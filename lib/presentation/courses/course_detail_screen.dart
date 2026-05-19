@@ -2708,221 +2708,139 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     );
   }
 
-  Widget _buildCommentsSection(
-    String postId,
-    List<Map<String, dynamic>> comments,
-  ) {
-    final controller =
-        _commentControllers[postId] ??
-        (_commentControllers[postId] = TextEditingController());
+  Widget _buildCommentsSection(String postId, List<Map<String, dynamic>> comments) {
+    // 1. Use the Map-based state instead of singular variables
+    final controller = _commentControllers[postId] ?? (_commentControllers[postId] = TextEditingController());
     final isSubmitting = _submittingComment[postId] ?? false;
     final currentUserId = _supabase.auth.currentUser?.id;
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (comments.isNotEmpty) ...[
-          Divider(color: context.borderColor, height: 1),
-          const SizedBox(height: 10),
-          ...comments.map((comment) {
-            final isOwn = comment['user_id'] == currentUserId;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 15,
-                    backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                    child: Text(
-                      (comment['user_name'] as String)
-                          .substring(0, 1)
-                          .toUpperCase(),
-                      style: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: context.bgColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: context.borderColor),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                comment['user_name'] ?? '',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: context.textPrimary,
-                                ),
-                              ),
-                              const Spacer(),
-                              Text(
-                                _formatDate(comment['created_at']),
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 10,
-                                  color: context.textHint,
-                                ),
-                              ),
-                              if (isOwn || widget.isInstructor)
-                                PopupMenuButton<String>(
-                                  icon: Icon(
-                                    Icons.more_vert,
-                                    size: 16,
-                                    color: context.textHint,
-                                  ),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 0,
-                                    minHeight: 0,
-                                  ),
-                                  onSelected: (value) {
-                                    if (value == 'delete') {
-                                      _deleteComment(comment['id'], postId);
-                                    } else if (value == 'edit') {
-                                      _showEditCommentDialog(comment, postId);
-                                    }
-                                  },
-                                  itemBuilder: (context) => [
-                                    if (isOwn && widget.isInstructor)
-                                      const PopupMenuItem(
-                                        value: 'edit',
-                                        child: Text(
-                                          'Edit',
-                                          style: TextStyle(
-                                            fontFamily: 'Poppins',
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                    const PopupMenuItem(
-                                      value: 'delete',
-                                      child: Text(
-                                        'Delete',
-                                        style: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontSize: 13,
-                                          color: Colors.red,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            comment['text'] ?? '',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 13,
-                              color: context.textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-          const SizedBox(height: 8),
-        ],
-        Row(
-          children: [
-            CircleAvatar(
-              radius: 15,
-              backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-              child: Text(
-                (_currentUser?.name ?? 'U').substring(0, 1).toUpperCase(),
-                style: const TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.primary,
-                ),
-              ),
+        // ─── Header ───
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Text('Class Comments',
+            style: TextStyle(fontFamily: 'Poppins', fontSize: 14,
+                fontWeight: FontWeight.bold, color: textColor)),
+        ),
+        Divider(color: context.borderColor, height: 1),
+
+        // ─── Comment List ───
+        if (comments.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Center(
+              child: Text('No comments yet.',
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint)),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 13,
-                  color: context.textPrimary,
+          ),
+
+        ...comments.map((comment) {
+          final isOwn = comment['user_id'] == currentUserId;
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                  child: Text(
+                    (comment['user_name'] as String).substring(0, 1).toUpperCase(),
+                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 10,
+                        fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ),
-                decoration: InputDecoration(
-                  hintText: 'Add class comment...',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 13,
-                    color: context.textHint,
-                  ),
-                  filled: true,
-                  fillColor: context.bgColor,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide(color: context.borderColor),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide(color: context.borderColor),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: const BorderSide(
-                      color: AppColors.primary,
-                      width: 1.5,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: context.isDark ? context.bgColor : Colors.grey.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: context.borderColor.withValues(alpha: 0.5)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(comment['user_name'] ?? '',
+                              style: TextStyle(fontFamily: 'Poppins', fontSize: 12,
+                                  fontWeight: FontWeight.bold, color: textColor)),
+                            const Spacer(),
+                            Text(_formatDate(comment['created_at']),
+                              style: TextStyle(fontFamily: 'Poppins', fontSize: 10, color: context.textHint)),
+                            
+                            if (isOwn || widget.isInstructor)
+                              PopupMenuButton<String>(
+                                icon: Icon(Icons.more_vert, size: 14, color: context.textHint),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                                onSelected: (value) {
+                                  // 2. Added the second required argument: postId
+                                  if (value == 'delete') _deleteComment(comment['id'], postId); 
+                                  if (value == 'edit') _showEditCommentDialog(comment, postId); 
+                                },
+                                itemBuilder: (context) => [
+                                  if (isOwn && widget.isInstructor)
+                                    const PopupMenuItem(value: 'edit', child: Text('Edit', style: TextStyle(fontSize: 12))),
+                                  const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(fontSize: 12, color: Colors.red))),
+                                ],
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 1),
+                        Text(comment['text'] ?? '',
+                          style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: textColor, height: 1.3)),
+                      ],
                     ),
                   ),
-                  suffixIcon: GestureDetector(
-                    onTap: () => _submitComment(postId),
-                    child: isSubmitting
-                        ? const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.primary,
-                              ),
-                            ),
-                          )
-                        : const Icon(
-                            Icons.send_rounded,
-                            color: AppColors.primary,
-                            size: 20,
-                          ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+
+        // ─── Input Field ───
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                // 3. Use _currentUser?.name instead of _currentUserName
+                child: Text((_currentUser?.name ?? 'U').substring(0, 1).toUpperCase(),
+                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary)),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: textColor),
+                  decoration: InputDecoration(
+                    hintText: 'Add class comment...',
+                    hintStyle: TextStyle(fontSize: 13, color: context.textHint),
+                    filled: true, 
+                    fillColor: context.isDark ? context.bgColor : Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: context.borderColor)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: context.borderColor)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+                    suffixIcon: IconButton(
+                      // 4. Pass the postId to the submission function
+                      onPressed: () => _submitComment(postId), 
+                      icon: isSubmitting
+                          ? const Padding(padding: EdgeInsets.all(8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)))
+                          : const Icon(Icons.send_rounded, color: AppColors.primary, size: 18),
+                    ),
                   ),
                 ),
-                onSubmitted: (_) => _submitComment(postId),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
