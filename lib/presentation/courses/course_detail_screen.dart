@@ -685,7 +685,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         _buildUploadButton(
                           label:
                               assessmentName ??
-                              'Attach Assessment Instruction (PDF)',
+                              'Attach Assignment Instruction (PDF)',
                           icon: assessmentName != null
                               ? Icons.check_circle
                               : Icons.assignment_outlined,
@@ -1177,6 +1177,103 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+  void _showDeleteTopicConfirmation(Map<String, dynamic> topic) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: context.surfaceColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: context.borderColor),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 48),
+              const SizedBox(height: 12),
+              Text(
+                'Delete Topic?',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: context.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This will permanently delete "${topic['title']}". Any posts inside this topic will become uncategorized.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: context.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: context.cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: context.borderColor),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              color: context.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        minimumSize: const Size(double.infinity, 48),
+                        elevation: 0,
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        try {
+                          await _supabase.from('topics').delete().eq('id', topic['id']);
+                          await _loadCoursework();
+                        } catch (e) {
+                          debugPrint('Error deleting topic: $e');
+                        }
+                      },
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -2709,91 +2806,96 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   }
 
   Widget _buildCommentsSection(String postId, List<Map<String, dynamic>> comments) {
-    // 1. Use the Map-based state instead of singular variables
-    final controller = _commentControllers[postId] ?? (_commentControllers[postId] = TextEditingController());
-    final isSubmitting = _submittingComment[postId] ?? false;
-    final currentUserId = _supabase.auth.currentUser?.id;
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+  final controller = _commentControllers[postId] ?? (_commentControllers[postId] = TextEditingController());
+  final isSubmitting = _submittingComment[postId] ?? false;
+  final currentUserId = _supabase.auth.currentUser?.id;
 
-    return Column(
+  // Exact Colors from your reference image
+  const cardBg = Colors.white;
+  final bubbleBg = const Color(0xFFEBEBEB); // Light gray background
+  final avatarBg = const Color(0xFFD6EBFF); // Very light blue
+  final avatarTextColor = const Color(0xFF007BFF); // Bright blue
+  final nameColor = const Color(0xFF0D1B4B); // Navy Blue
+  final dividerColor = Colors.grey.withOpacity(0.2);
+
+  return Container(
+    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    decoration: BoxDecoration(
+      color: cardBg,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: dividerColor),
+    ),
+    child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ─── Header ───
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Text('Class Comments',
-            style: TextStyle(fontFamily: 'Poppins', fontSize: 14,
-                fontWeight: FontWeight.bold, color: textColor)),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+          child: Text('Class comments',
+              style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.bold, color: nameColor)),
         ),
-        Divider(color: context.borderColor, height: 1),
+        Divider(color: dividerColor, height: 1),
 
         // ─── Comment List ───
-        if (comments.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Center(
-              child: Text('No comments yet.',
-                style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint)),
-            ),
-          ),
-
         ...comments.map((comment) {
           final isOwn = comment['user_id'] == currentUserId;
           return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0), // Consistent spacing for all
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Avatar (Unified for everyone)
                 CircleAvatar(
-                  radius: 14,
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                  radius: 20,
+                  backgroundColor: avatarBg,
                   child: Text(
-                    (comment['user_name'] as String).substring(0, 1).toUpperCase(),
-                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 10,
-                        fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    (comment['user_name'] as String? ?? 'U').substring(0, 1).toUpperCase(),
+                    style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.bold, color: avatarTextColor)),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
+                
+                // Comment Bubble (Unified for everyone)
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: context.isDark ? context.bgColor : Colors.grey.withValues(alpha: 0.05),
+                      color: bubbleBg,
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: context.borderColor.withValues(alpha: 0.5)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(comment['user_name'] ?? '',
-                              style: TextStyle(fontFamily: 'Poppins', fontSize: 12,
-                                  fontWeight: FontWeight.bold, color: textColor)),
-                            const Spacer(),
-                            Text(_formatDate(comment['created_at']),
-                              style: TextStyle(fontFamily: 'Poppins', fontSize: 10, color: context.textHint)),
-                            
-                            if (isOwn || widget.isInstructor)
-                              PopupMenuButton<String>(
-                                icon: Icon(Icons.more_vert, size: 14, color: context.textHint),
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-                                onSelected: (value) {
-                                  // 2. Added the second required argument: postId
-                                  if (value == 'delete') _deleteComment(comment['id'], postId); 
-                                  if (value == 'edit') _showEditCommentDialog(comment, postId); 
-                                },
-                                itemBuilder: (context) => [
-                                  if (isOwn && widget.isInstructor)
-                                    const PopupMenuItem(value: 'edit', child: Text('Edit', style: TextStyle(fontSize: 12))),
-                                  const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(fontSize: 12, color: Colors.red))),
-                                ],
-                              ),
+                                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.bold, color: nameColor)),
+                            Row(
+                              children: [
+                                Text('Today', // Or use _formatDate(comment['created_at'])
+                                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: Colors.grey)),
+                                // Only show menu if user owns comment or is instructor
+                                if (isOwn || widget.isInstructor)
+                                  PopupMenuButton<String>(
+                                    icon: const Icon(Icons.more_vert, size: 18, color: Colors.grey),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onSelected: (value) {
+                                      if (value == 'delete') _deleteComment(comment['id'], postId);
+                                      if (value == 'edit') _showEditCommentDialog(comment, postId);
+                                    },
+                                    itemBuilder: (context) => [
+                                      if (isOwn) const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                                      const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
+                                    ],
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 1),
+                        const SizedBox(height: 4),
                         Text(comment['text'] ?? '',
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: textColor, height: 1.3)),
+                            style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: nameColor.withOpacity(0.9), height: 1.3)),
                       ],
                     ),
                   ),
@@ -2805,36 +2907,32 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
         // ─── Input Field ───
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
           child: Row(
             children: [
               CircleAvatar(
-                radius: 14,
-                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                // 3. Use _currentUser?.name instead of _currentUserName
+                radius: 20,
+                backgroundColor: avatarBg,
                 child: Text((_currentUser?.name ?? 'U').substring(0, 1).toUpperCase(),
-                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.bold, color: avatarTextColor)),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: TextField(
                   controller: controller,
-                  style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: textColor),
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 14, color: nameColor),
                   decoration: InputDecoration(
-                    hintText: 'Add class comment...',
-                    hintStyle: TextStyle(fontSize: 13, color: context.textHint),
-                    filled: true, 
-                    fillColor: context.isDark ? context.bgColor : Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: context.borderColor)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: context.borderColor)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+                    hintText: 'Add class comment..',
+                    hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
+                    filled: true,
+                    fillColor: bubbleBg,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
                     suffixIcon: IconButton(
-                      // 4. Pass the postId to the submission function
-                      onPressed: () => _submitComment(postId), 
+                      onPressed: () => _submitComment(postId),
                       icon: isSubmitting
-                          ? const Padding(padding: EdgeInsets.all(8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)))
-                          : const Icon(Icons.send_rounded, color: AppColors.primary, size: 18),
+                          ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue))
+                          : const Icon(Icons.send, color: Colors.blue, size: 20),
                     ),
                   ),
                 ),
@@ -2843,8 +2941,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           ),
         ),
       ],
-    );
-  }
+    ),
+  );
+}
 
   // ════════════════════════════════════════════════════════
   // COURSEWORK TAB
@@ -2921,10 +3020,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return Container(
-      key: key, // Use the key here
+      key: key,
       decoration: BoxDecoration(
         color: context.cardColor,
-        borderRadius: BorderRadius.circular(20), // Matches your dashboard cards
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: context.borderColor),
         boxShadow: context.isDark
             ? []
@@ -2938,60 +3037,78 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       ),
       child: Column(
         children: [
-          GestureDetector(
-            onTap: () =>
-                setState(() => _expandedTopics[topicKey] = !isExpanded),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
-                children: [
-                  // ─── Proper Icon instead of Folder Emoji ───
-                  const Icon(
-                    Icons.folder_rounded,
-                    color: AppColors.primary,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                // Icon and Title wrap in Expanded GestureDetector to trigger toggle
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _expandedTopics[topicKey] = !isExpanded),
+                    behavior: HitTestBehavior.opaque,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.folder_rounded, color: AppColors.primary, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const Spacer(),
-                  // Count indicator
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '${posts.length}',
-                      style: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
+                ),
+                
+                // ─── Replacement: 3-dot menu for Instructor ───
+                if (widget.isInstructor && topic != null)
+                  PopupMenuButton<String>(
+                    icon: Icon(Icons.more_vert, color: textColor.withValues(alpha: 0.4), size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onSelected: (value) {
+                      if (value == 'delete') _showDeleteTopicConfirmation(topic);
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete_outline, color: AppColors.error, size: 18),
+                            SizedBox(width: 8),
+                            Text('Delete Topic', 
+                              style: TextStyle(
+                                fontFamily: 'Poppins', 
+                                color: AppColors.error, 
+                                fontSize: 13, 
+                                fontWeight: FontWeight.w600
+                              )),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Icon(
-                    isExpanded
-                        ? Icons.keyboard_arrow_up_rounded
-                        : Icons.keyboard_arrow_down_rounded,
+                
+                const SizedBox(width: 4),
+                
+                // Expansion Arrow
+                GestureDetector(
+                  onTap: () => setState(() => _expandedTopics[topicKey] = !isExpanded),
+                  child: Icon(
+                    isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
                     color: textColor.withValues(alpha: 0.4),
-                    size: 20,
+                    size: 22,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           if (isExpanded) ...[
