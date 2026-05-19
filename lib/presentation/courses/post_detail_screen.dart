@@ -1,5 +1,6 @@
 // lib/presentation/courses/post_detail_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -90,6 +91,36 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     finally { if (mounted) setState(() => _isSubmittingComment = false); }
   }
 
+  // ─── NEW: EDIT COMMENT DIALOG ───
+  void _showEditCommentDialog(Map<String, dynamic> comment) {
+    final controller = TextEditingController(text: comment['text']);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.surfaceColor,
+        title: Text('Edit Comment', 
+          style: TextStyle(color: context.isDark ? Colors.white : const Color(0xFF0D1B4B), 
+          fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.bold)),
+        content: TextField(
+          controller: controller,
+          style: TextStyle(color: context.isDark ? Colors.white : const Color(0xFF0D1B4B), fontFamily: 'Poppins'),
+          decoration: InputDecoration(hintText: 'Type something...', hintStyle: TextStyle(color: context.textHint)),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              await _supabase.from('comments').update({'text': controller.text.trim()}).eq('id', comment['id']);
+              Navigator.pop(context);
+              _loadComments();
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _deleteComment(String commentId) async {
     try {
       await _supabase.from('comments').delete().eq('id', commentId);
@@ -133,10 +164,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final filesJson = prefs.getStringList('offline_files') ?? [];
-      final tempDir = await getTemporaryDirectory();
+      final tempDir = await getApplicationDocumentsDirectory(); // Internal storage safer for offline
       int savedCount = 0;
 
-      // Save material
       if (materialUrl != null && !_materialSaved && materialName != null) {
         final response = await http.get(Uri.parse(materialUrl));
         if (response.statusCode == 200) {
@@ -156,7 +186,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         }
       }
 
-      // Save assessment
       if (assessmentUrl != null && !_assessmentSaved && assessmentName != null) {
         final response = await http.get(Uri.parse(assessmentUrl));
         if (response.statusCode == 200) {
@@ -186,7 +215,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(savedCount > 0
-                ? '$savedCount file${savedCount > 1 ? 's' : ''} saved for offline access! 📥'
+                ? '$savedCount file${savedCount > 1 ? 's' : ''} saved for offline access!'
                 : 'Files already saved offline.'),
             backgroundColor: savedCount > 0 ? Colors.green.shade700 : Colors.orange,
             behavior: SnackBarBehavior.floating,
@@ -204,7 +233,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
-  // ─── Helpers ─────────────────────────────────────────────
+  // ─── Helpers ───
   String _getScheduleStatus(String? scheduledTime) {
     if (scheduledTime == null) return 'none';
     final scheduled = DateTime.parse(scheduledTime);
@@ -253,6 +282,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final currentUserId = _supabase.auth.currentUser?.id;
     final hasFiles = post['material_url'] != null || post['assessment_url'] != null;
     final allSaved = _materialSaved && _assessmentSaved;
+    
+    // Using your system dark blue for light mode
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return Scaffold(
       backgroundColor: context.bgColor,
@@ -262,7 +294,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           SafeArea(
             child: Column(
               children: [
-                // ─── Top Bar ────────────────────────────
+                // ─── Top Bar ───
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                   child: Row(
@@ -276,34 +308,32 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: context.borderColor),
                           ),
-                          child: Icon(Icons.arrow_back, color: context.textPrimary, size: 20),
+                          child: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
                         ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Text(post['title'] ?? '',
                           style: TextStyle(fontFamily: 'Poppins', fontSize: 16,
-                              fontWeight: FontWeight.w700, color: context.textPrimary),
+                              fontWeight: FontWeight.w700, color: textColor),
                           maxLines: 1, overflow: TextOverflow.ellipsis),
                       ),
                     ],
                   ),
                 ),
 
-                // ─── Scrollable Content ──────────────────
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-
-                        // ─── Post Header Card ──────────────
+                        // ─── Post Header Card ───
                         Container(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
                             color: context.cardColor,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(20),
                             border: Border.all(color: context.borderColor),
                           ),
                           child: Column(
@@ -312,12 +342,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               Row(
                                 children: [
                                   Container(
-                                    padding: const EdgeInsets.all(8),
+                                    width: 44, height: 44,
                                     decoration: BoxDecoration(
-                                      color: postColor.withValues(alpha: 0.12),
-                                      borderRadius: BorderRadius.circular(10),
+                                      color: postColor.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: Icon(_getPostIcon(type), color: postColor, size: 20),
+                                    child: Icon(_getPostIcon(type), color: postColor, size: 22),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -325,22 +355,22 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(post['title'] ?? '',
-                                          style: TextStyle(fontFamily: 'Poppins', fontSize: 16,
-                                              fontWeight: FontWeight.w700, color: context.textPrimary)),
+                                          style: TextStyle(fontFamily: 'Poppins', fontSize: 17,
+                                              fontWeight: FontWeight.w700, color: textColor)),
                                         Row(
                                           children: [
                                             Text(_formatDate(post['created_at']),
-                                              style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: context.textSecondary)),
-                                            const SizedBox(width: 6),
+                                              style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: textColor.withValues(alpha: 0.5))),
+                                            const SizedBox(width: 8),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                               decoration: BoxDecoration(
-                                                color: postColor.withValues(alpha: 0.12),
+                                                color: postColor.withValues(alpha: 0.1),
                                                 borderRadius: BorderRadius.circular(20),
                                               ),
                                               child: Text(_getPostTypeLabel(type),
                                                 style: TextStyle(fontFamily: 'Poppins', fontSize: 10,
-                                                    fontWeight: FontWeight.w600, color: postColor)),
+                                                    fontWeight: FontWeight.bold, color: postColor)),
                                             ),
                                           ],
                                         ),
@@ -351,24 +381,24 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               ),
 
                               if (post['instructions'] != null) ...[
-                                const SizedBox(height: 14),
-                                Divider(color: context.borderColor, height: 1),
-                                const SizedBox(height: 14),
+                                const SizedBox(height: 16),
+                                Divider(color: context.borderColor),
+                                const SizedBox(height: 16),
                                 Text(post['instructions'],
                                   style: TextStyle(fontFamily: 'Poppins', fontSize: 14,
-                                      color: context.textPrimary, height: 1.6)),
+                                      color: textColor, height: 1.6)),
                               ],
                             ],
                           ),
                         ),
 
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 16),
 
-                        // ─── Files ─────────────────────────
+                        // ─── Files ───
                         if (post['material_url'] != null)
                           _buildFileCard(
                             name: post['material_name'] ?? 'Lesson Material',
-                            icon: Icons.picture_as_pdf_outlined,
+                            icon: Icons.picture_as_pdf_rounded,
                             color: AppColors.primary,
                             url: post['material_url'],
                             isSaved: _materialSaved,
@@ -377,22 +407,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         if (post['assessment_url'] != null)
                           _buildFileCard(
                             name: post['assessment_name'] ?? 'Assessment Instructions',
-                            icon: Icons.assignment_outlined,
+                            icon: Icons.assignment_rounded,
                             color: const Color(0xFFFF6B35),
                             url: post['assessment_url'],
                             isSaved: _assessmentSaved,
                           ),
 
-                        // ─── 3D Classroom Button ────────────
+                        // ─── 3D Classroom Button ───
                         if (post['scheduled_time'] != null) ...[
                           const SizedBox(height: 4),
                           _build3DButton(post['scheduled_time']),
-                          const SizedBox(height: 12),
                         ],
 
-                        // ─── Save Offline Button ────────────
+                        // ─── Save Offline Button ───
                         if (hasFiles && !widget.isInstructor) ...[
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 12),
                           GestureDetector(
                             onTap: (_isSavingOffline || allSaved) ? null : _saveFilesOffline,
                             child: AnimatedContainer(
@@ -400,14 +429,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               decoration: BoxDecoration(
-                                color: allSaved
-                                    ? Colors.green.shade700
-                                    : context.cardColor,
-                                borderRadius: BorderRadius.circular(14),
+                                color: allSaved ? Colors.green.shade700 : context.cardColor,
+                                borderRadius: BorderRadius.circular(16),
                                 border: Border.all(
-                                  color: allSaved
-                                      ? Colors.green.shade700
-                                      : AppColors.primary.withValues(alpha: 0.5),
+                                  color: allSaved ? Colors.green.shade700 : AppColors.primary.withValues(alpha: 0.3),
                                   width: 1.5,
                                 ),
                               ),
@@ -415,11 +440,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   if (_isSavingOffline)
-                                    const SizedBox(width: 20, height: 20,
-                                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                                    const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
                                   else
                                     Icon(
-                                      allSaved ? Icons.check_circle_outline : Icons.download_outlined,
+                                      allSaved ? Icons.check_circle_outline_rounded : Icons.cloud_download_outlined,
                                       color: allSaved ? Colors.white : AppColors.primary,
                                       size: 20,
                                     ),
@@ -429,7 +453,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                     style: TextStyle(
                                       fontFamily: 'Poppins',
                                       fontSize: 14,
-                                      fontWeight: FontWeight.w700,
+                                      fontWeight: FontWeight.bold,
                                       color: allSaved ? Colors.white : AppColors.primary,
                                     ),
                                   ),
@@ -437,59 +461,60 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 16),
                         ],
 
-                        // ─── Comments Section ───────────────
+                        const SizedBox(height: 24),
+
+                        // ─── Comments Section ───
                         Container(
                           decoration: BoxDecoration(
                             color: context.cardColor,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: BorderRadius.circular(20),
                             border: Border.all(color: context.borderColor),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                                padding: const EdgeInsets.all(16),
                                 child: Text('Class Comments',
-                                  style: TextStyle(fontFamily: 'Poppins', fontSize: 14,
-                                      fontWeight: FontWeight.w700, color: context.textPrimary)),
+                                  style: TextStyle(fontFamily: 'Poppins', fontSize: 15,
+                                      fontWeight: FontWeight.bold, color: textColor)),
                               ),
                               Divider(color: context.borderColor, height: 1),
 
                               if (_comments.isEmpty)
                                 Padding(
-                                  padding: const EdgeInsets.all(20),
+                                  padding: const EdgeInsets.all(32),
                                   child: Center(
                                     child: Text('No comments yet. Be the first to comment!',
                                       textAlign: TextAlign.center,
-                                      style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint)),
+                                      style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: textColor.withValues(alpha: 0.4))),
                                   ),
                                 ),
 
                               ..._comments.map((comment) {
                                 final isOwn = comment['user_id'] == currentUserId;
                                 return Padding(
-                                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                                   child: Row(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       CircleAvatar(
                                         radius: 16,
-                                        backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                                        backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                                         child: Text(
                                           (comment['user_name'] as String).substring(0, 1).toUpperCase(),
                                           style: const TextStyle(fontFamily: 'Poppins', fontSize: 11,
-                                              fontWeight: FontWeight.w600, color: AppColors.primary)),
+                                              fontWeight: FontWeight.bold, color: AppColors.primary)),
                                       ),
-                                      const SizedBox(width: 8),
+                                      const SizedBox(width: 12),
                                       Expanded(
                                         child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                          padding: const EdgeInsets.all(12),
                                           decoration: BoxDecoration(
                                             color: context.bgColor,
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius: BorderRadius.circular(14),
                                             border: Border.all(color: context.borderColor),
                                           ),
                                           child: Column(
@@ -499,22 +524,35 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                                 children: [
                                                   Text(comment['user_name'] ?? '',
                                                     style: TextStyle(fontFamily: 'Poppins', fontSize: 12,
-                                                        fontWeight: FontWeight.w600, color: context.textPrimary)),
+                                                        fontWeight: FontWeight.bold, color: textColor)),
                                                   const Spacer(),
                                                   Text(_formatDate(comment['created_at']),
                                                     style: TextStyle(fontFamily: 'Poppins', fontSize: 10, color: context.textHint)),
-                                                  if (isOwn || widget.isInstructor) ...[
-                                                    const SizedBox(width: 6),
-                                                    GestureDetector(
-                                                      onTap: () => _deleteComment(comment['id']),
-                                                      child: Icon(Icons.close, size: 14, color: context.textHint),
+                                                  
+                                                  // ─── 3-DOT MENU ───
+                                                  if (isOwn || widget.isInstructor)
+                                                    PopupMenuButton<String>(
+                                                      icon: Icon(Icons.more_vert, size: 16, color: context.textHint),
+                                                      padding: EdgeInsets.zero,
+                                                      constraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                                                      onSelected: (value) {
+                                                        if (value == 'delete') {
+                                                          _deleteComment(comment['id']);
+                                                        } else if (value == 'edit') {
+                                                          _showEditCommentDialog(comment);
+                                                        }
+                                                      },
+                                                      itemBuilder: (context) => [
+                                                        if (isOwn && widget.isInstructor)
+                                                          const PopupMenuItem(value: 'edit', child: Text('Edit', style: TextStyle(fontSize: 13))),
+                                                        const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(fontSize: 13, color: Colors.red))),
+                                                      ],
                                                     ),
-                                                  ],
                                                 ],
                                               ),
                                               const SizedBox(height: 2),
                                               Text(comment['text'] ?? '',
-                                                style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textPrimary)),
+                                                style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: textColor)),
                                             ],
                                           ),
                                         ),
@@ -524,43 +562,36 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                 );
                               }),
 
-                              // Comment input
                               Padding(
-                                padding: const EdgeInsets.all(12),
+                                padding: const EdgeInsets.all(16),
                                 child: Row(
                                   children: [
                                     CircleAvatar(
                                       radius: 16,
-                                      backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                                      child: Text(
-                                        (_currentUserName ?? 'U').substring(0, 1).toUpperCase(),
-                                        style: const TextStyle(fontFamily: 'Poppins', fontSize: 11,
-                                            fontWeight: FontWeight.w600, color: AppColors.primary)),
+                                      backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                                      child: Text((_currentUserName ?? 'U').substring(0, 1).toUpperCase(),
+                                        style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
                                     ),
-                                    const SizedBox(width: 8),
+                                    const SizedBox(width: 12),
                                     Expanded(
                                       child: TextField(
                                         controller: _commentController,
-                                        style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textPrimary),
+                                        style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: textColor),
                                         decoration: InputDecoration(
                                           hintText: 'Add class comment...',
-                                          hintStyle: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint),
-                                          filled: true,
-                                          fillColor: context.bgColor,
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: context.borderColor)),
-                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: context.borderColor)),
-                                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
-                                          suffixIcon: GestureDetector(
-                                            onTap: _submitComment,
-                                            child: _isSubmittingComment
-                                                ? const Padding(padding: EdgeInsets.all(8),
-                                                    child: SizedBox(width: 16, height: 16,
-                                                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)))
+                                          hintStyle: TextStyle(fontSize: 13, color: context.textHint),
+                                          filled: true, fillColor: context.bgColor,
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: context.borderColor)),
+                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: context.borderColor)),
+                                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+                                          suffixIcon: IconButton(
+                                            onPressed: _submitComment,
+                                            icon: _isSubmittingComment
+                                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
                                                 : const Icon(Icons.send_rounded, color: AppColors.primary, size: 20),
                                           ),
                                         ),
-                                        onSubmitted: (_) => _submitComment(),
                                       ),
                                     ),
                                   ],
@@ -581,45 +612,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
-  Widget _buildFileCard({
-    required String name,
-    required IconData icon,
-    required Color color,
-    required String url,
-    required bool isSaved,
-  }) {
+  Widget _buildFileCard({required String name, required IconData icon, required Color color, required String url, required bool isSaved}) {
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: context.borderColor),
-      ),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.borderColor)),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FileViewerScreen(url: url, fileName: name))),
         leading: Container(
-          width: 40, height: 40,
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-          child: Icon(icon, color: color, size: 20),
+          width: 44, height: 44,
+          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+          child: Icon(icon, color: color, size: 22),
         ),
-        title: Text(name,
-          style: TextStyle(fontFamily: 'Poppins', fontSize: 13,
-              fontWeight: FontWeight.w600, color: color),
-          maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(isSaved ? '✓ Saved offline' : 'Tap to view',
-          style: TextStyle(fontFamily: 'Poppins', fontSize: 11,
-              color: isSaved ? Colors.green : context.textHint)),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.visibility_outlined, color: color, size: 18),
-            const SizedBox(width: 4),
-            Icon(Icons.chevron_right, color: color.withValues(alpha: 0.5), size: 16),
-          ],
-        ),
-        onTap: () => Navigator.push(context, MaterialPageRoute(
-          builder: (_) => FileViewerScreen(url: url, fileName: name),
-        )),
+        title: Text(name, style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.bold, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: Text(isSaved ? '✓ Saved offline' : 'Tap to view', style: TextStyle(fontSize: 11, color: isSaved ? Colors.green : context.textHint)),
+        trailing: Icon(Icons.chevron_right, color: textColor.withValues(alpha: 0.3), size: 20),
       ),
     );
   }
@@ -627,29 +634,31 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Widget _build3DButton(String scheduledTime) {
     final status = _getScheduleStatus(scheduledTime);
     final isLive = status == 'live';
-    final isUpcoming = status == 'upcoming';
     final Color btnColor = isLive ? const Color(0xFF22C55E) : Colors.grey;
-    final String btnText = isLive ? '🎮 Join 3D Classroom' : isUpcoming ? '🎮 Join 3D Classroom' : '🎮 Session Ended';
-    final String subText = isLive ? 'Session is live now! 🔴' : _formatScheduleTime(scheduledTime);
+    final icon = isLive ? Icons.videogame_asset_rounded : Icons.videogame_asset_outlined;
 
     return GestureDetector(
-      onTap: isLive ? () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Launching 3D Classroom... 🎮'), behavior: SnackBarBehavior.floating));
-      } : null,
+      onTap: isLive ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Launching 3D Classroom...'))) : null,
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
           color: isLive ? btnColor : btnColor.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: isLive ? [BoxShadow(color: btnColor.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, 4))] : [],
         ),
-        child: Column(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(btnText, style: const TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
-            const SizedBox(height: 2),
-            Text(subText, style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: Colors.white.withValues(alpha: 0.8))),
+            Icon(icon, color: Colors.white, size: 24),
+            const SizedBox(width: 12),
+            Column(
+              children: [
+                Text(isLive ? 'Join 3D Classroom' : '3D Meet Scheduled', 
+                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+                Text(isLive ? 'Session is live now!' : _formatScheduleTime(scheduledTime), 
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: Colors.white.withValues(alpha: 0.8))),
+              ],
+            ),
           ],
         ),
       ),
@@ -658,11 +667,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   IconData _getPostIcon(String type) {
     switch (type) {
-      case '3d_meet': return Icons.view_in_ar_outlined;
-      case 'material': return Icons.bookmark_outline;
-      case 'assignment': return Icons.assignment_outlined;
-      case 'announcement': return Icons.campaign_outlined;
-      default: return Icons.article_outlined;
+      case '3d_meet': return Icons.view_in_ar_rounded;
+      case 'material': return Icons.bookmark_rounded;
+      case 'assignment': return Icons.assignment_rounded;
+      default: return Icons.article_rounded;
     }
   }
 
@@ -671,7 +679,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       case '3d_meet': return '3D Meet';
       case 'material': return 'Material';
       case 'assignment': return 'Assignment';
-      case 'announcement': return 'Announcement';
       default: return 'Post';
     }
   }

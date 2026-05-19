@@ -58,7 +58,10 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: widget.isInstructor ? 2 : 1, vsync: this);
+    _tabController = TabController(
+      length: widget.isInstructor ? 2 : 1,
+      vsync: this,
+    );
     _acceptSubmissions = widget.post['accept_submissions'] ?? true;
     _loadCurrentUser();
     if (widget.isInstructor) {
@@ -86,9 +89,15 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
       _currentUserId = userId;
-      final data = await _supabase.from('users').select('name').eq('id', userId).single();
+      final data = await _supabase
+          .from('users')
+          .select('name')
+          .eq('id', userId)
+          .single();
       if (mounted) setState(() => _currentUserName = data['name']);
-    } catch (e) { debugPrint('User: $e'); }
+    } catch (e) {
+      debugPrint('User: $e');
+    }
   }
 
   Future<void> _loadMySubmission() async {
@@ -112,12 +121,14 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
       if (mounted) {
         setState(() {
-        _mySubmission = subData != null ? Map<String, dynamic>.from(subData) : null;
-        _myWorkFileUrl = _mySubmission?['file_url'];
-        _myWorkFileName = _mySubmission?['file_name'];
-        _myPrivateComments = List<Map<String, dynamic>>.from(commentData);
-        _isLoadingStudents = false;
-      });
+          _mySubmission = subData != null
+              ? Map<String, dynamic>.from(subData)
+              : null;
+          _myWorkFileUrl = _mySubmission?['file_url'];
+          _myWorkFileName = _mySubmission?['file_name'];
+          _myPrivateComments = List<Map<String, dynamic>>.from(commentData);
+          _isLoadingStudents = false;
+        });
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingStudents = false);
@@ -127,17 +138,26 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   Future<void> _loadStudentsAndSubmissions() async {
     try {
       final enrollmentsData = await _supabase
-          .from('enrollments').select('student_id').eq('course_id', widget.course['id']);
-      final studentIds = (enrollmentsData as List).map((e) => e['student_id'] as String).toList();
+          .from('enrollments')
+          .select('student_id')
+          .eq('course_id', widget.course['id']);
+      final studentIds = (enrollmentsData as List)
+          .map((e) => e['student_id'] as String)
+          .toList();
 
       List<Map<String, dynamic>> studentsList = [];
       if (studentIds.isNotEmpty) {
-        final studentsData = await _supabase.from('users').select('id, name').inFilter('id', studentIds);
+        final studentsData = await _supabase
+            .from('users')
+            .select('id, name')
+            .inFilter('id', studentIds);
         studentsList = List<Map<String, dynamic>>.from(studentsData);
       }
 
       final submissionsData = await _supabase
-          .from('submissions').select().eq('assessment_id', widget.post['id']);
+          .from('submissions')
+          .select()
+          .eq('assessment_id', widget.post['id']);
       final submissionsMap = <String, Map<String, dynamic>>{};
       for (final s in submissionsData) {
         submissionsMap[s['student_id']] = Map<String, dynamic>.from(s);
@@ -145,10 +165,10 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
       if (mounted) {
         setState(() {
-        _students = studentsList;
-        _submissions = submissionsMap;
-        _isLoadingStudents = false;
-      });
+          _students = studentsList;
+          _submissions = submissionsMap;
+          _isLoadingStudents = false;
+        });
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingStudents = false);
@@ -159,15 +179,16 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     setState(() => _isLoadingPrivate = true);
     try {
       final data = await _supabase
-          .from('private_comments').select()
+          .from('private_comments')
+          .select()
           .eq('post_id', widget.post['id'])
           .eq('student_id', studentId)
           .order('created_at', ascending: true);
       if (mounted) {
         setState(() {
-        _privateComments = List<Map<String, dynamic>>.from(data);
-        _isLoadingPrivate = false;
-      });
+          _privateComments = List<Map<String, dynamic>>.from(data);
+          _isLoadingPrivate = false;
+        });
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingPrivate = false);
@@ -182,15 +203,18 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'doc', 'docx', 'png', 'jpg', 'mp4'],
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
-    if (file.path == null) return;
 
     setState(() => _isUploadingWork = true);
     try {
       final userId = _supabase.auth.currentUser?.id;
-      final bytes = await File(file.path!).readAsBytes();
+      if (_currentUserName == null) await _loadCurrentUser();
+      debugPrint('DEBUG >>> userId: $userId'); // ✅ ADD
+      debugPrint('DEBUG >>> userName: $_currentUserName'); // ✅ ADD
+      final bytes = file.bytes ?? await File(file.path!).readAsBytes();
       final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
       await _supabase.storage.from('submissions').uploadBinary(fileName, bytes);
       final url = _supabase.storage.from('submissions').getPublicUrl(fileName);
@@ -202,21 +226,34 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
       // Auto-save to submissions table
       if (_mySubmission == null) {
-        final data = await _supabase.from('submissions').insert({
-          'assessment_id': widget.post['id'],
-          'student_id': userId,
-          'file_url': url,
-          'file_name': file.name,
-          'submitted_at': DateTime.now().toIso8601String(),
-          'created_at': DateTime.now().toIso8601String(),
-        }).select().single();
+        final data = await _supabase
+            .from('submissions')
+            .insert({
+              'assessment_id': widget.post['id'],
+              'course_id': widget.course['id'],
+              'student_id': userId,
+              'student_name': _currentUserName ?? 'Student', // FIX: send name
+              'type': 'assignment', // FIX: send type
+              'file_url': url,
+              'file_name': file.name,
+              'submitted_at': DateTime.now().toIso8601String(),
+              'max_score': widget.post['points'] ?? 100,
+              'is_graded': false,
+              'is_returned': false,
+            })
+            .select()
+            .single();
         setState(() => _mySubmission = Map<String, dynamic>.from(data));
       } else {
-        await _supabase.from('submissions').update({
-          'file_url': url,
-          'file_name': file.name,
-          'submitted_at': DateTime.now().toIso8601String(),
-        }).eq('id', _mySubmission!['id']);
+        await _supabase
+            .from('submissions')
+            .update({
+              'file_url': url,
+              'file_name': file.name,
+              'student_name': _currentUserName ?? 'Student',
+              'submitted_at': DateTime.now().toIso8601String(),
+            })
+            .eq('id', _mySubmission!['id']);
         setState(() {
           _mySubmission!['file_url'] = url;
           _mySubmission!['file_name'] = file.name;
@@ -225,23 +262,48 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: const Text('Work uploaded! ✅'), backgroundColor: Colors.green.shade700, behavior: SnackBarBehavior.floating));
+          SnackBar(
+            content: const Text('Work uploaded! ✅'),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } catch (e) {
       setState(() => _isUploadingWork = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Upload failed: $e'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
+          SnackBar(
+            content: Text('Upload failed: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
 
   Future<void> _removeWork() async {
-    if (_mySubmission == null) { setState(() { _myWorkFileUrl = null; _myWorkFileName = null; }); return; }
+    if (_mySubmission == null) {
+      setState(() {
+        _myWorkFileUrl = null;
+        _myWorkFileName = null;
+      });
+      return;
+    }
     try {
-      await _supabase.from('submissions').update({'file_url': null, 'file_name': null, 'submitted_at': null}).eq('id', _mySubmission!['id']);
-      setState(() { _myWorkFileUrl = null; _myWorkFileName = null; _mySubmission!['file_url'] = null; });
-    } catch (e) { debugPrint('Remove work: $e'); }
+      await _supabase
+          .from('submissions')
+          .update({'file_url': null, 'file_name': null, 'submitted_at': null})
+          .eq('id', _mySubmission!['id']);
+      setState(() {
+        _myWorkFileUrl = null;
+        _myWorkFileName = null;
+        _mySubmission!['file_url'] = null;
+      });
+    } catch (e) {
+      debugPrint('Remove work: $e');
+    }
   }
 
   Future<void> _markAsDone() async {
@@ -249,33 +311,70 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       // Mark as done without file
       try {
         final userId = _supabase.auth.currentUser?.id;
-        final data = await _supabase.from('submissions').insert({
-          'assessment_id': widget.post['id'],
-          'student_id': userId,
-          'submitted_at': DateTime.now().toIso8601String(),
-          'created_at': DateTime.now().toIso8601String(),
-        }).select().single();
+        if (_currentUserName == null) await _loadCurrentUser();
+
+        final data = await _supabase
+            .from('submissions')
+            .insert({
+              'assessment_id': widget.post['id'],
+              'course_id': widget.course['id'],
+              'student_id': userId,
+              'student_name': _currentUserName ?? 'Student',
+              'type':
+                  widget.post['type'] ??
+                  'assignment', // Added: Fixes the "type" null error
+              'submitted_at': DateTime.now().toIso8601String(),
+              'max_score': widget.post['points'] ?? 100,
+              'is_graded': false,
+              'is_returned': false,
+            })
+            .select()
+            .single();
+
         setState(() => _mySubmission = Map<String, dynamic>.from(data));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: const Text('Assignment marked as done! ✅'), backgroundColor: Colors.green.shade700, behavior: SnackBarBehavior.floating));
+            SnackBar(
+              content: const Text('Assignment marked as done! ✅'),
+              backgroundColor: Colors.green.shade700,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
         }
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
+            SnackBar(
+              content: Text('Error: $e'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
         }
       }
     } else if (_mySubmission != null) {
       // Unsubmit
       try {
-        await _supabase.from('submissions').delete().eq('id', _mySubmission!['id']);
-        setState(() { _mySubmission = null; _myWorkFileUrl = null; _myWorkFileName = null; });
+        await _supabase
+            .from('submissions')
+            .delete()
+            .eq('id', _mySubmission!['id']);
+        setState(() {
+          _mySubmission = null;
+          _myWorkFileUrl = null;
+          _myWorkFileName = null;
+        });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Assignment unsubmitted.'), behavior: SnackBarBehavior.floating));
+            const SnackBar(
+              content: Text('Assignment unsubmitted.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
         }
-      } catch (e) { debugPrint('Unsubmit: $e'); }
+      } catch (e) {
+        debugPrint('Unsubmit: $e');
+      }
     }
   }
 
@@ -296,8 +395,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       });
       _myPrivateCommentController.clear();
       await _loadMySubmission();
-    } catch (e) { debugPrint('Private comment: $e'); }
-    finally { if (mounted) setState(() => _isSubmittingMyComment = false); }
+    } catch (e) {
+      debugPrint('Private comment: $e');
+    } finally {
+      if (mounted) setState(() => _isSubmittingMyComment = false);
+    }
   }
 
   // ════════════════════════════════════════════════════════
@@ -330,26 +432,40 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         'body': text,
         'created_at': DateTime.now().toIso8601String(),
       });
-    } catch (e) { debugPrint('Instructor comment: $e'); }
-    finally { if (mounted) setState(() => _isSubmittingComment = false); }
+    } catch (e) {
+      debugPrint('Instructor comment: $e');
+    } finally {
+      if (mounted) setState(() => _isSubmittingComment = false);
+    }
   }
 
   Future<void> _gradeSubmission(String studentId) async {
     final score = int.tryParse(_gradeController.text.trim());
     if (score == null || score < 0 || score > (widget.post['points'] ?? 100)) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Enter a valid score (0-${widget.post['points'] ?? 100})'),
-        backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Enter a valid score (0-${widget.post['points'] ?? 100})',
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return;
     }
     setState(() => _isGrading = true);
     try {
       final submission = _submissions[studentId];
       if (submission == null) return;
-      await _supabase.from('submissions').update({
-        'score': score, 'is_graded': true, 'is_returned': true,
-        'returned_at': DateTime.now().toIso8601String(),
-      }).eq('id', submission['id']);
+      await _supabase
+          .from('submissions')
+          .update({
+            'score': score,
+            'is_graded': true,
+            'is_returned': true,
+            'returned_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', submission['id']);
       await _supabase.from('notifications').insert({
         'user_id': studentId,
         'course_id': widget.course['id'],
@@ -361,15 +477,27 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       });
       await _loadStudentsAndSubmissions();
       if (mounted) {
-        setState(() { _selectedStudent = null; _selectedSubmission = null; });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('Grade submitted! ✅'),
-          backgroundColor: Colors.green.shade700, behavior: SnackBarBehavior.floating));
+        setState(() {
+          _selectedStudent = null;
+          _selectedSubmission = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Grade submitted! ✅'),
+            backgroundColor: Colors.green.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isGrading = false);
@@ -379,9 +507,14 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   Future<void> _toggleAcceptSubmissions() async {
     try {
       final newValue = !_acceptSubmissions;
-      await _supabase.from('posts').update({'accept_submissions': newValue}).eq('id', widget.post['id']);
+      await _supabase
+          .from('posts')
+          .update({'accept_submissions': newValue})
+          .eq('id', widget.post['id']);
       if (mounted) setState(() => _acceptSubmissions = newValue);
-    } catch (e) { debugPrint('Toggle: $e'); }
+    } catch (e) {
+      debugPrint('Toggle: $e');
+    }
   }
 
   // ════════════════════════════════════════════════════════
@@ -393,24 +526,44 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     final date = DateTime.parse(dateStr);
     final now = DateTime.now();
     final diff = date.difference(now);
-    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    final hour = date.hour > 12 ? date.hour - 12 : date.hour == 0 ? 12 : date.hour;
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final hour = date.hour > 12
+        ? date.hour - 12
+        : date.hour == 0
+        ? 12
+        : date.hour;
     final ampm = date.hour >= 12 ? 'PM' : 'AM';
     final min = date.minute.toString().padLeft(2, '0');
     if (diff.inDays == 0) return 'Due today, $hour:$min $ampm';
     if (diff.inDays == 1) return 'Due tomorrow, $hour:$min $ampm';
-    if (diff.inDays < 0) return 'Past due ${months[date.month - 1]} ${date.day}';
+    if (diff.inDays < 0)
+      return 'Past due ${months[date.month - 1]} ${date.day}';
     return 'Due ${months[date.month - 1]} ${date.day}, $hour:$min $ampm';
   }
-
 
   bool get _hasTurnedIn => _mySubmission != null;
   bool get _isGraded => _mySubmission?['is_graded'] == true;
   int get _maxPoints => widget.post['points'] ?? 100;
-  int get _turnedInCount => _submissions.values.where((s) => s['submitted_at'] != null).length;
-  int get _gradedCount => _submissions.values.where((s) => s['is_graded'] == true).length;
+  int get _turnedInCount =>
+      _submissions.values.where((s) => s['submitted_at'] != null).length;
+  int get _gradedCount =>
+      _submissions.values.where((s) => s['is_graded'] == true).length;
   int get _assignedCount => _students.length - _turnedInCount;
-  int get _returnedCount => _submissions.values.where((s) => s['is_returned'] == true).length;
+  int get _returnedCount =>
+      _submissions.values.where((s) => s['is_returned'] == true).length;
 
   // ════════════════════════════════════════════════════════
   // BUILD
@@ -433,20 +586,41 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     children: [
                       GestureDetector(
                         onTap: _selectedStudent != null
-                            ? () => setState(() { _selectedStudent = null; _selectedSubmission = null; _privateComments = []; })
+                            ? () => setState(() {
+                                _selectedStudent = null;
+                                _selectedSubmission = null;
+                                _privateComments = [];
+                              })
                             : () => Navigator.pop(context),
                         child: Container(
                           padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.borderColor)),
-                          child: Icon(Icons.arrow_back, color: context.textPrimary, size: 20),
+                          decoration: BoxDecoration(
+                            color: context.cardColor,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: context.borderColor),
+                          ),
+                          child: Icon(
+                            Icons.arrow_back,
+                            color: context.textPrimary,
+                            size: 20,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
                         child: Text(
-                          _selectedStudent != null ? _selectedStudent!['name'] ?? 'Student' : widget.post['title'] ?? '',
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700, color: context.textPrimary),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                          _selectedStudent != null
+                              ? _selectedStudent!['name'] ?? 'Student'
+                              : widget.post['title'] ?? '',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: context.textPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
@@ -462,15 +636,28 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                       unselectedLabelColor: context.textSecondary,
                       indicatorColor: AppColors.primary,
                       indicatorWeight: 2.5,
-                      labelStyle: const TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w700),
-                      unselectedLabelStyle: const TextStyle(fontFamily: 'Poppins', fontSize: 13),
-                      tabs: const [Tab(text: 'Instructions'), Tab(text: 'Student Work')],
+                      labelStyle: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      unselectedLabelStyle: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                      ),
+                      tabs: const [
+                        Tab(text: 'Instructions'),
+                        Tab(text: 'Student Work'),
+                      ],
                     ),
                   ),
                   Expanded(
                     child: TabBarView(
                       controller: _tabController,
-                      children: [_buildInstructionsTab(), _buildStudentWorkTab()],
+                      children: [
+                        _buildInstructionsTab(),
+                        _buildStudentWorkTab(),
+                      ],
                     ),
                   ),
                 ] else if (_selectedStudent != null) ...[
@@ -493,7 +680,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
   Widget _buildStudentView() {
     final dueDate = widget.post['due_date'];
-    final isPastDue = dueDate != null && DateTime.parse(dueDate).isBefore(DateTime.now());
+    final isPastDue =
+        dueDate != null && DateTime.parse(dueDate).isBefore(DateTime.now());
 
     return Column(
       children: [
@@ -511,26 +699,66 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (dueDate != null) ...[
-                        Text(_formatDate(dueDate),
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 13,
-                              color: isPastDue ? AppColors.error : context.textSecondary, fontWeight: FontWeight.w500)),
+                        Text(
+                          _formatDate(dueDate),
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            color: isPastDue
+                                ? AppColors.error
+                                : context.textSecondary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                         if (isPastDue || !_acceptSubmissions)
-                          Text('Work cannot be turned in after the due date',
-                            style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: context.textHint)),
+                          Text(
+                            'Work cannot be turned in after the due date',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 12,
+                              color: context.textHint,
+                            ),
+                          ),
                         const SizedBox(height: 10),
                       ],
-                      Text(widget.post['title'] ?? '',
-                        style: TextStyle(fontFamily: 'Poppins', fontSize: 22, fontWeight: FontWeight.w700, color: context.textPrimary)),
+                      Text(
+                        widget.post['title'] ?? '',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text('$_maxPoints points',
-                        style: TextStyle(fontFamily: 'Poppins', fontSize: 14, color: context.textSecondary)),
+                      Text(
+                        '$_maxPoints points',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          color: context.textSecondary,
+                        ),
+                      ),
                       if (_isGraded) ...[
                         const SizedBox(height: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                          decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-                          child: Text('Grade: ${_mySubmission!['score']}/$_maxPoints',
-                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w700, color: Colors.green)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            'Grade: ${_mySubmission!['score']}/$_maxPoints',
+                            style: const TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.green,
+                            ),
+                          ),
                         ),
                       ],
                     ],
@@ -543,20 +771,36 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                 if (widget.post['instructions'] != null)
                   Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Text(widget.post['instructions'],
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 14, color: context.textPrimary, height: 1.6)),
+                    child: Text(
+                      widget.post['instructions'],
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                        color: context.textPrimary,
+                        height: 1.6,
+                      ),
+                    ),
                   ),
 
                 // ─── Attachments (from instructor) ─────────
                 if (widget.post['assessment_url'] != null) ...[
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                    child: Text('Attachments', style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary)),
+                    child: Text(
+                      'Attachments',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                      ),
+                    ),
                   ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                     child: _buildAttachmentTile(
-                      widget.post['assessment_name'] ?? 'Assignment Instructions',
+                      widget.post['assessment_name'] ??
+                          'Assignment Instructions',
                       widget.post['assessment_url'],
                       Icons.picture_as_pdf_outlined,
                       const Color(0xFFFF6B35),
@@ -572,9 +816,21 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     onTap: () => _showClassCommentsSheet(),
                     child: const Row(
                       children: [
-                        Icon(Icons.chat_bubble_outline, color: AppColors.primary, size: 20),
+                        Icon(
+                          Icons.chat_bubble_outline,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
                         SizedBox(width: 10),
-                        Text('Add class comment', style: TextStyle(fontFamily: 'Poppins', fontSize: 14, color: AppColors.primary, fontWeight: FontWeight.w500)),
+                        Text(
+                          'Add class comment',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -599,32 +855,75 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         color: context.cardColor,
         border: Border(top: BorderSide(color: context.borderColor)),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 12, offset: const Offset(0, -4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Handle
-          Container(margin: const EdgeInsets.only(top: 10), width: 40, height: 4,
-            decoration: BoxDecoration(color: context.borderColor, borderRadius: BorderRadius.circular(2))),
+          Container(
+            margin: const EdgeInsets.only(top: 10),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: context.borderColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
 
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Your work', style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700, color: context.textPrimary)),
+                Text(
+                  'Your work',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: context.textPrimary,
+                  ),
+                ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: _hasTurnedIn ? Colors.green.withValues(alpha: 0.1) : context.bgColor,
+                    color: _hasTurnedIn
+                        ? Colors.green.withValues(alpha: 0.1)
+                        : context.bgColor,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _hasTurnedIn ? Colors.green.withValues(alpha: 0.4) : context.borderColor),
+                    border: Border.all(
+                      color: _hasTurnedIn
+                          ? Colors.green.withValues(alpha: 0.4)
+                          : context.borderColor,
+                    ),
                   ),
                   child: Text(
-                    _isGraded ? 'Graded' : _hasTurnedIn ? 'Turned in' : 'Assigned',
-                    style: TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w700,
-                        color: _isGraded ? AppColors.primary : _hasTurnedIn ? Colors.green : context.textSecondary)),
+                    _isGraded
+                        ? 'Graded'
+                        : _hasTurnedIn
+                        ? 'Turned in'
+                        : 'Assigned',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _isGraded
+                          ? AppColors.primary
+                          : _hasTurnedIn
+                          ? Colors.green
+                          : context.textSecondary,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -637,31 +936,81 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (_myWorkFileName != null) ...[
-                  Text('Attachments', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w600, color: context.textSecondary)),
+                  Text(
+                    'Attachments',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: context.textSecondary,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(color: context.bgColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.borderColor)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: context.bgColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: context.borderColor),
+                    ),
                     child: Row(
                       children: [
-                        const Icon(Icons.insert_drive_file_outlined, color: AppColors.primary, size: 20),
+                        const Icon(
+                          Icons.insert_drive_file_outlined,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
                         const SizedBox(width: 10),
-                        Expanded(child: Text(_myWorkFileName!, style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Expanded(
+                          child: Text(
+                            _myWorkFileName!,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 13,
+                              color: context.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                         if (!_hasTurnedIn && canSubmit)
                           GestureDetector(
                             onTap: _removeWork,
-                            child: Icon(Icons.close, color: context.textHint, size: 18)),
+                            child: Icon(
+                              Icons.close,
+                              color: context.textHint,
+                              size: 18,
+                            ),
+                          ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 8),
                 ] else ...[
-                  Text('Attachments', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w600, color: context.textSecondary)),
+                  Text(
+                    'Attachments',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: context.textSecondary,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Center(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text('You have no attachments uploaded.', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint)),
+                      child: Text(
+                        'You have no attachments uploaded.',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 13,
+                          color: context.textHint,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -674,15 +1023,24 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
                       children: [
-                        const Icon(Icons.lock_outline, color: Color(0xFFFF6B35), size: 16),
+                        const Icon(
+                          Icons.lock_outline,
+                          color: Color(0xFFFF6B35),
+                          size: 16,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _myPrivateComments.isEmpty
                                 ? 'Add comment to ${widget.course['instructor_name'] ?? 'Instructor'}'
                                 : '${_myPrivateComments.length} private comment${_myPrivateComments.length > 1 ? 's' : ''}',
-                            style: TextStyle(fontFamily: 'Poppins', fontSize: 13,
-                                color: _myPrivateComments.isEmpty ? context.textHint : const Color(0xFFFF6B35)),
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 13,
+                              color: _myPrivateComments.isEmpty
+                                  ? context.textHint
+                                  : const Color(0xFFFF6B35),
+                            ),
                           ),
                         ),
                       ],
@@ -695,20 +1053,41 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                 // Add work button
                 if (canSubmit && !_hasTurnedIn)
                   SizedBox(
-                    width: double.infinity, height: 48,
+                    width: double.infinity,
+                    height: 48,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                        backgroundColor: AppColors.primary.withValues(
+                          alpha: 0.15,
+                        ),
                         foregroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: BorderSide(color: AppColors.primary.withValues(alpha: 0.3))),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          side: BorderSide(
+                            color: AppColors.primary.withValues(alpha: 0.3),
+                          ),
+                        ),
                         elevation: 0,
                       ),
                       onPressed: _isUploadingWork ? null : _pickAndUploadWork,
                       icon: _isUploadingWork
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                              ),
+                            )
                           : const Icon(Icons.add, size: 20),
-                      label: Text(_isUploadingWork ? 'Uploading...' : '+ Add work',
-                        style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 14)),
+                      label: Text(
+                        _isUploadingWork ? 'Uploading...' : 'Add work',
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
                   ),
 
@@ -716,29 +1095,53 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
                 // Mark as done / Unsubmit
                 SizedBox(
-                  width: double.infinity, height: 48,
+                  width: double.infinity,
+                  height: 48,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _hasTurnedIn ? context.cardColor : AppColors.primary,
-                      foregroundColor: _hasTurnedIn ? AppColors.primary : Colors.white,
+                      backgroundColor: _hasTurnedIn
+                          ? context.cardColor
+                          : AppColors.primary,
+                      foregroundColor: _hasTurnedIn
+                          ? AppColors.primary
+                          : Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(24),
-                        side: BorderSide(color: _hasTurnedIn ? AppColors.primary : Colors.transparent),
+                        side: BorderSide(
+                          color: _hasTurnedIn
+                              ? AppColors.primary
+                              : Colors.transparent,
+                        ),
                       ),
                       elevation: 0,
                     ),
-                    onPressed: (!canSubmit && !_hasTurnedIn) ? null : _markAsDone,
+                    onPressed: (!canSubmit && !_hasTurnedIn)
+                        ? null
+                        : _markAsDone,
                     child: Text(
                       _hasTurnedIn ? 'Unsubmit' : 'Mark as done',
-                      style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
                   ),
                 ),
 
                 if (!canSubmit && !_hasTurnedIn)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
-                    child: Center(child: Text('Work cannot be turned in after the due date',
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: context.textHint))),
+                    child: Center(
+                      child: Text(
+                        'Work cannot be turned in after the due date',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 11,
+                          color: context.textHint,
+                        ),
+                      ),
+                    ),
                   ),
 
                 const SizedBox(height: 8),
@@ -757,17 +1160,45 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.75,
-        decoration: BoxDecoration(color: context.surfaceColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+        decoration: BoxDecoration(
+          color: context.surfaceColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         child: Column(
           children: [
-            Container(margin: const EdgeInsets.only(top: 12), width: 40, height: 4,
-              decoration: BoxDecoration(color: context.borderColor, borderRadius: BorderRadius.circular(2))),
+            Container(
+              margin: const EdgeInsets.only(top: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.borderColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Text('Class Comments', style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700, color: context.textPrimary)),
+              child: Text(
+                'Class Comments',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: context.textPrimary,
+                ),
+              ),
             ),
             Divider(color: context.borderColor, height: 1),
-            Expanded(child: Center(child: Text('No class comments yet.', style: TextStyle(color: context.textHint, fontFamily: 'Poppins')))),
+            Expanded(
+              child: Center(
+                child: Text(
+                  'No class comments yet.',
+                  style: TextStyle(
+                    color: context.textHint,
+                    fontFamily: 'Poppins',
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -781,28 +1212,62 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
           child: Container(
             height: MediaQuery.of(ctx).size.height * 0.75,
-            decoration: BoxDecoration(color: context.surfaceColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+            decoration: BoxDecoration(
+              color: context.surfaceColor,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
             child: Column(
               children: [
-                Container(margin: const EdgeInsets.only(top: 12), width: 40, height: 4,
-                  decoration: BoxDecoration(color: context.borderColor, borderRadius: BorderRadius.circular(2))),
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: context.borderColor,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      const Icon(Icons.lock_outline, color: Color(0xFFFF6B35), size: 18),
+                      const Icon(
+                        Icons.lock_outline,
+                        color: Color(0xFFFF6B35),
+                        size: 18,
+                      ),
                       const SizedBox(width: 8),
-                      Text('Private Comments', style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700, color: context.textPrimary)),
+                      Text(
+                        'Private Comments',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 Divider(color: context.borderColor, height: 1),
                 Expanded(
                   child: _myPrivateComments.isEmpty
-                      ? Center(child: Text('No private comments yet.', style: TextStyle(color: context.textHint, fontFamily: 'Poppins')))
+                      ? Center(
+                          child: Text(
+                            'No private comments yet.',
+                            style: TextStyle(
+                              color: context.textHint,
+                              fontFamily: 'Poppins',
+                            ),
+                          ),
+                        )
                       : ListView.builder(
                           padding: const EdgeInsets.all(16),
                           itemCount: _myPrivateComments.length,
@@ -813,28 +1278,76 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                               padding: const EdgeInsets.only(bottom: 12),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: isOwn ? MainAxisAlignment.end : MainAxisAlignment.start,
+                                mainAxisAlignment: isOwn
+                                    ? MainAxisAlignment.end
+                                    : MainAxisAlignment.start,
                                 children: [
                                   if (!isOwn) ...[
-                                    CircleAvatar(radius: 14, backgroundColor: const Color(0xFFFF6B35).withValues(alpha: 0.15),
-                                      child: Text((c['sender_name'] as String).substring(0, 1).toUpperCase(),
-                                        style: const TextStyle(fontFamily: 'Poppins', fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFFFF6B35)))),
+                                    CircleAvatar(
+                                      radius: 14,
+                                      backgroundColor: const Color(
+                                        0xFFFF6B35,
+                                      ).withValues(alpha: 0.15),
+                                      child: Text(
+                                        (c['sender_name'] as String)
+                                            .substring(0, 1)
+                                            .toUpperCase(),
+                                        style: const TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFFFF6B35),
+                                        ),
+                                      ),
+                                    ),
                                     const SizedBox(width: 8),
                                   ],
                                   Flexible(
                                     child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 8,
+                                      ),
                                       decoration: BoxDecoration(
-                                        color: isOwn ? AppColors.primary.withValues(alpha: 0.1) : context.cardColor,
+                                        color: isOwn
+                                            ? AppColors.primary.withValues(
+                                                alpha: 0.1,
+                                              )
+                                            : context.cardColor,
                                         borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: isOwn ? AppColors.primary.withValues(alpha: 0.2) : context.borderColor),
+                                        border: Border.all(
+                                          color: isOwn
+                                              ? AppColors.primary.withValues(
+                                                  alpha: 0.2,
+                                                )
+                                              : context.borderColor,
+                                        ),
                                       ),
                                       child: Column(
-                                        crossAxisAlignment: isOwn ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                                        crossAxisAlignment: isOwn
+                                            ? CrossAxisAlignment.end
+                                            : CrossAxisAlignment.start,
                                         children: [
-                                          Text(c['sender_name'] ?? '', style: TextStyle(fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.w600, color: isOwn ? AppColors.primary : context.textSecondary)),
+                                          Text(
+                                            c['sender_name'] ?? '',
+                                            style: TextStyle(
+                                              fontFamily: 'Poppins',
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: isOwn
+                                                  ? AppColors.primary
+                                                  : context.textSecondary,
+                                            ),
+                                          ),
                                           const SizedBox(height: 2),
-                                          Text(c['text'] ?? '', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textPrimary)),
+                                          Text(
+                                            c['text'] ?? '',
+                                            style: TextStyle(
+                                              fontFamily: 'Poppins',
+                                              fontSize: 13,
+                                              color: context.textPrimary,
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -853,23 +1366,66 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                       Expanded(
                         child: TextField(
                           controller: _myPrivateCommentController,
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textPrimary),
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            color: context.textPrimary,
+                          ),
                           decoration: InputDecoration(
-                            hintText: 'Add comment to ${widget.course['instructor_name'] ?? 'Instructor'}',
-                            hintStyle: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint),
-                            filled: true, fillColor: context.bgColor,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: context.borderColor)),
-                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: context.borderColor)),
-                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: const BorderSide(color: Color(0xFFFF6B35), width: 1.5)),
+                            hintText:
+                                'Add comment to ${widget.course['instructor_name'] ?? 'Instructor'}',
+                            hintStyle: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 13,
+                              color: context.textHint,
+                            ),
+                            filled: true,
+                            fillColor: context.bgColor,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide(
+                                color: context.borderColor,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide(
+                                color: context.borderColor,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFFF6B35),
+                                width: 1.5,
+                              ),
+                            ),
                             suffixIcon: GestureDetector(
                               onTap: () async {
                                 await _submitMyPrivateComment();
                                 setSheet(() {});
                               },
                               child: _isSubmittingMyComment
-                                  ? const Padding(padding: EdgeInsets.all(10), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF6B35))))
-                                  : const Icon(Icons.send_rounded, color: Color(0xFFFF6B35), size: 20),
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(10),
+                                      child: SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Color(0xFFFF6B35),
+                                        ),
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.send_rounded,
+                                      color: Color(0xFFFF6B35),
+                                      size: 20,
+                                    ),
                             ),
                           ),
                         ),
@@ -891,7 +1447,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
   Widget _buildInstructionsTab() {
     final dueDate = widget.post['due_date'];
-    final isPastDue = dueDate != null && DateTime.parse(dueDate).isBefore(DateTime.now());
+    final isPastDue =
+        dueDate != null && DateTime.parse(dueDate).isBefore(DateTime.now());
 
     return SingleChildScrollView(
       child: Column(
@@ -906,18 +1463,45 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (dueDate != null) ...[
-                  Text(_formatDate(dueDate),
-                    style: TextStyle(fontFamily: 'Poppins', fontSize: 13,
-                        color: isPastDue ? AppColors.error : context.textSecondary, fontWeight: FontWeight.w500)),
-                  Text('Work cannot be turned in after the due date',
-                    style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: context.textHint)),
+                  Text(
+                    _formatDate(dueDate),
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      color: isPastDue
+                          ? AppColors.error
+                          : context.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    'Work cannot be turned in after the due date',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 12,
+                      color: context.textHint,
+                    ),
+                  ),
                   const SizedBox(height: 12),
                 ],
-                Text(widget.post['title'] ?? '',
-                  style: TextStyle(fontFamily: 'Poppins', fontSize: 22, fontWeight: FontWeight.w700, color: context.textPrimary)),
+                Text(
+                  widget.post['title'] ?? '',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: context.textPrimary,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text('${widget.post['points'] ?? 100} points',
-                  style: TextStyle(fontFamily: 'Poppins', fontSize: 14, color: context.textSecondary)),
+                Text(
+                  '${widget.post['points'] ?? 100} points',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    color: context.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -931,11 +1515,24 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Do this assignment',
-                    style: TextStyle(fontFamily: 'Poppins', fontSize: 14, color: context.textSecondary)),
+                  Text(
+                    'Do this assignment',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: context.textSecondary,
+                    ),
+                  ),
                   const SizedBox(height: 8),
-                  Text(widget.post['instructions'],
-                    style: TextStyle(fontFamily: 'Poppins', fontSize: 14, color: context.textPrimary, height: 1.6)),
+                  Text(
+                    widget.post['instructions'],
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: context.textPrimary,
+                      height: 1.6,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -944,8 +1541,15 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           if (widget.post['assessment_url'] != null) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
-              child: Text('Attachments',
-                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary)),
+              child: Text(
+                'Attachments',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: context.textPrimary,
+                ),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
@@ -963,13 +1567,26 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           // ─── Class Comments ────────────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-            child: Text('Class comments',
-              style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary)),
+            child: Text(
+              'Class comments',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: context.textPrimary,
+              ),
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
-            child: Text('No comments',
-              style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint)),
+            child: Text(
+              'No comments',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                color: context.textHint,
+              ),
+            ),
           ),
         ],
       ),
@@ -977,10 +1594,17 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   }
 
   Widget _buildStudentWorkTab() {
-    if (_isLoadingStudents) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+    if (_isLoadingStudents)
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
 
-    final turnedInStudents = _students.where((s) => _submissions[s['id']]?['submitted_at'] != null).toList();
-    final assignedStudents = _students.where((s) => _submissions[s['id']]?['submitted_at'] == null).toList();
+    final turnedInStudents = _students
+        .where((s) => _submissions[s['id']]?['submitted_at'] != null)
+        .toList();
+    final assignedStudents = _students
+        .where((s) => _submissions[s['id']]?['submitted_at'] == null)
+        .toList();
 
     return Column(
       children: [
@@ -991,31 +1615,99 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           child: Row(
             children: [
               Expanded(
-                child: Column(children: [
-                  Text('$_turnedInCount', style: TextStyle(fontFamily: 'Poppins', fontSize: 28, fontWeight: FontWeight.w700, color: context.textPrimary)),
-                  Text('Turned in', style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: context.textSecondary)),
-                ]),
+                child: Column(
+                  children: [
+                    Text(
+                      '$_turnedInCount',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      'Turned in',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        color: context.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               Container(width: 1, height: 40, color: context.borderColor),
               Expanded(
-                child: Column(children: [
-                  Text('$_assignedCount', style: TextStyle(fontFamily: 'Poppins', fontSize: 28, fontWeight: FontWeight.w700, color: context.textPrimary)),
-                  Text('Assigned', style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: context.textSecondary)),
-                ]),
+                child: Column(
+                  children: [
+                    Text(
+                      '$_assignedCount',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      'Assigned',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        color: context.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               Container(width: 1, height: 40, color: context.borderColor),
               Expanded(
-                child: Column(children: [
-                  Text('$_gradedCount', style: TextStyle(fontFamily: 'Poppins', fontSize: 28, fontWeight: FontWeight.w700, color: context.textPrimary)),
-                  Text('Graded', style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: context.textSecondary)),
-                ]),
+                child: Column(
+                  children: [
+                    Text(
+                      '$_gradedCount',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      'Graded',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        color: context.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               Container(width: 1, height: 40, color: context.borderColor),
               Expanded(
-                child: Column(children: [
-                  Text('$_returnedCount', style: TextStyle(fontFamily: 'Poppins', fontSize: 28, fontWeight: FontWeight.w700, color: context.textPrimary)),
-                  Text('Returned', style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: context.textSecondary)),
-                ]),
+                child: Column(
+                  children: [
+                    Text(
+                      '$_returnedCount',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      'Returned',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        color: context.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -1037,14 +1729,21 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                           _acceptSubmissions
                               ? 'Submissions will close ${_formatDate(widget.post['due_date']).replaceAll('Due ', '')}'
                               : 'Submissions are closed',
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textSecondary),
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            color: context.textSecondary,
+                          ),
                         ),
                       ),
                       GestureDetector(
                         onTap: _toggleAcceptSubmissions,
                         child: Icon(
-                          _acceptSubmissions ? Icons.edit_outlined : Icons.lock_open_outlined,
-                          color: AppColors.primary, size: 20,
+                          _acceptSubmissions
+                              ? Icons.edit_outlined
+                              : Icons.lock_open_outlined,
+                          color: AppColors.primary,
+                          size: 20,
                         ),
                       ),
                     ],
@@ -1057,15 +1756,24 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     children: [
                       Expanded(
                         child: Text(
-                          _acceptSubmissions ? 'Accepting submissions' : 'Submissions are closed',
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textSecondary),
+                          _acceptSubmissions
+                              ? 'Accepting submissions'
+                              : 'Submissions are closed',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            color: context.textSecondary,
+                          ),
                         ),
                       ),
                       GestureDetector(
                         onTap: _toggleAcceptSubmissions,
                         child: Icon(
-                          _acceptSubmissions ? Icons.lock_open_outlined : Icons.lock_outline,
-                          color: AppColors.primary, size: 20,
+                          _acceptSubmissions
+                              ? Icons.lock_open_outlined
+                              : Icons.lock_outline,
+                          color: AppColors.primary,
+                          size: 20,
                         ),
                       ),
                     ],
@@ -1074,12 +1782,27 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
               // ─── All Students header with checkbox ──────
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 4,
+                ),
                 child: Row(
                   children: [
-                    Icon(Icons.people_outlined, color: context.textSecondary, size: 22),
+                    Icon(
+                      Icons.people_outlined,
+                      color: context.textSecondary,
+                      size: 22,
+                    ),
                     const SizedBox(width: 14),
-                    Text('All students', style: TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w600, color: context.textPrimary)),
+                    Text(
+                      'All students',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: context.textPrimary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1090,7 +1813,16 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               if (turnedInStudents.isNotEmpty) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  child: Text('TURNED IN', style: TextStyle(fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.w700, color: context.textSecondary, letterSpacing: 1)),
+                  child: Text(
+                    'TURNED IN',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: context.textSecondary,
+                      letterSpacing: 1,
+                    ),
+                  ),
                 ),
                 ..._buildStudentRows(turnedInStudents),
                 Divider(color: context.borderColor),
@@ -1100,7 +1832,16 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               if (assignedStudents.isNotEmpty) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  child: Text('ASSIGNED', style: TextStyle(fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.w700, color: context.textSecondary, letterSpacing: 1)),
+                  child: Text(
+                    'ASSIGNED',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: context.textSecondary,
+                      letterSpacing: 1,
+                    ),
+                  ),
                 ),
                 ..._buildStudentRows(assignedStudents),
               ],
@@ -1108,7 +1849,15 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               if (_students.isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(32),
-                  child: Center(child: Text('No students enrolled yet.', style: TextStyle(fontFamily: 'Poppins', color: context.textHint))),
+                  child: Center(
+                    child: Text(
+                      'No students enrolled yet.',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        color: context.textHint,
+                      ),
+                    ),
+                  ),
                 ),
 
               const SizedBox(height: 40),
@@ -1132,20 +1881,45 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           backgroundColor: AppColors.primary.withValues(alpha: 0.15),
           child: Text(
             (student['name'] as String).substring(0, 1).toUpperCase(),
-            style: const TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.primary),
+            style: const TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary,
+            ),
           ),
         ),
-        title: Text(student['name'] ?? '',
-          style: TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w500, color: context.textPrimary)),
+        title: Text(
+          student['name'] ?? '',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: context.textPrimary,
+          ),
+        ),
         trailing: Text(
-          isGradedS ? '${submission!['score']}/${widget.post['points'] ?? 100}' : hasTurnedIn ? 'Turned in' : 'Assigned',
-          style: TextStyle(fontFamily: 'Poppins', fontSize: 13,
-              color: isGradedS ? AppColors.primary : hasTurnedIn ? Colors.green : context.textSecondary)),
+          isGradedS
+              ? '${submission!['score']}/${widget.post['points'] ?? 100}'
+              : hasTurnedIn
+              ? 'Turned in'
+              : 'Assigned',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 13,
+            color: isGradedS
+                ? AppColors.primary
+                : hasTurnedIn
+                ? Colors.green
+                : context.textSecondary,
+          ),
+        ),
         onTap: () {
           setState(() {
             _selectedStudent = student;
             _selectedSubmission = submission;
-            if (submission?['score'] != null) _gradeController.text = submission!['score'].toString();
+            if (submission?['score'] != null)
+              _gradeController.text = submission!['score'].toString();
           });
           _loadPrivateComments(student['id']);
         },
@@ -1161,200 +1935,532 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Student info + submission
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.borderColor)),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              CircleAvatar(radius: 24, backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                child: Text((student['name'] as String).substring(0, 1).toUpperCase(),
-                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.primary))),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(student['name'] ?? '', style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700, color: context.textPrimary)),
-                Text(hasTurnedIn ? 'Turned in' : 'Not submitted',
-                  style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: hasTurnedIn ? Colors.green : context.textHint)),
-              ])),
-            ]),
-            if (hasTurnedIn && submission!['file_url'] != null) ...[
-              const SizedBox(height: 14),
-              Divider(color: context.borderColor, height: 1),
-              const SizedBox(height: 12),
-              Text('Submitted Work', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w700, color: context.textSecondary)),
-              const SizedBox(height: 8),
-              _buildAttachmentTile(submission['file_name'] ?? 'Submission', submission['file_url'], Icons.insert_drive_file_outlined, AppColors.primary),
-            ],
-          ]),
-        ),
-        const SizedBox(height: 12),
-
-        // Grade input
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.primary.withValues(alpha: 0.3))),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Grade', style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary)),
-            const SizedBox(height: 12),
-            if (isGradedS) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Text('Current Score', style: TextStyle(fontFamily: 'Poppins', fontSize: 14, color: context.textPrimary)),
-                  Text('${submission!['score']}/${widget.post['points'] ?? 100}',
-                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.primary)),
-                ]),
-              ),
-              const SizedBox(height: 10),
-            ],
-            Row(children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _gradeController,
-                  keyboardType: TextInputType.number,
-                  style: TextStyle(fontFamily: 'Poppins', color: context.textPrimary, fontSize: 14),
-                  decoration: InputDecoration(
-                    labelText: '${isGradedS ? 'Update' : 'Set'} Score (0-${widget.post['points'] ?? 100})',
-                    labelStyle: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textSecondary),
-                    prefixIcon: Icon(Icons.grade_outlined, color: context.textHint, size: 20),
-                    suffixText: '/ ${widget.post['points'] ?? 100}',
-                    suffixStyle: TextStyle(fontFamily: 'Poppins', color: context.textSecondary),
-                    filled: true, fillColor: context.bgColor,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.borderColor)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.borderColor)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  minimumSize: const Size(80, 52), elevation: 0),
-                onPressed: _isGrading ? null : () => _gradeSubmission(student['id']),
-                child: _isGrading
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : Text(isGradedS ? 'Update' : 'Grade', style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
-              ),
-            ]),
-          ]),
-        ),
-        const SizedBox(height: 12),
-
-        // Private comments
-        Container(
-          decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFFF6B35).withValues(alpha: 0.3))),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-              child: Row(children: [
-                const Icon(Icons.lock_outline, color: Color(0xFFFF6B35), size: 16),
-                const SizedBox(width: 8),
-                Text('Private Comments', style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary)),
-              ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Student info + submission
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: context.cardColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: context.borderColor),
             ),
-            Divider(color: context.borderColor, height: 1),
-            if (_isLoadingPrivate)
-              const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2)))
-            else if (_privateComments.isEmpty)
-              Padding(padding: const EdgeInsets.all(16), child: Text('No private comments yet.', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint), textAlign: TextAlign.center))
-            else
-              ..._privateComments.map((c) {
-                final isOwn = c['sender_id'] == _currentUserId;
-                return Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: isOwn ? MainAxisAlignment.end : MainAxisAlignment.start,
-                    children: [
-                      if (!isOwn) ...[
-                        CircleAvatar(radius: 14, backgroundColor: const Color(0xFFFF6B35).withValues(alpha: 0.15),
-                          child: Text((c['sender_name'] as String).substring(0, 1).toUpperCase(),
-                            style: const TextStyle(fontFamily: 'Poppins', fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFFFF6B35)))),
-                        const SizedBox(width: 8),
-                      ],
-                      Flexible(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: isOwn ? AppColors.primary.withValues(alpha: 0.1) : context.bgColor,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: isOwn ? AppColors.primary.withValues(alpha: 0.2) : context.borderColor),
-                          ),
-                          child: Column(crossAxisAlignment: isOwn ? CrossAxisAlignment.end : CrossAxisAlignment.start, children: [
-                            Text(c['sender_name'] ?? '', style: TextStyle(fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.w600, color: isOwn ? AppColors.primary : context.textSecondary)),
-                            const SizedBox(height: 2),
-                            Text(c['text'] ?? '', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textPrimary)),
-                          ]),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: AppColors.primary.withValues(
+                        alpha: 0.15,
+                      ),
+                      child: Text(
+                        (student['name'] as String)
+                            .substring(0, 1)
+                            .toUpperCase(),
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
                         ),
                       ),
-                      if (isOwn) const SizedBox(width: 8),
-                    ],
-                  ),
-                );
-              }),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(children: [
-                CircleAvatar(radius: 14, backgroundColor: const Color(0xFFFF6B35).withValues(alpha: 0.15),
-                  child: Text((_currentUserName ?? 'I').substring(0, 1).toUpperCase(),
-                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFFFF6B35)))),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    controller: _privateCommentController,
-                    style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textPrimary),
-                    decoration: InputDecoration(
-                      hintText: 'Add private comment...',
-                      hintStyle: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint),
-                      filled: true, fillColor: context.bgColor,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: context.borderColor)),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: context.borderColor)),
-                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: Color(0xFFFF6B35), width: 1.5)),
-                      suffixIcon: GestureDetector(
-                        onTap: () => _submitPrivateComment(student['id']),
-                        child: _isSubmittingComment
-                            ? const Padding(padding: EdgeInsets.all(8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFFFF6B35))))
-                            : const Icon(Icons.send_rounded, color: Color(0xFFFF6B35), size: 20)),
                     ),
-                    onSubmitted: (_) => _submitPrivateComment(student['id']),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            student['name'] ?? '',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: context.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            hasTurnedIn ? 'Turned in' : 'Not submitted',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 12,
+                              color: hasTurnedIn
+                                  ? Colors.green
+                                  : context.textHint,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                if (hasTurnedIn && submission!['file_url'] != null) ...[
+                  const SizedBox(height: 14),
+                  Divider(color: context.borderColor, height: 1),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Submitted Work',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: context.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildAttachmentTile(
+                    submission['file_name'] ?? 'Submission',
+                    submission['file_url'],
+                    Icons.insert_drive_file_outlined,
+                    AppColors.primary,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Grade input
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: context.cardColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.primary.withValues(alpha: 0.3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Grade',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: context.textPrimary,
                   ),
                 ),
-              ]),
+                const SizedBox(height: 12),
+                if (isGradedS) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Current Score',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 14,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          '${submission!['score']}/${widget.post['points'] ?? 100}',
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _gradeController,
+                        keyboardType: TextInputType.number,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          color: context.textPrimary,
+                          fontSize: 14,
+                        ),
+                        decoration: InputDecoration(
+                          labelText:
+                              '${isGradedS ? 'Update' : 'Set'} Score (0-${widget.post['points'] ?? 100})',
+                          labelStyle: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            color: context.textSecondary,
+                          ),
+                          prefixIcon: Icon(
+                            Icons.grade_outlined,
+                            color: context.textHint,
+                            size: 20,
+                          ),
+                          suffixText: '/ ${widget.post['points'] ?? 100}',
+                          suffixStyle: TextStyle(
+                            fontFamily: 'Poppins',
+                            color: context.textSecondary,
+                          ),
+                          filled: true,
+                          fillColor: context.bgColor,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: context.borderColor),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: context.borderColor),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: AppColors.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        minimumSize: const Size(80, 52),
+                        elevation: 0,
+                      ),
+                      onPressed: _isGrading
+                          ? null
+                          : () => _gradeSubmission(student['id']),
+                      child: _isGrading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              isGradedS ? 'Update' : 'Grade',
+                              style: const TextStyle(
+                                fontFamily: 'Poppins',
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ]),
-        ),
-        const SizedBox(height: 80),
-      ]),
+          ),
+          const SizedBox(height: 12),
+
+          // Private comments
+          Container(
+            decoration: BoxDecoration(
+              color: context.cardColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: const Color(0xFFFF6B35).withValues(alpha: 0.3),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.lock_outline,
+                        color: Color(0xFFFF6B35),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Private Comments',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: context.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(color: context.borderColor, height: 1),
+                if (_isLoadingPrivate)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  )
+                else if (_privateComments.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'No private comments yet.',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                        color: context.textHint,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                else
+                  ..._privateComments.map((c) {
+                    final isOwn = c['sender_id'] == _currentUserId;
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: isOwn
+                            ? MainAxisAlignment.end
+                            : MainAxisAlignment.start,
+                        children: [
+                          if (!isOwn) ...[
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: const Color(
+                                0xFFFF6B35,
+                              ).withValues(alpha: 0.15),
+                              child: Text(
+                                (c['sender_name'] as String)
+                                    .substring(0, 1)
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFFFF6B35),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isOwn
+                                    ? AppColors.primary.withValues(alpha: 0.1)
+                                    : context.bgColor,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isOwn
+                                      ? AppColors.primary.withValues(alpha: 0.2)
+                                      : context.borderColor,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: isOwn
+                                    ? CrossAxisAlignment.end
+                                    : CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    c['sender_name'] ?? '',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: isOwn
+                                          ? AppColors.primary
+                                          : context.textSecondary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    c['text'] ?? '',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 13,
+                                      color: context.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (isOwn) const SizedBox(width: 8),
+                        ],
+                      ),
+                    );
+                  }),
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 14,
+                        backgroundColor: const Color(
+                          0xFFFF6B35,
+                        ).withValues(alpha: 0.15),
+                        child: Text(
+                          (_currentUserName ?? 'I')
+                              .substring(0, 1)
+                              .toUpperCase(),
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFFF6B35),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: _privateCommentController,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            color: context.textPrimary,
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'Add private comment...',
+                            hintStyle: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 13,
+                              color: context.textHint,
+                            ),
+                            filled: true,
+                            fillColor: context.bgColor,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide(
+                                color: context.borderColor,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: BorderSide(
+                                color: context.borderColor,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                              borderSide: const BorderSide(
+                                color: Color(0xFFFF6B35),
+                                width: 1.5,
+                              ),
+                            ),
+                            suffixIcon: GestureDetector(
+                              onTap: () => _submitPrivateComment(student['id']),
+                              child: _isSubmittingComment
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(8),
+                                      child: SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Color(0xFFFF6B35),
+                                        ),
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons.send_rounded,
+                                      color: Color(0xFFFF6B35),
+                                      size: 20,
+                                    ),
+                            ),
+                          ),
+                          onSubmitted: (_) =>
+                              _submitPrivateComment(student['id']),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 80),
+        ],
+      ),
     );
   }
 
   // ─── Shared Widgets ───────────────────────────────────────
 
-  Widget _buildAttachmentTile(String name, String url, IconData icon, Color color) {
+  Widget _buildAttachmentTile(
+    String name,
+    String url,
+    IconData icon,
+    Color color,
+  ) {
     return GestureDetector(
-      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FileViewerScreen(url: url, fileName: name))),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FileViewerScreen(url: url, fileName: name),
+        ),
+      ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12),
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
-        child: Row(children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 12),
-          Expanded(child: Text(name, style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: color, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis)),
-          Icon(Icons.visibility_outlined, color: color, size: 16),
-          const SizedBox(width: 4),
-          Icon(Icons.chevron_right, color: color.withValues(alpha: 0.5), size: 16),
-        ]),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                name,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: color,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(Icons.visibility_outlined, color: color, size: 16),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.chevron_right,
+              color: color.withValues(alpha: 0.5),
+              size: 16,
+            ),
+          ],
+        ),
       ),
     );
   }
-
 }

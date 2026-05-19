@@ -30,7 +30,6 @@ class CourseDetailScreen extends ConsumerStatefulWidget {
 
 class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     with TickerProviderStateMixin {
-
   // ─── State ───────────────────────────────────────────────
   int _currentTab = 0;
   final _supabase = Supabase.instance.client;
@@ -94,9 +93,15 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
-      final data = await _supabase.from('users').select().eq('id', userId).single();
+      final data = await _supabase
+          .from('users')
+          .select()
+          .eq('id', userId)
+          .single();
       if (mounted) setState(() => _currentUser = UserModel.fromMap(data));
-    } catch (e) { debugPrint('User error: $e'); }
+    } catch (e) {
+      debugPrint('User error: $e');
+    }
   }
 
   Future<void> _loadStream() async {
@@ -108,45 +113,53 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           .order('created_at', ascending: false);
       if (mounted) {
         setState(() {
-        _streamPosts = List<Map<String, dynamic>>.from(data);
-        _isLoadingStream = false;
-      });
+          _streamPosts = List<Map<String, dynamic>>.from(data);
+          _isLoadingStream = false;
+        });
       }
-    } catch (e) { if (mounted) setState(() => _isLoadingStream = false); }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingStream = false);
+    }
   }
 
   Future<void> _loadCoursework() async {
     try {
       final topicsData = await _supabase
-          .from('topics').select()
+          .from('topics')
+          .select()
           .eq('course_id', widget.course['id'])
           .order('order_index');
       final postsData = await _supabase
-          .from('posts').select()
+          .from('posts')
+          .select('*, users(name)')
           .eq('course_id', widget.course['id'])
           .neq('type', 'announcement')
           .order('created_at', ascending: false);
+
       if (mounted) {
         setState(() {
+          // By using List.from, we ensure the UI sees a brand new list
+          // and stops showing the post in its old topic
           _topics = List<Map<String, dynamic>>.from(topicsData);
           _posts = List<Map<String, dynamic>>.from(postsData);
           _isLoadingCoursework = false;
-          for (final t in _topics) {
-            _expandedTopics[t['id']] = true;
-          }
-          _expandedTopics['general'] = true;
         });
       }
-    } catch (e) { if (mounted) setState(() => _isLoadingCoursework = false); }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingCoursework = false);
+    }
   }
 
   Future<void> _loadPeople() async {
     try {
       final instructorData = await _supabase
-          .from('users').select()
-          .eq('id', widget.course['instructor_id']).single();
+          .from('users')
+          .select()
+          .eq('id', widget.course['instructor_id'])
+          .single();
       final enrollmentsData = await _supabase
-          .from('enrollments').select('users(*)')
+          .from('enrollments')
+          .select('users(*)')
           .eq('course_id', widget.course['id']);
       if (mounted) {
         setState(() {
@@ -157,17 +170,25 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           _isLoadingPeople = false;
         });
       }
-    } catch (e) { if (mounted) setState(() => _isLoadingPeople = false); }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingPeople = false);
+    }
   }
 
   Future<void> _loadComments(String postId) async {
     try {
       final data = await _supabase
-          .from('comments').select()
+          .from('comments')
+          .select()
           .eq('post_id', postId)
           .order('created_at', ascending: true);
-      if (mounted) setState(() => _comments[postId] = List<Map<String, dynamic>>.from(data));
-    } catch (e) { debugPrint('Comments error: $e'); }
+      if (mounted)
+        setState(
+          () => _comments[postId] = List<Map<String, dynamic>>.from(data),
+        );
+    } catch (e) {
+      debugPrint('Comments error: $e');
+    }
   }
 
   Future<void> _submitComment(String postId) async {
@@ -187,15 +208,64 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       });
       controller.clear();
       await _loadComments(postId);
-    } catch (e) { debugPrint('Comment submit error: $e'); }
-    finally { if (mounted) setState(() => _submittingComment[postId] = false); }
+    } catch (e) {
+      debugPrint('Comment submit error: $e');
+    } finally {
+      if (mounted) setState(() => _submittingComment[postId] = false);
+    }
+  }
+
+  void _showEditCommentDialog(Map<String, dynamic> comment, String postId) {
+    final controller = TextEditingController(text: comment['text']);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: context.surfaceColor,
+        title: Text(
+          'Edit Comment',
+          style: TextStyle(
+            color: context.textPrimary,
+            fontFamily: 'Poppins',
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: TextField(
+          controller: controller,
+          style: TextStyle(color: context.textPrimary, fontFamily: 'Poppins'),
+          decoration: InputDecoration(
+            hintText: 'Type something...',
+            hintStyle: TextStyle(color: context.textHint),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await _supabase
+                  .from('comments')
+                  .update({'text': controller.text.trim()})
+                  .eq('id', comment['id']);
+              Navigator.pop(context);
+              _loadComments(postId);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _deleteComment(String commentId, String postId) async {
     try {
       await _supabase.from('comments').delete().eq('id', commentId);
       await _loadComments(postId);
-    } catch (e) { debugPrint('Delete comment error: $e'); }
+    } catch (e) {
+      debugPrint('Delete comment error: $e');
+    }
   }
 
   Future<void> _deletePost(String postId) async {
@@ -206,8 +276,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting post: $e'), backgroundColor: AppColors.error),
-      );
+          SnackBar(
+            content: Text('Error deleting post: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
       }
     }
   }
@@ -229,7 +302,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           ),
         );
       }
-    } catch (e) { debugPrint('Remove student error: $e'); }
+    } catch (e) {
+      debugPrint('Remove student error: $e');
+    }
   }
 
   void _togglePost(String postId) {
@@ -245,8 +320,12 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   // ════════════════════════════════════════════════════════
 
   void _showAnnouncementDialog({Map<String, dynamic>? existing}) {
-    final titleController = TextEditingController(text: existing?['title'] ?? '');
-    final instructionsController = TextEditingController(text: existing?['instructions'] ?? '');
+    final titleController = TextEditingController(
+      text: existing?['title'] ?? '',
+    );
+    final instructionsController = TextEditingController(
+      text: existing?['instructions'] ?? '',
+    );
     bool isPosting = false;
 
     showModalBottomSheet(
@@ -262,75 +341,155 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           ),
           child: Column(
             children: [
-              Container(margin: const EdgeInsets.only(top: 12), width: 40, height: 4,
-                decoration: BoxDecoration(color: context.borderColor, borderRadius: BorderRadius.circular(2))),
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: context.borderColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
                 child: Row(
                   children: [
-                    Container(padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.accent, Color(0xFF9B59B6)]), borderRadius: BorderRadius.circular(12)),
-                      child: const Icon(Icons.campaign_outlined, color: Colors.white, size: 20)),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [AppColors.accent, Color(0xFF9B59B6)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.campaign_outlined,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    Text(existing != null ? 'Edit Announcement' : 'Create Announcement',
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 17, fontWeight: FontWeight.w700, color: context.textPrimary)),
+                    Text(
+                      existing != null
+                          ? 'Edit Announcement'
+                          : 'Create Announcement',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
+                      ),
+                    ),
                   ],
                 ),
               ),
               Expanded(
                 child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(24, 20, 24, MediaQuery.of(context).viewInsets.bottom + 24),
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    20,
+                    24,
+                    MediaQuery.of(context).viewInsets.bottom + 24,
+                  ),
                   child: Column(
                     children: [
-                      _buildSheetField('Announcement Title', 'e.g. Class reminder', titleController, Icons.title_outlined),
+                      _buildSheetField(
+                        'Announcement Title',
+                        'e.g. Class reminder',
+                        titleController,
+                        Icons.title_outlined,
+                      ),
                       const SizedBox(height: 16),
-                      _buildSheetField('Message', 'Write your announcement here...', instructionsController, Icons.message_outlined, maxLines: 5),
+                      _buildSheetField(
+                        'Message',
+                        'Write your announcement here...',
+                        instructionsController,
+                        Icons.message_outlined,
+                        maxLines: 5,
+                      ),
                       const SizedBox(height: 24),
                       SizedBox(
-                        width: double.infinity, height: 52,
+                        width: double.infinity,
+                        height: 52,
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.accent,
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
                             elevation: 0,
                           ),
-                          onPressed: isPosting ? null : () async {
-                            if (titleController.text.trim().isEmpty) return;
-                            setSheet(() => isPosting = true);
-                            try {
-                              final userId = _supabase.auth.currentUser?.id;
-                              if (existing != null) {
-                                await _supabase.from('posts').update({
-                                  'title': titleController.text.trim(),
-                                  'instructions': instructionsController.text.trim(),
-                                }).eq('id', existing['id']);
-                              } else {
-                                await _supabase.from('posts').insert({
-                                  'course_id': widget.course['id'],
-                                  'instructor_id': userId,
-                                  'type': 'announcement',
-                                  'title': titleController.text.trim(),
-                                  'instructions': instructionsController.text.trim(),
-                                  'created_at': DateTime.now().toIso8601String(),
-                                });
-                              }
-                              if (mounted) {
-                                Navigator.pop(context);
-                                await _loadStream();
-                              }
-                            } catch (e) {
-                              setSheet(() => isPosting = false);
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error));
-                              }
-                            }
-                          },
+                          onPressed: isPosting
+                              ? null
+                              : () async {
+                                  if (titleController.text.trim().isEmpty)
+                                    return;
+                                  setSheet(() => isPosting = true);
+                                  try {
+                                    final userId =
+                                        _supabase.auth.currentUser?.id;
+                                    if (existing != null) {
+                                      await _supabase
+                                          .from('posts')
+                                          .update({
+                                            'title': titleController.text
+                                                .trim(),
+                                            'instructions':
+                                                instructionsController.text
+                                                    .trim(),
+                                          })
+                                          .eq('id', existing['id']);
+                                    } else {
+                                      await _supabase.from('posts').insert({
+                                        'course_id': widget.course['id'],
+                                        'instructor_id': userId,
+                                        'type': 'announcement',
+                                        'title': titleController.text.trim(),
+                                        'instructions': instructionsController
+                                            .text
+                                            .trim(),
+                                        'created_at': DateTime.now()
+                                            .toIso8601String(),
+                                      });
+                                    }
+                                    if (mounted) {
+                                      Navigator.pop(context);
+                                      await _loadStream();
+                                    }
+                                  } catch (e) {
+                                    setSheet(() => isPosting = false);
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Error: $e'),
+                                          backgroundColor: AppColors.error,
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
                           child: isPosting
-                              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                              : Text(existing != null ? 'Save Changes' : 'Post Announcement',
-                                  style: const TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  existing != null
+                                      ? 'Save Changes'
+                                      : 'Post Announcement',
+                                  style: const TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                  ),
+                                ),
                         ),
                       ),
                     ],
@@ -344,284 +503,527 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     );
   }
 
-  void _showCreatePostDialog(String postType, {Map<String, dynamic>? existing}) {
-  final titleController = TextEditingController(text: existing?['title'] ?? '');
-  final instructionsController = TextEditingController(text: existing?['instructions'] ?? '');
-  String? selectedTopicId = existing?['topic_id'];
-  
-  // ─── Scheduling State (3d_meet) ───
-  DateTime? scheduledDate;
-  TimeOfDay? scheduledTime;
-  int durationMinutes = existing?['duration_minutes'] ?? 60;
-  bool isPosting = false;
+  void _showCreatePostDialog(
+    String postType, {
+    Map<String, dynamic>? existing,
+  }) {
+    final titleController = TextEditingController(
+      text: existing?['title'] ?? '',
+    );
+    final instructionsController = TextEditingController(
+      text: existing?['instructions'] ?? '',
+    );
+    String? selectedTopicId = existing?['topic_id'];
 
-  if (existing?['scheduled_time'] != null) {
-    final dt = DateTime.parse(existing!['scheduled_time']);
-    scheduledDate = dt;
-    scheduledTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
-  }
+    // ─── Scheduling State (3d_meet) ───
+    DateTime? scheduledDate;
+    TimeOfDay? scheduledTime;
+    int durationMinutes = existing?['duration_minutes'] ?? 60;
+    bool isPosting = false;
 
-  // ─── File upload state ───
-  String? materialUrl = existing?['material_url'];
-  String? materialName = existing?['material_name'];
-  String? assessmentUrl = existing?['assessment_url'];
-  String? assessmentName = existing?['assessment_name'];
-  bool isUploadingMaterial = false;
-  bool isUploadingAssessment = false;
+    if (existing?['scheduled_time'] != null) {
+      final dt = DateTime.parse(existing!['scheduled_time']);
+      scheduledDate = dt;
+      scheduledTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
+    }
 
-  final typeConfig = {
-    '3d_meet': {'label': '3D Meet Coding', 'icon': Icons.view_in_ar_outlined, 'color': const Color(0xFF22C55E)},
-    'material': {'label': 'Lesson Material', 'icon': Icons.bookmark_outline, 'color': AppColors.primary},
-    'assignment': {'label': 'Assignment', 'icon': Icons.assignment_outlined, 'color': const Color(0xFFFF6B35)},
-  };
-  final config = typeConfig[postType]!;
+    // ─── File upload state ───
+    String? materialUrl = existing?['material_url'];
+    String? materialName = existing?['material_name'];
+    String? assessmentUrl = existing?['assessment_url'];
+    String? assessmentName = existing?['assessment_name'];
+    bool isUploadingMaterial = false;
+    bool isUploadingAssessment = false;
 
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setSheet) => Container(
-        height: MediaQuery.of(context).size.height * 0.92,
-        decoration: BoxDecoration(
-          color: context.surfaceColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            Container(margin: const EdgeInsets.only(top: 12), width: 40, height: 4,
-              decoration: BoxDecoration(color: context.borderColor, borderRadius: BorderRadius.circular(2))),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: (config['color'] as Color).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(config['icon'] as IconData, color: config['color'] as Color, size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    existing != null ? 'Edit Post' : config['label'] as String,
-                    style: TextStyle(fontFamily: 'Poppins', fontSize: 17, fontWeight: FontWeight.w700, color: context.textPrimary),
-                  ),
-                ],
+    final typeConfig = {
+      '3d_meet': {
+        'label': '3D Meet Coding',
+        'icon': Icons.view_in_ar_outlined,
+        'color': const Color(0xFF22C55E),
+      },
+      'material': {
+        'label': 'Lesson Material',
+        'icon': Icons.bookmark_outline,
+        'color': AppColors.primary,
+      },
+      'assignment': {
+        'label': 'Assignment',
+        'icon': Icons.assignment_outlined,
+        'color': const Color(0xFFFF6B35),
+      },
+    };
+    final config = typeConfig[postType]!;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheet) => Container(
+          height: MediaQuery.of(context).size.height * 0.92,
+          decoration: BoxDecoration(
+            color: context.surfaceColor,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: context.borderColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.fromLTRB(24, 20, 24, MediaQuery.of(context).viewInsets.bottom + 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                child: Row(
                   children: [
-                    _buildSheetField('Title', 'Enter post title', titleController, Icons.title_outlined),
-                    const SizedBox(height: 16),
-
-                    _buildSheetField('Instructions / Description', 'What do students need to do?', instructionsController, Icons.description_outlined, maxLines: 4),
-                    const SizedBox(height: 16),
-
-                    // ─── Lesson Material (Hidden for assignments) ──
-                    if (postType != 'assignment') ...[
-                      _buildUploadButton(
-                        label: materialName ?? 'Attach Lesson Material',
-                        icon: materialName != null ? Icons.check_circle : Icons.picture_as_pdf_outlined,
-                        color: AppColors.primary,
-                        isUploading: isUploadingMaterial,
-                        onTap: () async {
-                          final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf', 'mp4', 'png', 'jpg']);
-                          if (result == null) return;
-                          setSheet(() => isUploadingMaterial = true);
-                          try {
-                            final file = result.files.first;
-                            final bytes = kIsWeb ? file.bytes! : await File(file.path!).readAsBytes();
-                            final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
-                            await _supabase.storage.from('course-materials').uploadBinary(fileName, bytes);
-                            final url = _supabase.storage.from('course-materials').getPublicUrl(fileName);
-                            setSheet(() { materialUrl = url; materialName = file.name; isUploadingMaterial = false; });
-                          } catch (e) { setSheet(() => isUploadingMaterial = false); }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-
-                    // ─── Assignment Instruction ──
-                    if (postType == '3d_meet' || postType == 'assignment') ...[
-                      _buildUploadButton(
-                        label: assessmentName ?? 'Attach Assessment Instruction (PDF)',
-                        icon: assessmentName != null ? Icons.check_circle : Icons.assignment_outlined,
-                        color: const Color(0xFFFF6B35),
-                        isUploading: isUploadingAssessment,
-                        onTap: () async {
-                          final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['pdf']);
-                          if (result == null) return;
-                          setSheet(() => isUploadingAssessment = true);
-                          try {
-                            final file = result.files.first;
-                            final bytes = kIsWeb ? file.bytes! : await File(file.path!).readAsBytes();
-                            final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
-                            await _supabase.storage.from('course-assessments').uploadBinary(fileName, bytes);
-                            final url = _supabase.storage.from('course-assessments').getPublicUrl(fileName);
-                            setSheet(() { assessmentUrl = url; assessmentName = file.name; isUploadingAssessment = false; });
-                          } catch (e) { setSheet(() => isUploadingAssessment = false); }
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    _buildTopicPicker(selectedTopicId, (val) => setSheet(() => selectedTopicId = val)),
-                    const SizedBox(height: 24),
-
-                    // ─── 3D Classroom Schedule (Switch Removed, Always Visible) ───
-                    if (postType == '3d_meet') ...[
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF22C55E).withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.25)),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: (config['color'] as Color).withValues(
+                          alpha: 0.15,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.calendar_month_outlined, color: Color(0xFF22C55E), size: 20),
-                                const SizedBox(width: 10),
-                                Text('Classroom Schedule', style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w700, color: context.textPrimary)),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            _buildDateTimePicker(
-                              context: context,
-                              date: scheduledDate,
-                              time: scheduledTime,
-                              onDateTap: () async {
-                                final p = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 365)));
-                                if (p != null) setSheet(() => scheduledDate = p);
-                              },
-                              onTimeTap: () async {
-                                final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                                if (t != null) setSheet(() => scheduledTime = t);
-                              },
-                            ),
-                            const SizedBox(height: 16),
-                            Text('Duration', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w600, color: context.textPrimary)),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [30, 60, 90, 120].map((mins) {
-                                final isSelected = durationMinutes == mins;
-                                // ─── REVISED DURATION LOGIC ───
-                                String label = mins == 90 ? '1.5 hr' : (mins >= 60 ? '${mins ~/ 60} hr' : '$mins min');
-
-                                return Padding(
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: GestureDetector(
-                                    onTap: () => setSheet(() => durationMinutes = mins),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: isSelected ? const Color(0xFF22C55E) : context.cardColor,
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: isSelected ? const Color(0xFF22C55E) : context.borderColor),
-                                      ),
-                                      child: Text(label,
-                                        style: TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : context.textSecondary)),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ],
-                        ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      const SizedBox(height: 24),
-                    ],
-
-                    // ─── Post Button with Strict Validation ───
-                    SizedBox(
-                      width: double.infinity, height: 52,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: config['color'] as Color,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          elevation: 0,
-                        ),
-                        onPressed: isPosting ? null : () async {
-                          String? error;
-                          final title = titleController.text.trim();
-                          final desc = instructionsController.text.trim();
-
-                          if (title.isEmpty) error = "Post title is required";
-                          else if (desc.isEmpty) error = "Instructions/Description are required";
-                          else if (postType == 'material' && materialUrl == null) error = "Please attach a Lesson Material file";
-                          else if (postType == 'assignment' && assessmentUrl == null) error = "Please attach Assignment Instructions (PDF)";
-                          else if (postType == '3d_meet') {
-                            if (materialUrl == null) error = "Lesson material is required for 3D Meet";
-                            else if (assessmentUrl == null) error = "Assessment instruction is required for 3D Meet";
-                            else if (scheduledDate == null || scheduledTime == null) error = "Date and Time are required for 3D Meet";
-                          }
-
-                          if (error != null) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: Text(error, style: const TextStyle(fontFamily: 'Poppins')),
-                              backgroundColor: AppColors.error,
-                              behavior: SnackBarBehavior.floating,
-                            ));
-                            return;
-                          }
-
-                          setSheet(() => isPosting = true);
-                          try {
-                            final userId = _supabase.auth.currentUser?.id;
-                            DateTime? finalScheduledTime;
-                            if (postType == '3d_meet') {
-                              finalScheduledTime = DateTime(scheduledDate!.year, scheduledDate!.month, scheduledDate!.day, scheduledTime!.hour, scheduledTime!.minute);
-                            }
-
-                            await _supabase.from('posts').insert({
-                              'course_id': widget.course['id'],
-                              'instructor_id': userId,
-                              'type': postType,
-                              'title': title,
-                              'instructions': desc,
-                              'topic_id': selectedTopicId,
-                              'material_url': materialUrl,
-                              'material_name': materialName,
-                              'assessment_url': assessmentUrl,
-                              'assessment_name': assessmentName,
-                              'scheduled_time': finalScheduledTime?.toIso8601String(),
-                              'duration_minutes': postType == '3d_meet' ? durationMinutes : null,
-                              'created_at': DateTime.now().toIso8601String(),
-                            });
-                            
-                            if (mounted) {
-                              Navigator.pop(context);
-                              await _loadStream();
-                              await _loadCoursework();
-                            }
-                          } catch (e) {
-                            setSheet(() => isPosting = false);
-                          }
-                        },
-                        child: isPosting
-                            ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : const Text('Post', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15)),
+                      child: Icon(
+                        config['icon'] as IconData,
+                        color: config['color'] as Color,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      existing != null
+                          ? 'Edit Post'
+                          : config['label'] as String,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: context.textPrimary,
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ],
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    20,
+                    24,
+                    MediaQuery.of(context).viewInsets.bottom + 24,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSheetField(
+                        'Title',
+                        'Enter post title',
+                        titleController,
+                        Icons.title_outlined,
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildSheetField(
+                        'Instructions / Description',
+                        'What do students need to do?',
+                        instructionsController,
+                        Icons.description_outlined,
+                        maxLines: 4,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ─── Lesson Material (Hidden for assignments) ──
+                      if (postType != 'assignment') ...[
+                        _buildUploadButton(
+                          label: materialName ?? 'Attach Lesson Material',
+                          icon: materialName != null
+                              ? Icons.check_circle
+                              : Icons.picture_as_pdf_outlined,
+                          color: AppColors.primary,
+                          isUploading: isUploadingMaterial,
+                          onTap: () async {
+                            final result = await FilePicker.platform.pickFiles(
+                              type: FileType.custom,
+                              allowedExtensions: ['pdf', 'mp4', 'png', 'jpg'],
+                            );
+                            if (result == null) return;
+                            setSheet(() => isUploadingMaterial = true);
+                            try {
+                              final file = result.files.first;
+                              final bytes = kIsWeb
+                                  ? file.bytes!
+                                  : await File(file.path!).readAsBytes();
+                              final fileName =
+                                  '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+                              await _supabase.storage
+                                  .from('course-materials')
+                                  .uploadBinary(fileName, bytes);
+                              final url = _supabase.storage
+                                  .from('course-materials')
+                                  .getPublicUrl(fileName);
+                              setSheet(() {
+                                materialUrl = url;
+                                materialName = file.name;
+                                isUploadingMaterial = false;
+                              });
+                            } catch (e) {
+                              setSheet(() => isUploadingMaterial = false);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      // ─── Assignment Instruction ──
+                      if (postType == '3d_meet' ||
+                          postType == 'assignment') ...[
+                        _buildUploadButton(
+                          label:
+                              assessmentName ??
+                              'Attach Assessment Instruction (PDF)',
+                          icon: assessmentName != null
+                              ? Icons.check_circle
+                              : Icons.assignment_outlined,
+                          color: const Color(0xFFFF6B35),
+                          isUploading: isUploadingAssessment,
+                          onTap: () async {
+                            final result = await FilePicker.platform.pickFiles(
+                              type: FileType.custom,
+                              allowedExtensions: ['pdf'],
+                            );
+                            if (result == null) return;
+                            setSheet(() => isUploadingAssessment = true);
+                            try {
+                              final file = result.files.first;
+                              final bytes = kIsWeb
+                                  ? file.bytes!
+                                  : await File(file.path!).readAsBytes();
+                              final fileName =
+                                  '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
+                              await _supabase.storage
+                                  .from('course-assessments')
+                                  .uploadBinary(fileName, bytes);
+                              final url = _supabase.storage
+                                  .from('course-assessments')
+                                  .getPublicUrl(fileName);
+                              setSheet(() {
+                                assessmentUrl = url;
+                                assessmentName = file.name;
+                                isUploadingAssessment = false;
+                              });
+                            } catch (e) {
+                              setSheet(() => isUploadingAssessment = false);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      _buildTopicPicker(
+                        selectedTopicId,
+                        (val) => setSheet(() => selectedTopicId = val),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // ─── 3D Classroom Schedule (Switch Removed, Always Visible) ───
+                      if (postType == '3d_meet') ...[
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF22C55E,
+                            ).withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: const Color(
+                                0xFF22C55E,
+                              ).withValues(alpha: 0.25),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.calendar_month_outlined,
+                                    color: Color(0xFF22C55E),
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'Classroom Schedule',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: context.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              _buildDateTimePicker(
+                                context: context,
+                                date: scheduledDate,
+                                time: scheduledTime,
+                                onDateTap: () async {
+                                  final p = await showDatePicker(
+                                    context: context,
+                                    initialDate: DateTime.now(),
+                                    firstDate: DateTime.now(),
+                                    lastDate: DateTime.now().add(
+                                      const Duration(days: 365),
+                                    ),
+                                  );
+                                  if (p != null)
+                                    setSheet(() => scheduledDate = p);
+                                },
+                                onTimeTap: () async {
+                                  final t = await showTimePicker(
+                                    context: context,
+                                    initialTime: TimeOfDay.now(),
+                                  );
+                                  if (t != null)
+                                    setSheet(() => scheduledTime = t);
+                                },
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Duration',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [30, 60, 90, 120].map((mins) {
+                                  final isSelected = durationMinutes == mins;
+                                  // ─── REVISED DURATION LOGIC ───
+                                  String label = mins == 90
+                                      ? '1.5 hr'
+                                      : (mins >= 60
+                                            ? '${mins ~/ 60} hr'
+                                            : '$mins min');
+
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: GestureDetector(
+                                      onTap: () => setSheet(
+                                        () => durationMinutes = mins,
+                                      ),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 14,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isSelected
+                                              ? const Color(0xFF22C55E)
+                                              : context.cardColor,
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                          border: Border.all(
+                                            color: isSelected
+                                                ? const Color(0xFF22C55E)
+                                                : context.borderColor,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          label,
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: isSelected
+                                                ? Colors.white
+                                                : context.textSecondary,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+
+                      // ─── Post Button with Strict Validation ───
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: config['color'] as Color,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 0,
+                          ),
+                          onPressed: isPosting
+                              ? null
+                              : () async {
+                                  String? error;
+                                  final title = titleController.text.trim();
+                                  final desc = instructionsController.text
+                                      .trim();
+
+                                  if (title.isEmpty) {
+                                    error = "Post title is required";
+                                  } else if (desc.isEmpty)
+                                    error =
+                                        "Instructions/Description are required";
+                                  else if (postType == 'material' &&
+                                      materialUrl == null)
+                                    error =
+                                        "Please attach a Lesson Material file";
+                                  else if (postType == 'assignment' &&
+                                      assessmentUrl == null)
+                                    error =
+                                        "Please attach Assignment Instructions (PDF)";
+                                  else if (postType == '3d_meet') {
+                                    if (materialUrl == null) {
+                                      error =
+                                          "Lesson material is required for 3D Meet";
+                                    } else if (assessmentUrl == null)
+                                      error =
+                                          "Assessment instruction is required for 3D Meet";
+                                    else if (scheduledDate == null ||
+                                        scheduledTime == null)
+                                      error =
+                                          "Date and Time are required for 3D Meet";
+                                  }
+
+                                  if (error != null) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          error,
+                                          style: const TextStyle(
+                                            fontFamily: 'Poppins',
+                                          ),
+                                        ),
+                                        backgroundColor: AppColors.error,
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                    return;
+                                  }
+
+                                  setSheet(() => isPosting = true);
+                                  try {
+                                    final userId =
+                                        _supabase.auth.currentUser?.id;
+                                    DateTime? finalScheduledTime;
+                                    if (postType == '3d_meet') {
+                                      finalScheduledTime = DateTime(
+                                        scheduledDate!.year,
+                                        scheduledDate!.month,
+                                        scheduledDate!.day,
+                                        scheduledTime!.hour,
+                                        scheduledTime!.minute,
+                                      );
+                                    }
+
+                                    // ─── FIX: Check if we are UPDATING or INSERTING ───
+                                    if (existing != null) {
+                                      // If 'existing' is not null, we UPDATE the current post
+                                      await _supabase
+                                          .from('posts')
+                                          .update({
+                                            'title': title,
+                                            'instructions': desc,
+                                            'topic_id':
+                                                selectedTopicId, // This becomes null if "General" is picked
+                                            'material_url': materialUrl,
+                                            'material_name': materialName,
+                                            'assessment_url': assessmentUrl,
+                                            'assessment_name': assessmentName,
+                                            'scheduled_time': finalScheduledTime
+                                                ?.toIso8601String(),
+                                            'duration_minutes':
+                                                postType == '3d_meet'
+                                                ? durationMinutes
+                                                : null,
+                                          })
+                                          .eq('id', existing['id']);
+                                    } else {
+                                      // If 'existing' is null, we create a NEW post (INSERT)
+                                      await _supabase.from('posts').insert({
+                                        'course_id': widget.course['id'],
+                                        'instructor_id': userId,
+                                        'type': postType,
+                                        'title': title,
+                                        'instructions': desc,
+                                        'topic_id': selectedTopicId,
+                                        'material_url': materialUrl,
+                                        'material_name': materialName,
+                                        'assessment_url': assessmentUrl,
+                                        'assessment_name': assessmentName,
+                                        'scheduled_time': finalScheduledTime
+                                            ?.toIso8601String(),
+                                        'duration_minutes':
+                                            postType == '3d_meet'
+                                            ? durationMinutes
+                                            : null,
+                                        'created_at': DateTime.now()
+                                            .toIso8601String(),
+                                      });
+                                    }
+
+                                    if (mounted) {
+                                      Navigator.pop(context);
+                                      // Refresh both tabs
+                                      await _loadStream();
+                                      await _loadCoursework();
+                                    }
+                                  } catch (e) {
+                                    setSheet(() => isPosting = false);
+                                    debugPrint('Error posting: $e');
+                                  }
+                                },
+                          child: isPosting
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text(
+                                  'Post',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   void _showCreateTopicDialog() {
     final titleController = TextEditingController();
@@ -632,31 +1034,66 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       builder: (context) => StatefulBuilder(
         builder: (context, setDialog) => Dialog(
           backgroundColor: context.surfaceColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: context.borderColor)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: context.borderColor),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Create Topic', style: TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w700, color: context.textPrimary)),
+                Text(
+                  'Create Topic',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: context.textPrimary,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text('Topics help organize your coursework into sections.',
-                  style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: context.textSecondary)),
+                Text(
+                  'Topics help organize your coursework into sections.',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    color: context.textSecondary,
+                  ),
+                ),
                 const SizedBox(height: 20),
                 TextField(
                   controller: titleController,
                   autofocus: true,
-                  style: TextStyle(fontFamily: 'Poppins', color: context.textPrimary),
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    color: context.textPrimary,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'e.g. Chapter 1, Week 1...',
                     hintStyle: TextStyle(color: context.textHint),
                     filled: true,
                     fillColor: context.cardColor,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.borderColor)),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.borderColor)),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 14,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: context.borderColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: context.borderColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: AppColors.primary,
+                        width: 1.5,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -667,8 +1104,21 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         onTap: () => Navigator.pop(context),
                         child: Container(
                           height: 48,
-                          decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.borderColor)),
-                          child: Center(child: Text('Cancel', style: TextStyle(fontFamily: 'Poppins', color: context.textSecondary, fontWeight: FontWeight.w600))),
+                          decoration: BoxDecoration(
+                            color: context.cardColor,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: context.borderColor),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                color: context.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -678,31 +1128,49 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           minimumSize: const Size(double.infinity, 48),
                           elevation: 0,
                         ),
-                        onPressed: isCreating ? null : () async {
-                          if (titleController.text.trim().isEmpty) return;
-                          setDialog(() => isCreating = true);
-                          try {
-                            await _supabase.from('topics').insert({
-                              'course_id': widget.course['id'],
-                              'title': titleController.text.trim(),
-                              'order_index': _topics.length,
-                              'created_at': DateTime.now().toIso8601String(),
-                            });
-                            if (mounted) {
-                              Navigator.pop(context);
-                              await _loadCoursework();
-                            }
-                          } catch (e) {
-                            setDialog(() => isCreating = false);
-                          }
-                        },
+                        onPressed: isCreating
+                            ? null
+                            : () async {
+                                if (titleController.text.trim().isEmpty) return;
+                                setDialog(() => isCreating = true);
+                                try {
+                                  await _supabase.from('topics').insert({
+                                    'course_id': widget.course['id'],
+                                    'title': titleController.text.trim(),
+                                    'order_index': _topics.length,
+                                    'created_at': DateTime.now()
+                                        .toIso8601String(),
+                                  });
+                                  if (mounted) {
+                                    Navigator.pop(context);
+                                    await _loadCoursework();
+                                  }
+                                } catch (e) {
+                                  setDialog(() => isCreating = false);
+                                }
+                              },
                         child: isCreating
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : const Text('Create', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text(
+                                'Create',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                       ),
                     ),
                   ],
@@ -722,26 +1190,55 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(color: context.surfaceColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+        decoration: BoxDecoration(
+          color: context.surfaceColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderColor, borderRadius: BorderRadius.circular(2))),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.borderColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             const SizedBox(height: 16),
-            Text(post['title'] ?? '', style: TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w700, color: context.textPrimary), textAlign: TextAlign.center),
+            Text(
+              post['title'] ?? '',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: context.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 16),
-            _buildOptionTile(Icons.edit_outlined, 'Edit Post', AppColors.primary, () {
-              Navigator.pop(context);
-              if (type == 'announcement') {
-                _showAnnouncementDialog(existing: post);
-              } else {
-                _showCreatePostDialog(type, existing: post);
-              }
-            }),
-            _buildOptionTile(Icons.delete_outline, 'Delete Post', AppColors.error, () {
-              Navigator.pop(context);
-              _showDeletePostConfirmation(post);
-            }),
+            _buildOptionTile(
+              Icons.edit_outlined,
+              'Edit Post',
+              AppColors.primary,
+              () {
+                Navigator.pop(context);
+                if (type == 'announcement') {
+                  _showAnnouncementDialog(existing: post);
+                } else {
+                  _showCreatePostDialog(type, existing: post);
+                }
+              },
+            ),
+            _buildOptionTile(
+              Icons.delete_outline,
+              'Delete Post',
+              AppColors.error,
+              () {
+                Navigator.pop(context);
+                _showDeletePostConfirmation(post);
+              },
+            ),
           ],
         ),
       ),
@@ -753,39 +1250,89 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       context: context,
       builder: (context) => Dialog(
         backgroundColor: context.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: context.borderColor)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: context.borderColor),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 48),
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: AppColors.error,
+                size: 48,
+              ),
               const SizedBox(height: 12),
-              Text('Delete Post?', style: TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w700, color: context.textPrimary)),
+              Text(
+                'Delete Post?',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: context.textPrimary,
+                ),
+              ),
               const SizedBox(height: 8),
-              Text('This will permanently delete "${post['title']}". This cannot be undone.',
+              Text(
+                'This will permanently delete "${post['title']}". This cannot be undone.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textSecondary)),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: context.textSecondary,
+                ),
+              ),
               const SizedBox(height: 24),
               Row(
                 children: [
                   Expanded(
                     child: GestureDetector(
                       onTap: () => Navigator.pop(context),
-                      child: Container(height: 48, decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.borderColor)),
-                        child: Center(child: Text('Cancel', style: TextStyle(fontFamily: 'Poppins', color: context.textSecondary, fontWeight: FontWeight.w600)))),
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: context.cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: context.borderColor),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              color: context.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), minimumSize: const Size(double.infinity, 48), elevation: 0),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        minimumSize: const Size(double.infinity, 48),
+                        elevation: 0,
+                      ),
                       onPressed: () async {
                         Navigator.pop(context);
                         await _deletePost(post['id']);
                       },
-                      child: const Text('Delete', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -802,39 +1349,92 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       context: context,
       builder: (context) => Dialog(
         backgroundColor: context.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: context.borderColor)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: context.borderColor),
+        ),
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.person_remove_outlined, color: AppColors.error, size: 48),
+              const Icon(
+                Icons.person_remove_outlined,
+                color: AppColors.error,
+                size: 48,
+              ),
               const SizedBox(height: 12),
-              Text('Remove Student?', style: TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w700, color: context.textPrimary)),
+              Text(
+                'Remove Student?',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: context.textPrimary,
+                ),
+              ),
               const SizedBox(height: 8),
-              Text('Remove "${student['name']}" from this class? Their enrollment will be deleted.',
+              Text(
+                'Remove "${student['name']}" from this class? Their enrollment will be deleted.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textSecondary)),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: context.textSecondary,
+                ),
+              ),
               const SizedBox(height: 24),
               Row(
                 children: [
                   Expanded(
                     child: GestureDetector(
                       onTap: () => Navigator.pop(context),
-                      child: Container(height: 48, decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.borderColor)),
-                        child: Center(child: Text('Cancel', style: TextStyle(fontFamily: 'Poppins', color: context.textSecondary, fontWeight: FontWeight.w600)))),
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: context.cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: context.borderColor),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              color: context.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), minimumSize: const Size(double.infinity, 48), elevation: 0),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        minimumSize: const Size(double.infinity, 48),
+                        elevation: 0,
+                      ),
                       onPressed: () async {
                         Navigator.pop(context);
-                        await _removeStudent(student['id'], student['name'] ?? 'Student');
+                        await _removeStudent(
+                          student['id'],
+                          student['name'] ?? 'Student',
+                        );
                       },
-                      child: const Text('Remove', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700)),
+                      child: const Text(
+                        'Remove',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -866,15 +1466,45 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     if (diff.inDays == 0) return 'Today';
     if (diff.inDays == 1) return 'Yesterday';
     if (diff.inDays < 7) return '${diff.inDays} days ago';
-    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${months[date.month - 1]} ${date.day}';
   }
 
   String _formatScheduleTime(String? scheduledTime) {
     if (scheduledTime == null) return '';
     final dt = DateTime.parse(scheduledTime);
-    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    final hour = dt.hour > 12 ? dt.hour - 12 : dt.hour == 0 ? 12 : dt.hour;
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final hour = dt.hour > 12
+        ? dt.hour - 12
+        : dt.hour == 0
+        ? 12
+        : dt.hour;
     final ampm = dt.hour >= 12 ? 'PM' : 'AM';
     final min = dt.minute.toString().padLeft(2, '0');
     return '${months[dt.month - 1]} ${dt.day}, $hour:$min $ampm';
@@ -882,52 +1512,102 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   IconData _getPostIcon(String type) {
     switch (type) {
-      case '3d_meet': return Icons.view_in_ar_outlined;
-      case 'material': return Icons.bookmark_outline;
-      case 'assignment': return Icons.assignment_outlined;
-      case 'announcement': return Icons.campaign_outlined;
-      default: return Icons.article_outlined;
+      case '3d_meet':
+        return Icons.view_in_ar_outlined;
+      case 'material':
+        return Icons.bookmark_outline;
+      case 'assignment':
+        return Icons.assignment_outlined;
+      case 'announcement':
+        return Icons.campaign_outlined;
+      default:
+        return Icons.article_outlined;
     }
   }
 
   Color _getPostColor(String type) {
     switch (type) {
-      case '3d_meet': return const Color(0xFF22C55E);
-      case 'material': return AppColors.primary;
-      case 'assignment': return const Color(0xFFFF6B35);
-      case 'announcement': return AppColors.accent;
-      default: return AppColors.primary;
+      case '3d_meet':
+        return const Color(0xFF22C55E);
+      case 'material':
+        return AppColors.primary;
+      case 'assignment':
+        return const Color(0xFFFF6B35);
+      case 'announcement':
+        return AppColors.accent;
+      default:
+        return AppColors.primary;
     }
   }
 
   String _getPostTypeLabel(String type) {
     switch (type) {
-      case '3d_meet': return '3D Meet';
-      case 'material': return 'Material';
-      case 'assignment': return 'Assignment';
-      case 'announcement': return 'Announcement';
-      default: return 'Post';
+      case '3d_meet':
+        return '3D Meet';
+      case 'material':
+        return 'Material';
+      case 'assignment':
+        return 'Assignment';
+      case 'announcement':
+        return 'Announcement';
+      default:
+        return 'Post';
     }
   }
 
-  Widget _buildSheetField(String label, String hint, TextEditingController controller, IconData icon, {int maxLines = 1}) {
+  Widget _buildSheetField(
+    String label,
+    String hint,
+    TextEditingController controller,
+    IconData icon, {
+    int maxLines = 1,
+  }) {
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
-      style: TextStyle(fontFamily: 'Poppins', color: context.textPrimary, fontSize: 14),
+      style: TextStyle(
+        fontFamily: 'Poppins',
+        color: context.textPrimary,
+        fontSize: 14,
+      ),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textSecondary),
-        floatingLabelStyle: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
-        hintStyle: TextStyle(fontFamily: 'Poppins', color: context.textHint, fontSize: 13),
+        labelStyle: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 13,
+          color: context.textSecondary,
+        ),
+        floatingLabelStyle: const TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 12,
+          color: AppColors.primary,
+          fontWeight: FontWeight.w600,
+        ),
+        hintStyle: TextStyle(
+          fontFamily: 'Poppins',
+          color: context.textHint,
+          fontSize: 13,
+        ),
         prefixIcon: Icon(icon, color: context.textHint, size: 20),
         filled: true,
         fillColor: context.cardColor,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.borderColor)),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: context.borderColor)),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: context.borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: context.borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+        ),
       ),
     );
   }
@@ -946,7 +1626,17 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           children: [
             Icon(icon, color: color, size: 20),
             const SizedBox(width: 12),
-            Expanded(child: Text(label, style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: color, fontWeight: FontWeight.w500))),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: color,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
             Icon(Icons.attach_file_outlined, color: color, size: 18),
           ],
         ),
@@ -954,14 +1644,29 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     );
   }
 
-  Widget _buildTopicPicker(String? selectedTopicId, ValueChanged<String?> onChanged) {
+  Widget _buildTopicPicker(
+    String? selectedTopicId,
+    ValueChanged<String?> onChanged,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Choose Topic (optional)', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w600, color: context.textPrimary)),
+        Text(
+          'Choose Topic (optional)',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: context.textPrimary,
+          ),
+        ),
         const SizedBox(height: 8),
         Container(
-          decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.borderColor)),
+          decoration: BoxDecoration(
+            color: context.cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.borderColor),
+          ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<String?>(
               value: selectedTopicId,
@@ -969,11 +1674,42 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               padding: const EdgeInsets.symmetric(horizontal: 14),
               borderRadius: BorderRadius.circular(12),
               dropdownColor: context.surfaceColor,
-              style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textPrimary),
-              hint: Text('General (no topic)', style: TextStyle(fontFamily: 'Poppins', color: context.textHint, fontSize: 13)),
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                color: context.textPrimary,
+              ),
+              hint: Text(
+                'General (no topic)',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  color: context.textHint,
+                  fontSize: 13,
+                ),
+              ),
               items: [
-                DropdownMenuItem<String?>(value: null, child: Text('General (no topic)', style: TextStyle(fontFamily: 'Poppins', color: context.textHint))),
-                ..._topics.map((t) => DropdownMenuItem<String?>(value: t['id'], child: Text('📁 ${t['title']}', style: TextStyle(fontFamily: 'Poppins', color: context.textPrimary)))),
+                DropdownMenuItem<String?>(
+                  value: null,
+                  child: Text(
+                    'General (no topic)',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      color: context.textHint,
+                    ),
+                  ),
+                ),
+                ..._topics.map(
+                  (t) => DropdownMenuItem<String?>(
+                    value: t['id'],
+                    child: Text(
+                      '📁 ${t['title']}',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        color: context.textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
               ],
               onChanged: onChanged,
             ),
@@ -983,16 +1719,31 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     );
   }
 
-  Widget _buildOptionTile(IconData icon, String label, Color color, VoidCallback onTap) {
+  Widget _buildOptionTile(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return ListTile(
       onTap: onTap,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       leading: Container(
         padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
         child: Icon(icon, color: color, size: 20),
       ),
-      title: Text(label, style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w600, color: color)),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
     );
   }
 
@@ -1023,8 +1774,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             ),
           ),
           // ─── Expanded FAB (Coursework, instructor only) ─
-          if (widget.isInstructor && _currentTab == 1)
-            _buildExpandedFAB(),
+          if (widget.isInstructor && _currentTab == 1) _buildExpandedFAB(),
         ],
       ),
       bottomNavigationBar: _buildBottomNav(),
@@ -1040,58 +1790,90 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             onTap: () => Navigator.pop(context),
             child: Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.borderColor)),
-              child: Icon(Icons.arrow_back, color: context.textPrimary, size: 20),
+              decoration: BoxDecoration(
+                color: context.cardColor,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: context.borderColor),
+              ),
+              child: Icon(
+                Icons.arrow_back,
+                color: context.textPrimary,
+                size: 20,
+              ),
             ),
           ),
           const Spacer(),
           if (widget.isInstructor)
-          GestureDetector(
-            onTap: () async {
-              final updated = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ClassSettingsScreen(course: widget.course)),
-              );
-              if (updated == true && mounted) setState(() {});
-            },
-            child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.borderColor)),
-              child: Icon(Icons.settings_outlined, color: context.textPrimary, size: 20)),
-          ),
-      ]),
+            GestureDetector(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ClassSettingsScreen(course: widget.course),
+                  ),
+                );
+                // Re-fetch course details when returning
+                _loadCurrentUser();
+                _loadStream();
+                _loadCoursework();
+              },
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: context.cardColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.borderColor),
+                ),
+                child: Icon(
+                  Icons.settings_outlined,
+                  color: context.textPrimary,
+                  size: 20,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
   Widget _buildCourseCard() {
-    final gradientIndex = (widget.course['title'] as String? ?? '').length % _cardGradients.length;
+    final gradientIndex =
+        (widget.course['title'] as String? ?? '').length %
+        _cardGradients.length;
     final gradient = _cardGradients[gradientIndex];
 
     return Container(
-      width: double.infinity, // Ensures it matches the width of containers below it
+      width: double
+          .infinity, // Ensures it matches the width of containers below it
       margin: const EdgeInsets.only(bottom: 12), // Only vertical spacing
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: gradient, 
-          begin: Alignment.topLeft, 
-          end: Alignment.bottomRight
+          colors: gradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20), // Standardized with announcement bar
+        borderRadius: BorderRadius.circular(
+          20,
+        ), // Standardized with announcement bar
         boxShadow: [
           BoxShadow(
-            color: gradient[0].withValues(alpha: 0.35), 
-            blurRadius: 16, 
-            offset: const Offset(0, 6)
-          )
+            color: gradient[0].withValues(alpha: 0.35),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
       child: Stack(
         children: [
           Positioned(
-            right: -20, top: -20, 
+            right: -20,
+            top: -20,
             child: Container(
-              width: 100, height: 100,
+              width: 100,
+              height: 100,
               decoration: BoxDecoration(
-                shape: BoxShape.circle, 
-                color: Colors.white.withValues(alpha: 0.08)
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.08),
               ),
             ),
           ),
@@ -1101,19 +1883,22 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.22), 
-                    borderRadius: BorderRadius.circular(8)
+                    color: Colors.white.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     widget.course['course_code'] ?? '',
                     style: const TextStyle(
-                      fontFamily: 'Poppins', 
-                      fontSize: 12, 
-                      fontWeight: FontWeight.w700, 
-                      color: Colors.white, 
-                      letterSpacing: 0.5
+                      fontFamily: 'Poppins',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
                     ),
                   ),
                 ),
@@ -1121,46 +1906,57 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 Text(
                   widget.course['title'] ?? '',
                   style: const TextStyle(
-                    fontFamily: 'Poppins', 
-                    fontSize: 20, 
-                    fontWeight: FontWeight.w700, 
-                    color: Colors.white, 
-                    height: 1.2
+                    fontFamily: 'Poppins',
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    height: 1.2,
                   ),
-                  maxLines: 2, 
-                  overflow: TextOverflow.ellipsis
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    const Icon(Icons.person_outline, color: Colors.white70, size: 16),
+                    const Icon(
+                      Icons.person_outline,
+                      color: Colors.white70,
+                      size: 16,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       widget.course['instructor_name'] ?? 'Instructor',
                       style: const TextStyle(
-                        fontFamily: 'Poppins', 
-                        fontSize: 13, 
-                        color: Colors.white70
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                        color: Colors.white70,
                       ),
                     ),
                     const Spacer(),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18), 
-                        borderRadius: BorderRadius.circular(8)
+                        color: Colors.white.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.people_outline, color: Colors.white, size: 14),
+                          const Icon(
+                            Icons.people_outline,
+                            color: Colors.white,
+                            size: 14,
+                          ),
                           const SizedBox(width: 5),
                           Text(
                             '${widget.course['enrolled_count'] ?? 0}',
                             style: const TextStyle(
-                              fontFamily: 'Poppins', 
-                              fontSize: 12, 
-                              fontWeight: FontWeight.w600, 
-                              color: Colors.white
+                              fontFamily: 'Poppins',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
                             ),
                           ),
                         ],
@@ -1178,17 +1974,38 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   Widget _buildBottomNav() {
     final items = [
-      {'icon': Icons.forum_outlined, 'activeIcon': Icons.forum, 'label': 'Stream'},
-      {'icon': Icons.assignment_outlined, 'activeIcon': Icons.assignment, 'label': 'Coursework'},
-      {'icon': Icons.people_outline, 'activeIcon': Icons.people, 'label': 'People'},
-      {'icon': Icons.leaderboard_outlined, 'activeIcon': Icons.leaderboard, 'label': 'Ranking'},
+      {
+        'icon': Icons.forum_outlined,
+        'activeIcon': Icons.forum,
+        'label': 'Stream',
+      },
+      {
+        'icon': Icons.assignment_outlined,
+        'activeIcon': Icons.assignment,
+        'label': 'Coursework',
+      },
+      {
+        'icon': Icons.people_outline,
+        'activeIcon': Icons.people,
+        'label': 'People',
+      },
+      {
+        'icon': Icons.leaderboard_outlined,
+        'activeIcon': Icons.leaderboard,
+        'label': 'Ranking',
+      },
     ];
 
     return Container(
       height: 68,
       decoration: BoxDecoration(
         color: context.cardColor,
-        border: Border(top: BorderSide(color: context.borderColor.withValues(alpha: 0.5), width: 1)),
+        border: Border(
+          top: BorderSide(
+            color: context.borderColor.withValues(alpha: 0.5),
+            width: 1,
+          ),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1206,24 +2023,41 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               decoration: BoxDecoration(
-                gradient: isActive ? const LinearGradient(colors: [AppColors.primaryDark, AppColors.primary]) : null,
+                gradient: isActive
+                    ? const LinearGradient(
+                        colors: [AppColors.primaryDark, AppColors.primary],
+                      )
+                    : null,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    isActive ? items[index]['activeIcon'] as IconData : items[index]['icon'] as IconData,
-                    color: isActive ? Colors.white : context.isDark ? Colors.white54 : const Color(0xFF0D1B4B).withValues(alpha: 0.4),
+                    isActive
+                        ? items[index]['activeIcon'] as IconData
+                        : items[index]['icon'] as IconData,
+                    color: isActive
+                        ? Colors.white
+                        : context.isDark
+                        ? Colors.white54
+                        : const Color(0xFF0D1B4B).withValues(alpha: 0.4),
                     size: 22,
                   ),
                   const SizedBox(height: 2),
-                  Text(items[index]['label'] as String,
+                  Text(
+                    items[index]['label'] as String,
                     style: TextStyle(
-                      fontFamily: 'Poppins', fontSize: 10,
+                      fontFamily: 'Poppins',
+                      fontSize: 10,
                       fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
-                      color: isActive ? Colors.white : context.isDark ? Colors.white54 : const Color(0xFF0D1B4B).withValues(alpha: 0.4),
-                    )),
+                      color: isActive
+                          ? Colors.white
+                          : context.isDark
+                          ? Colors.white54
+                          : const Color(0xFF0D1B4B).withValues(alpha: 0.4),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1236,10 +2070,30 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   // ─── Expanded FAB ─────────────────────────────────────────
   Widget _buildExpandedFAB() {
     final fabItems = [
-      {'label': '3D Meet Coding', 'icon': Icons.view_in_ar_outlined, 'color': const Color(0xFF22C55E), 'type': '3d_meet'},
-      {'label': 'Lesson Material', 'icon': Icons.bookmark_outline, 'color': AppColors.primary, 'type': 'material'},
-      {'label': 'Assignment', 'icon': Icons.assignment_outlined, 'color': const Color(0xFFFF6B35), 'type': 'assignment'},
-      {'label': 'Topic', 'icon': Icons.folder_outlined, 'color': AppColors.accent, 'type': 'topic'},
+      {
+        'label': '3D Meet Coding',
+        'icon': Icons.view_in_ar_outlined,
+        'color': const Color(0xFF22C55E),
+        'type': '3d_meet',
+      },
+      {
+        'label': 'Lesson Material',
+        'icon': Icons.bookmark_outline,
+        'color': AppColors.primary,
+        'type': 'material',
+      },
+      {
+        'label': 'Assignment',
+        'icon': Icons.assignment_outlined,
+        'color': const Color(0xFFFF6B35),
+        'type': 'assignment',
+      },
+      {
+        'label': 'Topic',
+        'icon': Icons.folder_outlined,
+        'color': AppColors.accent,
+        'type': 'topic',
+      },
     ];
 
     return Positioned(
@@ -1251,47 +2105,78 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         children: [
           // Mini FAB options
           if (_fabExpanded) ...[
-            ...fabItems.map((item) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: GestureDetector(
-                onTap: () {
-                  setState(() => _fabExpanded = false);
-                  if (item['type'] == 'topic') {
-                    _showCreateTopicDialog();
-                  } else {
-                    _showCreatePostDialog(item['type'] as String);
-                  }
-                },
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Label
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: context.cardColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: context.borderColor),
-                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))],
+            ...fabItems.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() => _fabExpanded = false);
+                    if (item['type'] == 'topic') {
+                      _showCreateTopicDialog();
+                    } else {
+                      _showCreatePostDialog(item['type'] as String);
+                    }
+                  },
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Label
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: context.cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: context.borderColor),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          item['label'] as String,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: context.textPrimary,
+                          ),
+                        ),
                       ),
-                      child: Text(item['label'] as String,
-                        style: TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w600, color: context.textPrimary)),
-                    ),
-                    const SizedBox(width: 10),
-                    // Icon button
-                    Container(
-                      width: 44, height: 44,
-                      decoration: BoxDecoration(
-                        color: item['color'] as Color,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [BoxShadow(color: (item['color'] as Color).withValues(alpha: 0.35), blurRadius: 8, offset: const Offset(0, 3))],
+                      const SizedBox(width: 10),
+                      // Icon button
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: item['color'] as Color,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: (item['color'] as Color).withValues(
+                                alpha: 0.35,
+                              ),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Icon(
+                          item['icon'] as IconData,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                       ),
-                      child: Icon(item['icon'] as IconData, color: Colors.white, size: 20),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            )),
+            ),
           ],
 
           // Main FAB
@@ -1299,13 +2184,26 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             onTap: () => setState(() => _fabExpanded = !_fabExpanded),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              width: 56, height: 56,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [AppColors.primaryDark, AppColors.primary]),
+                gradient: const LinearGradient(
+                  colors: [AppColors.primaryDark, AppColors.primary],
+                ),
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 4))],
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.4),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              child: Icon(_fabExpanded ? Icons.close : Icons.add, color: Colors.white, size: 28),
+              child: Icon(
+                _fabExpanded ? Icons.close : Icons.add,
+                color: Colors.white,
+                size: 28,
+              ),
             ),
           ),
         ],
@@ -1318,7 +2216,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   // ════════════════════════════════════════════════════════
   Widget _buildStreamTab() {
     if (_isLoadingStream) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
     }
 
     return RefreshIndicator(
@@ -1336,11 +2236,18 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               onTap: () => _showAnnouncementDialog(),
               child: Container(
                 margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: context.cardColor,
-                  borderRadius: BorderRadius.circular(16), // Increased radius for modern look
-                  border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
+                  borderRadius: BorderRadius.circular(
+                    16,
+                  ), // Increased radius for modern look
+                  border: Border.all(
+                    color: AppColors.accent.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   children: [
@@ -1348,15 +2255,32 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                       radius: 18,
                       backgroundColor: AppColors.accent.withValues(alpha: 0.15),
                       child: Text(
-                        (_currentUser?.name ?? 'I').substring(0, 1).toUpperCase(),
-                        style: const TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.accent),
+                        (_currentUser?.name ?? 'I')
+                            .substring(0, 1)
+                            .toUpperCase(),
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.accent,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Text('Announce something to your class...',
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint)),
+                    Text(
+                      'Announce something to your class...',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                        color: context.textHint,
+                      ),
+                    ),
                     const Spacer(),
-                    const Icon(Icons.campaign_outlined, color: AppColors.accent, size: 22),
+                    const Icon(
+                      Icons.campaign_outlined,
+                      color: AppColors.accent,
+                      size: 22,
+                    ),
                   ],
                 ),
               ),
@@ -1368,9 +2292,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             _buildEmptyState(
               Icons.campaign_rounded, // Proper Icon instead of Emoji
               'No posts yet',
-              widget.isInstructor 
-                ? 'Post an announcement to get started!' 
-                : 'Your instructor hasn\'t posted anything yet.'
+              widget.isInstructor
+                  ? 'Post an announcement to get started!'
+                  : 'Your instructor hasn\'t posted anything yet.',
             )
           else
             ..._streamPosts.map((post) => _buildStreamCard(post)),
@@ -1387,7 +2311,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     final postIcon = _getPostIcon(type);
     final comments = _comments[postId] ?? [];
     final isAnnouncement = type == 'announcement';
-    final instructorName = post['users']?['name'] ?? widget.course['instructor_name'] ?? 'Instructor';
+    final instructorName =
+        post['users']?['name'] ??
+        widget.course['instructor_name'] ??
+        'Instructor';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -1395,7 +2322,15 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         color: context.cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: context.borderColor),
-        boxShadow: context.isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: context.isDark
+            ? []
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Column(
         children: [
@@ -1425,11 +2360,24 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(color: postColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(12)),
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: postColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         child: isAnnouncement
-                            ? Center(child: Text(instructorName.substring(0, 1).toUpperCase(),
-                                style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700, color: postColor)))
+                            ? Center(
+                                child: Text(
+                                  instructorName.substring(0, 1).toUpperCase(),
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: postColor,
+                                  ),
+                                ),
+                              )
                             : Icon(postIcon, color: postColor, size: 20),
                       ),
                       const SizedBox(width: 10),
@@ -1437,19 +2385,47 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(isAnnouncement ? instructorName : post['title'] ?? '',
-                              style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w600, color: context.textPrimary)),
+                            Text(
+                              isAnnouncement
+                                  ? instructorName
+                                  : post['title'] ?? '',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: context.textPrimary,
+                              ),
+                            ),
                             const SizedBox(height: 2),
                             Row(
                               children: [
-                                Text(_formatDate(post['created_at']),
-                                  style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: context.textSecondary)),
+                                Text(
+                                  _formatDate(post['created_at']),
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 11,
+                                    color: context.textSecondary,
+                                  ),
+                                ),
                                 const SizedBox(width: 6),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                  decoration: BoxDecoration(color: postColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
-                                  child: Text(_getPostTypeLabel(type),
-                                    style: TextStyle(fontFamily: 'Poppins', fontSize: 10, fontWeight: FontWeight.w600, color: postColor)),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: postColor.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    _getPostTypeLabel(type),
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: postColor,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -1462,19 +2438,35 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                           onTap: () => _showPostOptions(post),
                           child: Padding(
                             padding: const EdgeInsets.only(left: 4),
-                            child: Icon(Icons.more_vert, color: context.textSecondary, size: 20),
+                            child: Icon(
+                              Icons.more_vert,
+                              color: context.textSecondary,
+                              size: 20,
+                            ),
                           ),
                         )
                       else
-                        Icon(isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                          color: context.textSecondary, size: 20),
+                        Icon(
+                          isExpanded
+                              ? Icons.keyboard_arrow_up
+                              : Icons.keyboard_arrow_down,
+                          color: context.textSecondary,
+                          size: 20,
+                        ),
                     ],
                   ),
                   if (post['instructions'] != null && !isExpanded) ...[
                     const SizedBox(height: 8),
-                    Text(post['instructions'],
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textSecondary),
-                      maxLines: 2, overflow: TextOverflow.ellipsis),
+                    Text(
+                      post['instructions'],
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                        color: context.textSecondary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ],
               ),
@@ -1489,14 +2481,31 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (post['instructions'] != null) ...[
-                    Text(post['instructions'],
-                      style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textPrimary, height: 1.5)),
+                    Text(
+                      post['instructions'],
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                        color: context.textPrimary,
+                        height: 1.5,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                   ],
                   if (post['material_url'] != null)
-                    _buildFileAttachment(post['material_name'] ?? 'Lesson Material', Icons.picture_as_pdf_outlined, AppColors.primary, post['material_url']),
+                    _buildFileAttachment(
+                      post['material_name'] ?? 'Lesson Material',
+                      Icons.picture_as_pdf_outlined,
+                      AppColors.primary,
+                      post['material_url'],
+                    ),
                   if (post['assessment_url'] != null)
-                    _buildFileAttachment(post['assessment_name'] ?? 'Assessment Instructions', Icons.assignment_outlined, const Color(0xFFFF6B35), post['assessment_url']),
+                    _buildFileAttachment(
+                      post['assessment_name'] ?? 'Assessment Instructions',
+                      Icons.assignment_outlined,
+                      const Color(0xFFFF6B35),
+                      post['assessment_url'],
+                    ),
                   if (post['scheduled_time'] != null) ...[
                     const SizedBox(height: 12),
                     _buildJoin3DButton(post['scheduled_time']),
@@ -1528,17 +2537,38 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 ),
               ).then((_) => _loadStream()),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
                     CircleAvatar(
                       radius: 14,
-                      backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                      child: Text((_currentUser?.name ?? 'U').substring(0, 1).toUpperCase(),
-                        style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                      backgroundColor: AppColors.primary.withValues(
+                        alpha: 0.15,
+                      ),
+                      child: Text(
+                        (_currentUser?.name ?? 'U')
+                            .substring(0, 1)
+                            .toUpperCase(),
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 10),
-                    Text('Add class comment...', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint)),
+                    Text(
+                      'Add class comment...',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                        color: context.textHint,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1549,18 +2579,21 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     );
   }
 
-  Widget _buildFileAttachment(String name, IconData icon, Color color, [String? url]) {
+  Widget _buildFileAttachment(
+    String name,
+    IconData icon,
+    Color color, [
+    String? url,
+  ]) {
     return GestureDetector(
       onTap: url != null
           ? () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => FileViewerScreen(
-                    url: url,
-                    fileName: name,
-                  ),
-                ),
-              )
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    FileViewerScreen(url: url, fileName: name),
+              ),
+            )
           : null,
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -1577,8 +2610,14 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             Expanded(
               child: Text(
                 name,
-                style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: color, fontWeight: FontWeight.w500),
-                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: color,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             if (url != null) ...[
@@ -1598,22 +2637,38 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     final isLive = status == 'live';
     final isUpcoming = status == 'upcoming';
     final Color btnColor = isLive ? const Color(0xFF22C55E) : Colors.grey;
-    
+
     // Proper icon instead of 🎮
-    final icon = isLive ? Icons.videogame_asset_rounded : Icons.videogame_asset_outlined;
+    final icon = isLive
+        ? Icons.videogame_asset_rounded
+        : Icons.videogame_asset_outlined;
 
     return GestureDetector(
-      onTap: isLive ? () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Launching 3D Classroom...'), behavior: SnackBarBehavior.floating));
-      } : null,
+      onTap: isLive
+          ? () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Launching 3D Classroom...'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          : null,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
           color: isLive ? btnColor : btnColor.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: isLive ? [BoxShadow(color: btnColor.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, 4))] : [],
+          boxShadow: isLive
+              ? [
+                  BoxShadow(
+                    color: btnColor.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ]
+              : [],
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1623,12 +2678,27 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             Column(
               children: [
                 Text(
-                  isLive ? 'Join 3D Classroom' : isUpcoming ? '3D Meet Scheduled' : 'Session Ended', 
-                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)
+                  isLive
+                      ? 'Join 3D Classroom'
+                      : isUpcoming
+                      ? '3D Meet Scheduled'
+                      : 'Session Ended',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
                 Text(
-                  isLive ? 'Session is live now! 🔴' : _formatScheduleTime(scheduledTime), 
-                  style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: Colors.white.withValues(alpha: 0.8))
+                  isLive
+                      ? 'Session is live now!'
+                      : _formatScheduleTime(scheduledTime),
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.8),
+                  ),
                 ),
               ],
             ),
@@ -1638,8 +2708,13 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     );
   }
 
-  Widget _buildCommentsSection(String postId, List<Map<String, dynamic>> comments) {
-    final controller = _commentControllers[postId] ?? (_commentControllers[postId] = TextEditingController());
+  Widget _buildCommentsSection(
+    String postId,
+    List<Map<String, dynamic>> comments,
+  ) {
+    final controller =
+        _commentControllers[postId] ??
+        (_commentControllers[postId] = TextEditingController());
     final isSubmitting = _submittingComment[postId] ?? false;
     final currentUserId = _supabase.auth.currentUser?.id;
 
@@ -1659,35 +2734,108 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                   CircleAvatar(
                     radius: 15,
                     backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                    child: Text((comment['user_name'] as String).substring(0, 1).toUpperCase(),
-                      style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary)),
+                    child: Text(
+                      (comment['user_name'] as String)
+                          .substring(0, 1)
+                          .toUpperCase(),
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(color: context.bgColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: context.borderColor)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: context.bgColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: context.borderColor),
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
-                              Text(comment['user_name'] ?? '',
-                                style: TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600, color: context.textPrimary)),
-                              const Spacer(),
-                              Text(_formatDate(comment['created_at']),
-                                style: TextStyle(fontFamily: 'Poppins', fontSize: 10, color: context.textHint)),
-                              if (isOwn || widget.isInstructor) ...[
-                                const SizedBox(width: 6),
-                                GestureDetector(
-                                  onTap: () => _deleteComment(comment['id'], postId),
-                                  child: Icon(Icons.close, size: 14, color: context.textHint),
+                              Text(
+                                comment['user_name'] ?? '',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.textPrimary,
                                 ),
-                              ],
+                              ),
+                              const Spacer(),
+                              Text(
+                                _formatDate(comment['created_at']),
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 10,
+                                  color: context.textHint,
+                                ),
+                              ),
+                              if (isOwn || widget.isInstructor)
+                                PopupMenuButton<String>(
+                                  icon: Icon(
+                                    Icons.more_vert,
+                                    size: 16,
+                                    color: context.textHint,
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 0,
+                                    minHeight: 0,
+                                  ),
+                                  onSelected: (value) {
+                                    if (value == 'delete') {
+                                      _deleteComment(comment['id'], postId);
+                                    } else if (value == 'edit') {
+                                      _showEditCommentDialog(comment, postId);
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    if (isOwn && widget.isInstructor)
+                                      const PopupMenuItem(
+                                        value: 'edit',
+                                        child: Text(
+                                          'Edit',
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    const PopupMenuItem(
+                                      value: 'delete',
+                                      child: Text(
+                                        'Delete',
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 13,
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                             ],
                           ),
                           const SizedBox(height: 2),
-                          Text(comment['text'] ?? '', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textPrimary)),
+                          Text(
+                            comment['text'] ?? '',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 13,
+                              color: context.textPrimary,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1703,27 +2851,72 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             CircleAvatar(
               radius: 15,
               backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-              child: Text((_currentUser?.name ?? 'U').substring(0, 1).toUpperCase(),
-                style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary)),
+              child: Text(
+                (_currentUser?.name ?? 'U').substring(0, 1).toUpperCase(),
+                style: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: TextField(
                 controller: controller,
-                style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textPrimary),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: context.textPrimary,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Add class comment...',
-                  hintStyle: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint),
-                  filled: true, fillColor: context.bgColor,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: context.borderColor)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide(color: context.borderColor)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
+                  hintStyle: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 13,
+                    color: context.textHint,
+                  ),
+                  filled: true,
+                  fillColor: context.bgColor,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    borderSide: BorderSide(color: context.borderColor),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    borderSide: BorderSide(color: context.borderColor),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    borderSide: const BorderSide(
+                      color: AppColors.primary,
+                      width: 1.5,
+                    ),
+                  ),
                   suffixIcon: GestureDetector(
                     onTap: () => _submitComment(postId),
                     child: isSubmitting
-                        ? const Padding(padding: EdgeInsets.all(8), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary)))
-                        : const Icon(Icons.send_rounded, color: AppColors.primary, size: 20),
+                        ? const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.send_rounded,
+                            color: AppColors.primary,
+                            size: 20,
+                          ),
                   ),
                 ),
                 onSubmitted: (_) => _submitComment(postId),
@@ -1740,13 +2933,17 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   // ════════════════════════════════════════════════════════
   Widget _buildCourseworkTab() {
     if (_isLoadingCoursework) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
     }
 
     final generalPosts = _posts.where((p) => p['topic_id'] == null).toList();
     final topicMap = <String, List<Map<String, dynamic>>>{};
     for (final topic in _topics) {
-      topicMap[topic['id']] = _posts.where((p) => p['topic_id'] == topic['id']).toList();
+      topicMap[topic['id']] = _posts
+          .where((p) => p['topic_id'] == topic['id'])
+          .toList();
     }
 
     // ─── Empty State (Replaced emoji with Icon) ───
@@ -1754,9 +2951,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       return _buildEmptyState(
         Icons.library_books_rounded, // Proper Icon
         'No coursework yet',
-        widget.isInstructor 
-            ? 'Tap the + button to create your first post' 
-            : 'Your instructor hasn\'t posted any coursework yet.'
+        widget.isInstructor
+            ? 'Tap the + button to create your first post'
+            : 'Your instructor hasn\'t posted any coursework yet.',
       );
     }
 
@@ -1764,81 +2961,116 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
       children: [
         if (generalPosts.isNotEmpty) ...[
-          // Removed '📁' from the string
-          _buildTopicSection('General', 'general', generalPosts),
+          _buildTopicSection(
+            'General',
+            'general',
+            generalPosts,
+            key: const ValueKey('topic_general'), // Added Key
+          ),
           const SizedBox(height: 12),
         ],
-        ..._topics.map((topic) => Column(
-          children: [
-            // Removed '📁' from the string
-            _buildTopicSection(topic['title'], topic['id'], topicMap[topic['id']] ?? [], topic: topic),
-            const SizedBox(height: 12),
-          ],
-        )),
+        ..._topics
+            .map(
+              (topic) => Column(
+                key: ValueKey('topic_col_${topic['id']}'), // Added Key here
+                children: [
+                  _buildTopicSection(
+                    topic['title'],
+                    topic['id'],
+                    topicMap[topic['id']] ?? [],
+                    topic: topic,
+                    key: ValueKey(
+                      'topic_section_${topic['id']}',
+                    ), // Added Key here
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            )
+            .toList(),
       ],
     );
   }
 
-  Widget _buildTopicSection(String title, String topicKey, List<Map<String, dynamic>> posts, {Map<String, dynamic>? topic}) {
+  Widget _buildTopicSection(
+    String title,
+    String topicKey,
+    List<Map<String, dynamic>> posts, {
+    Map<String, dynamic>? topic,
+    Key? key,
+  }) {
     final isExpanded = _expandedTopics[topicKey] ?? true;
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return Container(
+      key: key, // Use the key here
       decoration: BoxDecoration(
         color: context.cardColor,
         borderRadius: BorderRadius.circular(20), // Matches your dashboard cards
         border: Border.all(color: context.borderColor),
-        boxShadow: context.isDark ? [] : [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
+        boxShadow: context.isDark
+            ? []
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       child: Column(
         children: [
           GestureDetector(
-            onTap: () => setState(() => _expandedTopics[topicKey] = !isExpanded),
+            onTap: () =>
+                setState(() => _expandedTopics[topicKey] = !isExpanded),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
                 children: [
                   // ─── Proper Icon instead of Folder Emoji ───
-                  const Icon(Icons.folder_rounded, color: AppColors.primary, size: 20),
+                  const Icon(
+                    Icons.folder_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
                   const SizedBox(width: 12),
                   Text(
-                    title, 
+                    title,
                     style: TextStyle(
-                      fontFamily: 'Poppins', 
-                      fontSize: 15, 
-                      fontWeight: FontWeight.bold, 
-                      color: textColor
-                    )
+                      fontFamily: 'Poppins',
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
+                    ),
                   ),
                   const Spacer(),
                   // Count indicator
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: AppColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      '${posts.length}', 
+                      '${posts.length}',
                       style: const TextStyle(
-                        fontFamily: 'Poppins', 
-                        fontSize: 11, 
-                        fontWeight: FontWeight.bold, 
-                        color: AppColors.primary
-                      )
+                        fontFamily: 'Poppins',
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   Icon(
-                    isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, 
-                    color: textColor.withValues(alpha: 0.4), 
-                    size: 20
+                    isExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: textColor.withValues(alpha: 0.4),
+                    size: 20,
                   ),
                 ],
               ),
@@ -1849,13 +3081,22 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Text(
-                  'No posts in this topic yet', 
-                  style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: textColor.withValues(alpha: 0.4))
+                  'No posts in this topic yet',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 13,
+                    color: textColor.withValues(alpha: 0.4),
+                  ),
                 ),
               )
             else ...[
               const Divider(height: 1),
-              ...posts.asMap().entries.map((entry) => _buildCourseworkItem(entry.value, entry.key == posts.length - 1)),
+              ...posts.asMap().entries.map(
+                (entry) => _buildCourseworkItem(
+                  entry.value,
+                  entry.key == posts.length - 1,
+                ),
+              ),
             ],
           ],
         ],
@@ -1869,19 +3110,42 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(color: context.surfaceColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+        decoration: BoxDecoration(
+          color: context.surfaceColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderColor, borderRadius: BorderRadius.circular(2))),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.borderColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             const SizedBox(height: 16),
-            Text('📁 ${topic['title']}', style: TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.w700, color: context.textPrimary)),
+            Text(
+              '${topic['title']}',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: context.textPrimary,
+              ),
+            ),
             const SizedBox(height: 16),
-            _buildOptionTile(Icons.delete_outline, 'Delete Topic', AppColors.error, () async {
-              Navigator.pop(context);
-              await _supabase.from('topics').delete().eq('id', topic['id']);
-              await _loadCoursework();
-            }),
+            _buildOptionTile(
+              Icons.delete_outline,
+              'Delete Topic',
+              AppColors.error,
+              () async {
+                Navigator.pop(context);
+                await _supabase.from('topics').delete().eq('id', topic['id']);
+                await _loadCoursework();
+              },
+            ),
           ],
         ),
       ),
@@ -1893,14 +3157,22 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     final postColor = _getPostColor(type);
     final postIcon = _getPostIcon(type);
     final hasSchedule = post['scheduled_time'] != null;
-    final scheduleStatus = hasSchedule ? _getScheduleStatus(post['scheduled_time']) : 'none';
-    
+    final scheduleStatus = hasSchedule
+        ? _getScheduleStatus(post['scheduled_time'])
+        : 'none';
+
     // Using your system dark blue for light mode
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return Container(
       decoration: BoxDecoration(
-        border: isLast ? null : Border(bottom: BorderSide(color: context.borderColor.withValues(alpha: 0.5))),
+        border: isLast
+            ? null
+            : Border(
+                bottom: BorderSide(
+                  color: context.borderColor.withValues(alpha: 0.5),
+                ),
+              ),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1928,36 +3200,55 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             children: [
               Text(
                 'Posted ${_formatDate(post['created_at'])}',
-                style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: textColor.withValues(alpha: 0.5)),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 11,
+                  color: textColor.withValues(alpha: 0.5),
+                ),
               ),
               if (hasSchedule) ...[
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: (scheduleStatus == 'live' ? const Color(0xFF22C55E) : context.textHint).withValues(alpha: 0.1),
+                    color:
+                        (scheduleStatus == 'live'
+                                ? const Color(0xFF22C55E)
+                                : context.textHint)
+                            .withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        scheduleStatus == 'live' 
-                            ? Icons.fiber_manual_record 
-                            : scheduleStatus == 'upcoming' 
-                                ? Icons.schedule_rounded 
-                                : Icons.check_circle_rounded,
+                        scheduleStatus == 'live'
+                            ? Icons.fiber_manual_record
+                            : scheduleStatus == 'upcoming'
+                            ? Icons.schedule_rounded
+                            : Icons.check_circle_rounded,
                         size: 10,
-                        color: scheduleStatus == 'live' ? const Color(0xFF22C55E) : context.textHint,
+                        color: scheduleStatus == 'live'
+                            ? const Color(0xFF22C55E)
+                            : context.textHint,
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        scheduleStatus == 'live' ? 'Live' : scheduleStatus == 'upcoming' ? 'Scheduled' : 'Ended',
+                        scheduleStatus == 'live'
+                            ? 'Live'
+                            : scheduleStatus == 'upcoming'
+                            ? 'Scheduled'
+                            : 'Ended',
                         style: TextStyle(
                           fontFamily: 'Poppins',
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: scheduleStatus == 'live' ? const Color(0xFF22C55E) : context.textHint,
+                          color: scheduleStatus == 'live'
+                              ? const Color(0xFF22C55E)
+                              : context.textHint,
                         ),
                       ),
                     ],
@@ -1971,26 +3262,38 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         trailing: widget.isInstructor
             ? GestureDetector(
                 onTap: () => _showPostOptions(post),
-                child: Icon(Icons.more_vert, color: textColor.withValues(alpha: 0.4), size: 20))
-            : Icon(Icons.chevron_right, color: textColor.withValues(alpha: 0.3), size: 20),
-            
+                child: Icon(
+                  Icons.more_vert,
+                  color: textColor.withValues(alpha: 0.4),
+                  size: 20,
+                ),
+              )
+            : Icon(
+                Icons.chevron_right,
+                color: textColor.withValues(alpha: 0.3),
+                size: 20,
+              ),
+
         // ─── RESTORED NAVIGATION LOGIC ───
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => post['type'] == 'assignment'
-                ? AssignmentDetailScreen(
-                    post: post,
-                    course: widget.course,
-                    isInstructor: widget.isInstructor,
-                  )
-                : PostDetailScreen(
-                    post: post,
-                    course: widget.course,
-                    isInstructor: widget.isInstructor,
-                  ),
-          ),
-        ).then((_) => _loadCoursework()), // Reloads data when returning from the detail screen
+        onTap: () =>
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => post['type'] == 'assignment'
+                    ? AssignmentDetailScreen(
+                        post: post,
+                        course: widget.course,
+                        isInstructor: widget.isInstructor,
+                      )
+                    : PostDetailScreen(
+                        post: post,
+                        course: widget.course,
+                        isInstructor: widget.isInstructor,
+                      ),
+              ),
+            ).then(
+              (_) => _loadCoursework(),
+            ), // Reloads data when returning from the detail screen
       ),
     );
   }
@@ -2000,24 +3303,54 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   // ════════════════════════════════════════════════════════
   Widget _buildPeopleTab() {
     if (_isLoadingPeople) {
-      return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
     }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
       children: [
-        Text('Instructors', style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700, color: context.textPrimary)),
+        Text(
+          'Instructors',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: context.textPrimary,
+          ),
+        ),
         Divider(color: context.borderColor),
-        if (_instructor != null) _buildPersonTile(_instructor!, showMenu: false),
+        if (_instructor != null)
+          _buildPersonTile(_instructor!, showMenu: false),
         const SizedBox(height: 20),
         Row(
           children: [
-            Text('Students', style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.w700, color: context.textPrimary)),
+            Text(
+              'Students',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: context.textPrimary,
+              ),
+            ),
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-              child: Text('${_students.length}', style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primary)),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${_students.length}',
+                style: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                ),
+              ),
             ),
           ],
         ),
@@ -2025,9 +3358,19 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         if (_students.isEmpty)
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text('No students enrolled yet', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textHint), textAlign: TextAlign.center),
+            child: Text(
+              'No students enrolled yet',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                color: context.textHint,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ),
-        ..._students.map((s) => _buildPersonTile(s, showMenu: widget.isInstructor)),
+        ..._students.map(
+          (s) => _buildPersonTile(s, showMenu: widget.isInstructor),
+        ),
       ],
     );
   }
@@ -2041,15 +3384,36 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           CircleAvatar(
             radius: 20,
             backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-            child: Text(name.substring(0, 1).toUpperCase(),
-              style: const TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.primary)),
+            child: Text(
+              name.substring(0, 1).toUpperCase(),
+              style: const TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+              ),
+            ),
           ),
           const SizedBox(width: 12),
-          Expanded(child: Text(name, style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w500, color: context.textPrimary))),
+          Expanded(
+            child: Text(
+              name,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: context.textPrimary,
+              ),
+            ),
+          ),
           if (showMenu)
             GestureDetector(
               onTap: () => _showRemoveStudentDialog(user),
-              child: Icon(Icons.more_vert, color: context.textSecondary, size: 20),
+              child: Icon(
+                Icons.more_vert,
+                color: context.textSecondary,
+                size: 20,
+              ),
             ),
         ],
       ),
@@ -2074,8 +3438,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                icon, 
-                size: 64, 
+                icon,
+                size: 64,
                 color: textColor.withValues(alpha: 0.2), // Subtle icon color
               ),
             ),
@@ -2105,6 +3469,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       ),
     );
   }
+
   Widget _buildDateTimePicker({
     required BuildContext context,
     required DateTime? date,
@@ -2128,7 +3493,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             ),
             child: Row(
               children: [
-                Icon(Icons.calendar_today_outlined, size: 18, color: context.textSecondary),
+                Icon(
+                  Icons.calendar_today_outlined,
+                  size: 18,
+                  color: context.textSecondary,
+                ),
                 const SizedBox(width: 10),
                 Text(
                   date == null
@@ -2153,7 +3522,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             ),
             child: Row(
               children: [
-                Icon(Icons.access_time_outlined, size: 18, color: context.textSecondary),
+                Icon(
+                  Icons.access_time_outlined,
+                  size: 18,
+                  color: context.textSecondary,
+                ),
                 const SizedBox(width: 10),
                 Text(
                   time == null ? 'Select Time' : time.format(context),
@@ -2169,38 +3542,91 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   Widget _buildRankingTab() {
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    if (_isLoadingPeople) return const Center(child: CircularProgressIndicator(color: AppColors.primary));
-    final ranked = [..._students]..sort((a, b) => (b['xp'] as int? ?? 0).compareTo(a['xp'] as int? ?? 0));
+    if (_isLoadingPeople)
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    final ranked = [..._students]
+      ..sort((a, b) => (b['xp'] as int? ?? 0).compareTo(a['xp'] as int? ?? 0));
     final currentUserId = _supabase.auth.currentUser?.id;
     if (ranked.isEmpty) {
-      return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Icons.leaderboard_outlined, size: 64, color: textColor.withValues(alpha: 0.2)),
-        const SizedBox(height: 16),
-        Text('No students yet', style: TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w700, color: textColor)),
-        const SizedBox(height: 8),
-        Text('Rankings will appear once students join.', textAlign: TextAlign.center, style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: context.textSecondary)),
-      ]));
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.leaderboard_outlined,
+              size: 64,
+              color: textColor.withValues(alpha: 0.2),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No students yet',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: textColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Rankings will appear once students join.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                color: context.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      );
     }
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            const Icon(Icons.emoji_events_rounded, color: AppColors.gold, size: 26),
-            const SizedBox(width: 8),
-            Text('Class Rankings', style: TextStyle(fontFamily: 'Poppins', fontSize: 20, fontWeight: FontWeight.w700, color: textColor)),
-          ]),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.emoji_events_rounded,
+                color: AppColors.gold,
+                size: 26,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Class Rankings',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: textColor,
+                ),
+              ),
+            ],
+          ),
         ),
         if (ranked.length >= 3) ...[
           const SizedBox(height: 8),
-          Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Expanded(child: _buildRankPodiumItem(ranked[1], 2, 100, textColor)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildRankPodiumItem(ranked[0], 1, 130, textColor)),
-            const SizedBox(width: 10),
-            Expanded(child: _buildRankPodiumItem(ranked[2], 3, 80, textColor)),
-          ]),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: _buildRankPodiumItem(ranked[1], 2, 100, textColor),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildRankPodiumItem(ranked[0], 1, 130, textColor),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildRankPodiumItem(ranked[2], 3, 80, textColor),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
         ],
         ...ranked.asMap().entries.map((entry) {
@@ -2209,62 +3635,206 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           final rank = index + 1;
           final isCurrentUser = student['id'] == currentUserId;
           final xp = student['xp'] as int? ?? 0;
-          final medalColors = {1: AppColors.gold, 2: const Color(0xFFC0C0C0), 3: const Color(0xFFCD7F32)};
+          final medalColors = {
+            1: AppColors.gold,
+            2: const Color(0xFFC0C0C0),
+            3: const Color(0xFFCD7F32),
+          };
           return Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              gradient: isCurrentUser ? const LinearGradient(colors: [Color(0xFF1565C0), Color(0xFF1E90FF)], begin: Alignment.centerLeft, end: Alignment.centerRight) : null,
+              gradient: isCurrentUser
+                  ? const LinearGradient(
+                      colors: [Color(0xFF1565C0), Color(0xFF1E90FF)],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                    )
+                  : null,
               color: isCurrentUser ? null : context.cardColor,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: isCurrentUser ? Colors.transparent : context.borderColor),
-              boxShadow: context.isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 4))],
+              border: Border.all(
+                color: isCurrentUser ? Colors.transparent : context.borderColor,
+              ),
+              boxShadow: context.isDark
+                  ? []
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
             ),
-            child: Row(children: [
-              SizedBox(width: 36, child: rank <= 3
-                  ? Icon(Icons.workspace_premium_rounded, color: medalColors[rank], size: 24)
-                  : Text('#$rank', style: TextStyle(fontFamily: 'Poppins', fontSize: 13, fontWeight: FontWeight.w700, color: isCurrentUser ? Colors.white70 : textColor.withValues(alpha: 0.5)), textAlign: TextAlign.center)),
-              const SizedBox(width: 12),
-              CircleAvatar(radius: 20,
-                backgroundColor: isCurrentUser ? Colors.white24 : AppColors.primary.withValues(alpha: 0.15),
-                child: Text((student['name'] as String).substring(0, 1).toUpperCase(),
-                  style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, color: isCurrentUser ? Colors.white : AppColors.primary))),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(student['name'] ?? '', style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w600, color: isCurrentUser ? Colors.white : textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(_getLevelTitle(xp), style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: isCurrentUser ? Colors.white70 : context.textSecondary)),
-              ])),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                Text('$xp XP', style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w800, color: isCurrentUser ? Colors.white : AppColors.gold)),
-                if (isCurrentUser) const Text('You', style: TextStyle(fontFamily: 'Poppins', fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70)),
-              ]),
-            ]),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 36,
+                  child: rank <= 3
+                      ? Icon(
+                          Icons.workspace_premium_rounded,
+                          color: medalColors[rank],
+                          size: 24,
+                        )
+                      : Text(
+                          '#$rank',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: isCurrentUser
+                                ? Colors.white70
+                                : textColor.withValues(alpha: 0.5),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                ),
+                const SizedBox(width: 12),
+                CircleAvatar(
+                  radius: 20,
+                  backgroundColor: isCurrentUser
+                      ? Colors.white24
+                      : AppColors.primary.withValues(alpha: 0.15),
+                  child: Text(
+                    (student['name'] as String).substring(0, 1).toUpperCase(),
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontWeight: FontWeight.w700,
+                      color: isCurrentUser ? Colors.white : AppColors.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        student['name'] ?? '',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isCurrentUser ? Colors.white : textColor,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        _getLevelTitle(xp),
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 11,
+                          color: isCurrentUser
+                              ? Colors.white70
+                              : context.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '$xp XP',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: isCurrentUser ? Colors.white : AppColors.gold,
+                      ),
+                    ),
+                    if (isCurrentUser)
+                      const Text(
+                        'You',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white70,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           );
         }),
       ],
     );
   }
 
-  Widget _buildRankPodiumItem(Map<String, dynamic> student, int rank, double height, Color textColor) {
-    final medalColors = {1: AppColors.gold, 2: const Color(0xFFC0C0C0), 3: const Color(0xFFCD7F32)};
+  Widget _buildRankPodiumItem(
+    Map<String, dynamic> student,
+    int rank,
+    double height,
+    Color textColor,
+  ) {
+    final medalColors = {
+      1: AppColors.gold,
+      2: const Color(0xFFC0C0C0),
+      3: const Color(0xFFCD7F32),
+    };
     final xp = student['xp'] as int? ?? 0;
     return Container(
       height: height,
       decoration: BoxDecoration(
         color: context.cardColor,
-        borderRadius: const BorderRadius.only(topLeft: Radius.circular(16), topRight: Radius.circular(16)),
-        border: Border.all(color: medalColors[rank]!.withValues(alpha: 0.5), width: 2),
-        boxShadow: context.isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 10, offset: const Offset(0, 4))],
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
+        ),
+        border: Border.all(
+          color: medalColors[rank]!.withValues(alpha: 0.5),
+          width: 2,
+        ),
+        boxShadow: context.isDark
+            ? []
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.workspace_premium_rounded, color: medalColors[rank], size: rank == 1 ? 28 : 22),
-        const SizedBox(height: 4),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Text(
-          (student['name'] as String).split(' ').first,
-          style: TextStyle(fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.bold, color: textColor),
-          textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis)),
-        Text('$xp XP', style: TextStyle(fontFamily: 'Poppins', fontSize: 10, color: medalColors[rank], fontWeight: FontWeight.w800)),
-      ]),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.workspace_premium_rounded,
+            color: medalColors[rank],
+            size: rank == 1 ? 28 : 22,
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              (student['name'] as String).split(' ').first,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            '$xp XP',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 10,
+              color: medalColors[rank],
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -2314,10 +3884,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: color,
-                ),
+                child: CircularProgressIndicator(strokeWidth: 2, color: color),
               )
             else
               Icon(Icons.attach_file_outlined, color: color, size: 18),

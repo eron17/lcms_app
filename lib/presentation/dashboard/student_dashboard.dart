@@ -2169,15 +2169,27 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                       CircleAvatar(
                         radius: 45,
                         backgroundColor: Colors.white.withValues(alpha: 0.2),
-                        child: Text(
-                          (user?.name ?? 'S').substring(0, 1).toUpperCase(),
-                          style: const TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                        // Add this line to show the image from Supabase Storage
+                        backgroundImage:
+                            user?.avatarUrl != null &&
+                                user!.avatarUrl!.isNotEmpty
+                            ? NetworkImage(user.avatarUrl!)
+                            : null,
+                        // Only show the letter if there is NO image
+                        child:
+                            user?.avatarUrl == null || user!.avatarUrl!.isEmpty
+                            ? Text(
+                                (user?.name ?? 'S')
+                                    .substring(0, 1)
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : null,
                       ),
                       Container(
                         padding: const EdgeInsets.all(6),
@@ -2297,7 +2309,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                     padding: const EdgeInsets.all(20),
                     child: Center(
                       child: Text(
-                        'No badges yet. Keep learning! 🚀',
+                        'No badges yet. Keep learning!',
                         style: TextStyle(
                           fontFamily: 'Poppins',
                           color: themeColor.withValues(alpha: 0.5),

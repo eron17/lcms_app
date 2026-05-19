@@ -416,8 +416,8 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
-                  Icons.celebration_rounded, 
-                  size: 48, 
+                  Icons.celebration_rounded,
+                  size: 48,
                   color: AppColors.gold,
                 ),
               ),
@@ -483,18 +483,23 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                     GestureDetector(
                       onTap: () {
                         Clipboard.setData(ClipboardData(text: classCode));
-                        HapticFeedback.mediumImpact(); 
+                        HapticFeedback.mediumImpact();
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: const Text('Class code copied! 📋'),
+                            content: const Text('Class code copied!'),
                             behavior: SnackBarBehavior.floating,
-                            backgroundColor: const Color(0xFF0D1B4B),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            backgroundColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
                         );
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(20),
@@ -502,7 +507,11 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.copy_rounded, color: Colors.white, size: 14),
+                            Icon(
+                              Icons.copy_rounded,
+                              color: Colors.white,
+                              size: 14,
+                            ),
                             SizedBox(width: 8),
                             Text(
                               'Copy Code',
@@ -539,6 +548,8 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   }
 
   void _showCourseOptions(Map<String, dynamic> course) {
+    final isArchived = course['is_archived'] == true;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -551,45 +562,30 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildOptionItem(
-              Icons.key_outlined,
-              'Show Class Code',
-              AppColors.primary,
-              () {
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderColor, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 20),
+            Text(course['title'] ?? '', style: TextStyle(fontWeight: FontWeight.w700, color: context.textPrimary), textAlign: TextAlign.center),
+            const SizedBox(height: 20),
+            _buildOptionItem(Icons.key_outlined, 'Show Class Code', AppColors.primary, () {
+              Navigator.pop(context);
+              _showClassCodeDialog(course['class_code'] ?? '', course['title'] ?? '');
+            }),
+            // Changed: Removed Publish/Unpublish. Added Restore if archived.
+            if (isArchived)
+              _buildOptionItem(Icons.restore_page_outlined, 'Restore Class', Colors.green, () async {
                 Navigator.pop(context);
-                _showClassCodeDialog(
-                  course['class_code'] ?? '',
-                  course['title'] ?? '',
-                );
-              },
-            ),
-            _buildOptionItem(
-              Icons.publish_outlined,
-              (course['is_published'] ?? false) ? 'Unpublish' : 'Publish',
-              AppColors.success,
-              () {
+                await _supabase.from('courses').update({'is_archived': false, 'is_published': true}).eq('id', course['id']);
+                await _loadCourses();
+              })
+            else
+              _buildOptionItem(Icons.archive_outlined, 'Archive Class', Colors.orange, () async {
                 Navigator.pop(context);
-                _togglePublish(course);
-              },
-            ),
-            _buildOptionItem(
-              Icons.archive_outlined,
-              'Archive Class',
-              Colors.orange,
-              () {
-                Navigator.pop(context);
-                _archiveCourse(course['id']);
-              },
-            ),
-            _buildOptionItem(
-              Icons.delete_outline,
-              'Delete Class',
-              AppColors.error,
-              () {
-                Navigator.pop(context);
-                _deleteCourse(course['id']);
-              },
-            ),
+                await _archiveCourse(course['id']);
+              }),
+            _buildOptionItem(Icons.delete_outline, 'Delete Class', AppColors.error, () {
+              Navigator.pop(context);
+              _showDeleteConfirmation(course['id']); // Pass ID
+            }),
           ],
         ),
       ),
@@ -640,22 +636,22 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Class'),
-        content: const Text(
-          'Are you sure you want to delete this class? This action cannot be undone.',
-        ),
+        backgroundColor: context.surfaceColor,
+        title: Text('Delete Class?', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to delete this class? All data will be lost permanently.', 
+          style: TextStyle(color: context.textSecondary)),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(context), 
+            child: Text('CANCEL', style: TextStyle(color: context.textSecondary))
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () {
               Navigator.pop(context);
               _deleteCourse(courseId);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('Delete'),
+            }, 
+            child: const Text('YES, DELETE', style: TextStyle(color: Colors.white))
           ),
         ],
       ),
@@ -875,7 +871,9 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   // ─── Home Page ───────────────────────────────────────────
   Widget _buildHomePage() {
     final name = _currentUser?.name ?? 'Instructor';
-    final activeCoursesCount = _courses.where((c) => c['is_published'] == true).length;
+    final activeCoursesCount = _courses
+        .where((c) => c['is_published'] == true)
+        .length;
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return SingleChildScrollView(
@@ -910,16 +908,29 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                     children: [
                       const Text(
                         'Good day,',
-                        style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: Colors.white70),
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 13,
+                          color: Colors.white70,
+                        ),
                       ),
                       Text(
                         name,
-                        style: const TextStyle(fontFamily: 'Poppins', fontSize: 22, fontWeight: FontWeight.w700, color: Colors.white),
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       const Text(
                         'Manage your classes and track student progress.',
-                        style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: Colors.white70),
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 12,
+                          color: Colors.white70,
+                        ),
                       ),
                     ],
                   ),
@@ -930,7 +941,11 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                     color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Icon(Icons.school_outlined, color: Colors.white, size: 32),
+                  child: const Icon(
+                    Icons.school_outlined,
+                    color: Colors.white,
+                    size: 32,
+                  ),
                 ),
               ],
             ),
@@ -987,7 +1002,10 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                   Icons.add_circle_outline,
                   () {
                     setState(() => _currentIndex = 1);
-                    Future.delayed(const Duration(milliseconds: 300), _showCreateCourseDialog);
+                    Future.delayed(
+                      const Duration(milliseconds: 300),
+                      _showCreateCourseDialog,
+                    );
                   },
                 ),
               ),
@@ -1008,9 +1026,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
 
           // ─── Sections Overview ───
           if (_courses.isNotEmpty) ...[
-            _buildSectionHeader('Sections Overview', icon: Icons.analytics_outlined),
+            _buildSectionHeader(
+              'Sections Overview',
+              icon: Icons.analytics_outlined,
+            ),
             const SizedBox(height: 12),
-            _buildSectionsOverview(), 
+            _buildSectionsOverview(),
             const SizedBox(height: 24),
           ],
 
@@ -1169,7 +1190,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     );
   }
 
-  Widget _buildStatCard(IconData icon, String value, String label, Color color) {
+  Widget _buildStatCard(
+    IconData icon,
+    String value,
+    String label,
+    Color color,
+  ) {
     // Interstellar Blue for Light Mode text, White for Dark Mode
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
@@ -1648,7 +1674,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     );
   }
 
- Widget _buildEmptyClasses() {
+  Widget _buildEmptyClasses() {
     // Flexible color: Interstellar Blue in Light Mode, White in Dark Mode
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
@@ -1660,9 +1686,11 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
           children: [
             // ─── Proper Icon instead of Emoji ───
             Icon(
-              Icons.school_rounded, 
-              size: 80, 
-              color: textColor.withValues(alpha: 0.15), // Subtle tint for a modern feel
+              Icons.school_rounded,
+              size: 80,
+              color: textColor.withValues(
+                alpha: 0.15,
+              ), // Subtle tint for a modern feel
             ),
             const SizedBox(height: 20),
             Text(
@@ -1702,7 +1730,11 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
           // ─── Main Title (Replaced Emoji) ──────────────────
           Row(
             children: [
-              const Icon(Icons.analytics_rounded, color: AppColors.primary, size: 24),
+              const Icon(
+                Icons.analytics_rounded,
+                color: AppColors.primary,
+                size: 24,
+              ),
               const SizedBox(width: 10),
               Text(
                 'Reports',
@@ -1718,7 +1750,10 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
           const SizedBox(height: 24),
 
           // ─── Students Per Section ───────────────────────
-          _buildSectionHeader('Students Per Section', icon: Icons.groups_rounded),
+          _buildSectionHeader(
+            'Students Per Section',
+            icon: Icons.groups_rounded,
+          ),
           const SizedBox(height: 12),
 
           _courses.isEmpty
@@ -1734,15 +1769,19 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color: context.cardColor,
-                        borderRadius: BorderRadius.circular(20), // Matches system theme
+                        borderRadius: BorderRadius.circular(
+                          20,
+                        ), // Matches system theme
                         border: Border.all(color: context.borderColor),
-                        boxShadow: context.isDark ? [] : [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          )
-                        ],
+                        boxShadow: context.isDark
+                            ? []
+                            : [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.04),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1777,12 +1816,15 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
                             child: LinearProgressIndicator(
-                              value: count > 0 ? (count / 50).clamp(0.0, 1.0) : 0,
+                              value: count > 0
+                                  ? (count / 50).clamp(0.0, 1.0)
+                                  : 0,
                               backgroundColor: context.isDark
                                   ? Colors.white.withValues(alpha: 0.05)
                                   : Colors.grey.withValues(alpha: 0.1),
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                _cardGradients[index % _cardGradients.length][1],
+                                _cardGradients[index %
+                                    _cardGradients.length][1],
                               ),
                               minHeight: 8,
                             ),
@@ -1805,7 +1847,10 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
           const SizedBox(height: 32),
 
           // ─── Pending Submissions ────────────────────────
-          _buildSectionHeader('Pending Submissions', icon: Icons.pending_actions_rounded),
+          _buildSectionHeader(
+            'Pending Submissions',
+            icon: Icons.pending_actions_rounded,
+          ),
           const SizedBox(height: 12),
 
           _pendingSubmissions.isEmpty
@@ -1852,13 +1897,15 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         color: context.cardColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: context.borderColor),
-        boxShadow: context.isDark ? [] : [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
+        boxShadow: context.isDark
+            ? []
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       child: Column(
         children: [
@@ -1870,9 +1917,9 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
               shape: BoxShape.circle,
             ),
             child: const Icon(
-              Icons.task_alt_rounded, 
-              size: 40, 
-              color: AppColors.success
+              Icons.task_alt_rounded,
+              size: 40,
+              color: AppColors.success,
             ),
           ),
           const SizedBox(height: 20),
@@ -1920,7 +1967,9 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(24), // Matches student dashboard
+              borderRadius: BorderRadius.circular(
+                24,
+              ), // Matches student dashboard
               boxShadow: [
                 BoxShadow(
                   color: const Color(0xFF7B2FBE).withValues(alpha: 0.3),
@@ -1947,15 +1996,28 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                       CircleAvatar(
                         radius: 45,
                         backgroundColor: Colors.white.withValues(alpha: 0.2),
-                        child: Text(
-                          (user?.name ?? 'I').substring(0, 1).toUpperCase(),
-                          style: const TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 36,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                        // Add this line to show the image from Supabase Storage
+                        backgroundImage:
+                            _currentUser?.avatarUrl != null &&
+                                _currentUser!.avatarUrl!.isNotEmpty
+                            ? NetworkImage(_currentUser!.avatarUrl!)
+                            : null,
+                        // Only show the letter if there is NO image
+                        child:
+                            _currentUser?.avatarUrl == null ||
+                                _currentUser!.avatarUrl!.isEmpty
+                            ? Text(
+                                (_currentUser?.name ?? 'I')
+                                    .substring(0, 1)
+                                    .toUpperCase(),
+                                style: const TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : null,
                       ),
                       Container(
                         padding: const EdgeInsets.all(6),
@@ -1963,7 +2025,11 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                           color: AppColors.primary,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.edit_rounded, color: Colors.white, size: 14),
+                        child: const Icon(
+                          Icons.edit_rounded,
+                          color: Colors.white,
+                          size: 14,
+                        ),
                       ),
                     ],
                   ),
@@ -1987,10 +2053,13 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                   ),
                 ),
                 const SizedBox(height: 16),
-                
+
                 // ─── UPDATED INSTRUCTOR BADGE (No Emojis) ───
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
@@ -2045,13 +2114,15 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
               color: context.cardColor,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: context.borderColor),
-              boxShadow: context.isDark ? [] : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                )
-              ],
+              boxShadow: context.isDark
+                  ? []
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
             ),
             child: Column(
               children: [
@@ -2060,7 +2131,8 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                   'Dark Mode',
                   trailing: Switch(
                     value: ref.watch(themeProvider) == ThemeMode.dark,
-                    onChanged: (_) => ref.read(themeProvider.notifier).toggleTheme(),
+                    onChanged: (_) =>
+                        ref.read(themeProvider.notifier).toggleTheme(),
                     activeThumbColor: AppColors.primary,
                   ),
                 ),
