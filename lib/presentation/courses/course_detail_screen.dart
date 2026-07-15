@@ -9,10 +9,11 @@ import 'dart:io';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import '../../data/models/user_model.dart';
-import 'file_viewer_screen.dart';
 import 'post_detail_screen.dart';
 import 'assignment_detail_screen.dart';
 import 'class_settings_screen.dart';
+import 'dart:async';
+import '../../shared/widgets/pressable_scale.dart';
 
 class CourseDetailScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> course;
@@ -50,10 +51,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   bool _isLoadingPeople = true;
 
   // Comments state
-  final Map<String, bool> _expandedPosts = {};
   final Map<String, List<Map<String, dynamic>>> _comments = {};
   final Map<String, TextEditingController> _commentControllers = {};
-  final Map<String, bool> _submittingComment = {};
 
   // Coursework topic expansion
   final Map<String, bool> _expandedTopics = {};
@@ -108,9 +107,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     try {
       final data = await _supabase
           .from('posts')
-          .select('*, users(name)')
+          // ─── THE FIX: Fetch post data AND comment count in one shot ───
+          .select('*, users(name), comments:comments(count)')
           .eq('course_id', widget.course['id'])
           .order('created_at', ascending: false);
+
       if (mounted) {
         setState(() {
           _streamPosts = List<Map<String, dynamic>>.from(data);
@@ -152,119 +153,72 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   Future<void> _loadPeople() async {
     try {
+      // 1. Load Instructor Data
       final instructorData = await _supabase
           .from('users')
           .select()
           .eq('id', widget.course['instructor_id'])
           .single();
+
+      // 2. Load Enrollment Data AND the joined User data
       final enrollmentsData = await _supabase
           .from('enrollments')
           .select('users(*)')
           .eq('course_id', widget.course['id']);
+
       if (mounted) {
         setState(() {
           _instructor = instructorData;
-          _students = List<Map<String, dynamic>>.from(
-            enrollmentsData.map((e) => e['users'] as Map<String, dynamic>),
-          );
+
+          // Filter out any null users to prevent crashes
+          _students = enrollmentsData
+              .where((e) => e['users'] != null)
+              .map((e) => e['users'] as Map<String, dynamic>)
+              .toList();
+
           _isLoadingPeople = false;
         });
       }
     } catch (e) {
+      debugPrint('Load People Error: $e');
       if (mounted) setState(() => _isLoadingPeople = false);
     }
   }
 
-  Future<void> _loadComments(String postId) async {
-    try {
-      final data = await _supabase
-          .from('comments')
-          .select()
-          .eq('post_id', postId)
-          .order('created_at', ascending: true);
-      if (mounted)
-        setState(
-          () => _comments[postId] = List<Map<String, dynamic>>.from(data),
-        );
-    } catch (e) {
-      debugPrint('Comments error: $e');
-    }
-  }
+  Future<void> _createOrUpdateAssessmentForPost({
+    required Map<String, dynamic> postData,
+    required String title,
+    required String type,
+  }) async {
+    if (type != 'assignment') return;
 
-  Future<void> _submitComment(String postId) async {
-    final controller = _commentControllers[postId];
-    if (controller == null || controller.text.trim().isEmpty) return;
-    final text = controller.text.trim();
-    setState(() => _submittingComment[postId] = true);
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
-      await _supabase.from('comments').insert({
-        'post_id': postId,
-        'user_id': userId,
-        'user_name': _currentUser?.name ?? 'User',
-        'text': text,
-        'created_at': DateTime.now().toIso8601String(),
+    final postId = postData['id']?.toString();
+    final courseId = postData['course_id'] ?? widget.course['id'];
+
+    if (postId == null || postId.isEmpty || courseId == null) {
+      throw Exception(
+        'Cannot create assessment: missing post ID or course ID.',
+      );
+    }
+
+    final existingAssessment = await _supabase
+        .from('assessments')
+        .select('id')
+        .eq('id', postId)
+        .maybeSingle();
+
+    if (existingAssessment == null) {
+      await _supabase.from('assessments').insert({
+        'id': postId,
+        'course_id': courseId,
+        'title': title,
+        'type': 'assignment',
       });
-      controller.clear();
-      await _loadComments(postId);
-    } catch (e) {
-      debugPrint('Comment submit error: $e');
-    } finally {
-      if (mounted) setState(() => _submittingComment[postId] = false);
-    }
-  }
-
-  void _showEditCommentDialog(Map<String, dynamic> comment, String postId) {
-    final controller = TextEditingController(text: comment['text']);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfaceColor,
-        title: Text(
-          'Edit Comment',
-          style: TextStyle(
-            color: context.textPrimary,
-            fontFamily: 'Poppins',
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: TextField(
-          controller: controller,
-          style: TextStyle(color: context.textPrimary, fontFamily: 'Poppins'),
-          decoration: InputDecoration(
-            hintText: 'Type something...',
-            hintStyle: TextStyle(color: context.textHint),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await _supabase
-                  .from('comments')
-                  .update({'text': controller.text.trim()})
-                  .eq('id', comment['id']);
-              Navigator.pop(context);
-              _loadComments(postId);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _deleteComment(String commentId, String postId) async {
-    try {
-      await _supabase.from('comments').delete().eq('id', commentId);
-      await _loadComments(postId);
-    } catch (e) {
-      debugPrint('Delete comment error: $e');
+    } else {
+      await _supabase
+          .from('assessments')
+          .update({'course_id': courseId, 'title': title, 'type': 'assignment'})
+          .eq('id', postId);
     }
   }
 
@@ -307,13 +261,55 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     }
   }
 
-  void _togglePost(String postId) {
-    setState(() => _expandedPosts[postId] = !(_expandedPosts[postId] ?? false));
-    if (_expandedPosts[postId] == true) {
-      _loadComments(postId);
-      _commentControllers.putIfAbsent(postId, () => TextEditingController());
+  Future<void> sendPostCreatedNotifications({
+  required Map<String, dynamic> newPost,     // The created post map (must have 'id', 'course_id', 'title', 'type')
+  required Map<String, dynamic> courseData,  // The course map (must have 'id')
+}) async {
+  final supabase = Supabase.instance.client;
+
+  try {
+    // 1. Fetch all students enrolled in this course
+    final studentsData = await supabase
+        .from('enrollments')
+        .select('student_id')
+        .eq('course_id', courseData['id']);
+
+    final List students = studentsData as List;
+    if (students.isEmpty) return; // No students to notify
+
+    // Determine notification title and body based on type
+    String title = 'New Material Posted';
+    String body = 'Instructor posted: ${newPost['title']}';
+
+    if (newPost['type'] == 'assignment') {
+      title = 'New assignment Posted';
+    } else if (newPost['type'] == '3d_meet') {
+      title = 'New 3d meet Posted';
+      body = 'Synchronous Coding: ${newPost['title']}';
+    } else if (newPost['type'] == 'announcement') {
+      title = 'New Announcement';
     }
+
+    // 2. Build the batch insert list
+    final List<Map<String, dynamic>> notificationsBatch = students.map((student) {
+      return {
+        'user_id': student['student_id'],
+        'course_id': courseData['id'],
+        'post_id': newPost['id'], // Extremely important: this bridges the deep link!
+        'type': newPost['type'] ?? 'material',
+        'title': title,
+        'body': body,
+        'created_at': DateTime.now().toUtc().toIso8601String(),
+      };
+    }).toList();
+
+    // 3. Batch insert into Supabase notifications table
+    await supabase.from('notifications').insert(notificationsBatch);
+    debugPrint('Notifications sent to ${notificationsBatch.length} students.');
+  } catch (e) {
+    debugPrint('Error sending post creation notifications: $e');
   }
+}
 
   // ════════════════════════════════════════════════════════
   // INSTRUCTOR DIALOGS
@@ -327,7 +323,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       text: existing?['instructions'] ?? '',
     );
     bool isPosting = false;
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -423,36 +418,67 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                           onPressed: isPosting
                               ? null
                               : () async {
-                                  if (titleController.text.trim().isEmpty)
+                                  if (titleController.text.trim().isEmpty) {
                                     return;
+                                  }
                                   setSheet(() => isPosting = true);
                                   try {
                                     final userId =
                                         _supabase.auth.currentUser?.id;
+                                    String? targetPostId;
+                                    
                                     if (existing != null) {
                                       await _supabase
                                           .from('posts')
                                           .update({
-                                            'title': titleController.text
-                                                .trim(),
-                                            'instructions':
-                                                instructionsController.text
-                                                    .trim(),
+                                            'title': titleController.text.trim(),
+                                            'instructions': instructionsController.text.trim(),
                                           })
                                           .eq('id', existing['id']);
+                                      targetPostId = existing['id'];
                                     } else {
-                                      await _supabase.from('posts').insert({
-                                        'course_id': widget.course['id'],
-                                        'instructor_id': userId,
-                                        'type': 'announcement',
-                                        'title': titleController.text.trim(),
-                                        'instructions': instructionsController
-                                            .text
-                                            .trim(),
-                                        'created_at': DateTime.now()
-                                            .toIso8601String(),
-                                      });
+                                      // Return newly created announcement post to get its ID
+                                      final newAnnouncement = await _supabase
+                                          .from('posts')
+                                          .insert({
+                                            'course_id': widget.course['id'],
+                                            'instructor_id': userId,
+                                            'type': 'announcement',
+                                            'title': titleController.text.trim(),
+                                            'instructions': instructionsController.text.trim(),
+                                            'created_at': DateTime.now().toIso8601String(),
+                                          })
+                                          .select()
+                                          .single();
+                                      targetPostId = newAnnouncement['id'];
                                     }
+
+                                    final studentsData = await _supabase
+                                        .from('enrollments')
+                                        .select('student_id')
+                                        .eq('course_id', widget.course['id']);
+                                    final List students = studentsData as List;
+
+                                    if (students.isNotEmpty && targetPostId != null) {
+                                      final List<Map<String, dynamic>>
+                                      notifs = students
+                                          .map(
+                                            (s) => {
+                                              'user_id': s['student_id'],
+                                              'course_id': widget.course['id'],
+                                              'post_id': targetPostId, // ADDED: Links deep routing logic to this post
+                                              'type': 'assignment_posted', 
+                                              'title': 'New Announcement',
+                                              'body': titleController.text.trim(),
+                                              'created_at': DateTime.now().toUtc().toIso8601String(),
+                                            },
+                                          )
+                                          .toList();
+                                      await _supabase
+                                          .from('notifications')
+                                          .insert(notifs);
+                                    }
+
                                     if (mounted) {
                                       Navigator.pop(context);
                                       await _loadStream();
@@ -513,7 +539,19 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     final instructionsController = TextEditingController(
       text: existing?['instructions'] ?? '',
     );
+    final pointsController = TextEditingController(
+      text: (existing?['points'] ?? 100).toString(),
+    );
     String? selectedTopicId = existing?['topic_id'];
+
+    // ─── Assignment deadline state ───
+    DateTime? assignmentDueDate;
+    TimeOfDay? assignmentDueTime;
+    if (existing?['due_date'] != null) {
+      final due = DateTime.parse(existing!['due_date']);
+      assignmentDueDate = due;
+      assignmentDueTime = TimeOfDay(hour: due.hour, minute: due.minute);
+    }
 
     // ─── Scheduling State (3d_meet) ───
     DateTime? scheduledDate;
@@ -685,7 +723,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         _buildUploadButton(
                           label:
                               assessmentName ??
-                              'Attach Assignment Instruction (PDF)',
+                              'Attach Assessment Instruction (PDF)',
                           icon: assessmentName != null
                               ? Icons.check_circle
                               : Icons.assignment_outlined,
@@ -720,6 +758,141 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                               setSheet(() => isUploadingAssessment = false);
                             }
                           },
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+
+                      if (postType == 'assignment') ...[
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFFFF6B35,
+                            ).withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(
+                                0xFFFF6B35,
+                              ).withValues(alpha: 0.25),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(
+                                    Icons.settings_suggest_outlined,
+                                    color: Color(0xFFFF6B35),
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    'Assignment Details',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: context.textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  // --- Points Input ---
+                                  Expanded(
+                                    flex: 2,
+                                    child: _buildSheetField(
+                                      'Points',
+                                      '100',
+                                      pointsController,
+                                      Icons.grade_outlined,
+                                      keyboardType: TextInputType.number,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // --- Due Date Logic ---
+                                  Expanded(
+                                    flex: 3,
+                                    child: GestureDetector(
+                                      onTap: () async {
+                                        final p = await showDatePicker(
+                                          context: context,
+                                          initialDate:
+                                              assignmentDueDate ??
+                                              DateTime.now(),
+                                          firstDate: DateTime.now(),
+                                          lastDate: DateTime.now().add(
+                                            const Duration(days: 365),
+                                          ),
+                                        );
+                                        if (p != null) {
+                                          final t = await showTimePicker(
+                                            context: context,
+                                            initialTime:
+                                                assignmentDueTime ??
+                                                const TimeOfDay(
+                                                  hour: 23,
+                                                  minute: 59,
+                                                ),
+                                          );
+                                          if (t != null) {
+                                            setSheet(() {
+                                              assignmentDueDate = p;
+                                              assignmentDueTime = t;
+                                            });
+                                          }
+                                        }
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 15,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: context.cardColor,
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: context.borderColor,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.calendar_today_outlined,
+                                              size: 16,
+                                              color: context.textHint,
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Text(
+                                                assignmentDueDate == null
+                                                    ? 'No Due Date'
+                                                    : '${assignmentDueDate!.month}/${assignmentDueDate!.day} ${assignmentDueTime!.format(context)}',
+                                                style: TextStyle(
+                                                  fontFamily: 'Poppins',
+                                                  fontSize: 13,
+                                                  color:
+                                                      assignmentDueDate == null
+                                                      ? context.textHint
+                                                      : context.textPrimary,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -781,16 +954,18 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                       const Duration(days: 365),
                                     ),
                                   );
-                                  if (p != null)
+                                  if (p != null) {
                                     setSheet(() => scheduledDate = p);
+                                  }
                                 },
                                 onTimeTap: () async {
                                   final t = await showTimePicker(
                                     context: context,
                                     initialTime: TimeOfDay.now(),
                                   );
-                                  if (t != null)
+                                  if (t != null) {
                                     setSheet(() => scheduledTime = t);
+                                  }
                                 },
                               ),
                               const SizedBox(height: 16),
@@ -894,6 +1069,16 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                       assessmentUrl == null)
                                     error =
                                         "Please attach Assignment Instructions (PDF)";
+                                  else if (postType == 'assignment' &&
+                                      (int.tryParse(
+                                                pointsController.text.trim(),
+                                              ) ==
+                                              null ||
+                                          int.parse(
+                                                pointsController.text.trim(),
+                                              ) <=
+                                              0))
+                                    error = "Please enter valid maximum points";
                                   else if (postType == '3d_meet') {
                                     if (materialUrl == null) {
                                       error =
@@ -908,16 +1093,37 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                   }
 
                                   if (error != null) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          error,
-                                          style: const TextStyle(
-                                            fontFamily: 'Poppins',
+                                    await showDialog(
+                                      context: context,
+                                      builder: (dialogContext) => AlertDialog(
+                                        backgroundColor: context.surfaceColor,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            18,
                                           ),
                                         ),
-                                        backgroundColor: AppColors.error,
-                                        behavior: SnackBarBehavior.floating,
+                                        title: Text(
+                                          'Missing Information',
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontWeight: FontWeight.w700,
+                                            color: context.textPrimary,
+                                          ),
+                                        ),
+                                        content: Text(
+                                          error!,
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            color: context.textSecondary,
+                                          ),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () =>
+                                                Navigator.pop(dialogContext),
+                                            child: const Text('OK'),
+                                          ),
+                                        ],
                                       ),
                                     );
                                     return;
@@ -928,6 +1134,26 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                     final userId =
                                         _supabase.auth.currentUser?.id;
                                     DateTime? finalScheduledTime;
+                                    DateTime? finalAssignmentDueDate;
+                                    String? targetPostId;
+                                    final assignmentPoints =
+                                        int.tryParse(
+                                          pointsController.text.trim(),
+                                        ) ??
+                                        100;
+
+                                    if (postType == 'assignment' &&
+                                        assignmentDueDate != null &&
+                                        assignmentDueTime != null) {
+                                      finalAssignmentDueDate = DateTime(
+                                        assignmentDueDate!.year,
+                                        assignmentDueDate!.month,
+                                        assignmentDueDate!.day,
+                                        assignmentDueTime!.hour,
+                                        assignmentDueTime!.minute,
+                                      );
+                                    }
+
                                     if (postType == '3d_meet') {
                                       finalScheduledTime = DateTime(
                                         scheduledDate!.year,
@@ -946,42 +1172,117 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                           .update({
                                             'title': title,
                                             'instructions': desc,
-                                            'topic_id':
-                                                selectedTopicId, // This becomes null if "General" is picked
+                                            'topic_id': selectedTopicId, 
                                             'material_url': materialUrl,
                                             'material_name': materialName,
                                             'assessment_url': assessmentUrl,
                                             'assessment_name': assessmentName,
                                             'scheduled_time': finalScheduledTime
-                                                ?.toIso8601String(),
+                                                ?.toUtc()
+                                                .toIso8601String(),
                                             'duration_minutes':
                                                 postType == '3d_meet'
                                                 ? durationMinutes
                                                 : null,
+                                            'points': postType == 'assignment'
+                                                ? assignmentPoints
+                                                : null,
+                                            'due_date': postType == 'assignment'
+                                                ? finalAssignmentDueDate
+                                                      ?.toUtc()
+                                                      .toIso8601String()
+                                                : null,
                                           })
                                           .eq('id', existing['id']);
+
+                                      await _createOrUpdateAssessmentForPost(
+                                        postData: existing,
+                                        title: title,
+                                        type: postType,
+                                      );
+                                      targetPostId = existing['id'];
                                     } else {
                                       // If 'existing' is null, we create a NEW post (INSERT)
-                                      await _supabase.from('posts').insert({
-                                        'course_id': widget.course['id'],
-                                        'instructor_id': userId,
-                                        'type': postType,
-                                        'title': title,
-                                        'instructions': desc,
-                                        'topic_id': selectedTopicId,
-                                        'material_url': materialUrl,
-                                        'material_name': materialName,
-                                        'assessment_url': assessmentUrl,
-                                        'assessment_name': assessmentName,
-                                        'scheduled_time': finalScheduledTime
-                                            ?.toIso8601String(),
-                                        'duration_minutes':
-                                            postType == '3d_meet'
-                                            ? durationMinutes
-                                            : null,
-                                        'created_at': DateTime.now()
-                                            .toIso8601String(),
-                                      });
+                                      final postData = await _supabase
+                                          .from('posts')
+                                          .insert({
+                                            'course_id': widget.course['id'],
+                                            'instructor_id': userId,
+                                            'type': postType,
+                                            'title': title,
+                                            'instructions': desc,
+                                            'topic_id': selectedTopicId,
+                                            'material_url': materialUrl,
+                                            'material_name': materialName,
+                                            'assessment_url': assessmentUrl,
+                                            'assessment_name': assessmentName,
+                                            'scheduled_time': finalScheduledTime
+                                                ?.toUtc()
+                                                .toIso8601String(),
+                                            'duration_minutes':
+                                                postType == '3d_meet'
+                                                ? durationMinutes
+                                                : null,
+                                            'points': postType == 'assignment'
+                                                ? assignmentPoints
+                                                : null,
+                                            'due_date': postType == 'assignment'
+                                                ? finalAssignmentDueDate
+                                                      ?.toUtc()
+                                                      .toIso8601String()
+                                                : null,
+                                            'created_at': DateTime.now()
+                                                .toIso8601String(),
+                                          })
+                                          .select()
+                                          .single();
+
+                                      await _createOrUpdateAssessmentForPost(
+                                        postData: Map<String, dynamic>.from(
+                                          postData,
+                                        ),
+                                        title: title,
+                                        type: postType,
+                                      );
+                                      targetPostId = postData['id'];
+                                    }
+                                    try {
+                                      // 1. Get all students enrolled in this course
+                                      final response = await _supabase
+                                          .from('enrollments')
+                                          .select('student_id')
+                                          .eq('course_id', widget.course['id']);
+
+                                      final students = response as List;
+
+                                      if (students.isNotEmpty && targetPostId != null) {
+                                        // 2. Create the notification list
+                                        final List<Map<String, dynamic>>
+                                        notifications = students
+                                            .map(
+                                              (s) => {
+                                                'user_id': s['student_id'],
+                                                'course_id': widget.course['id'],
+                                                'post_id': targetPostId, // ADDED: Links deep routing logic to this post
+                                                'type': 'assignment_posted',
+                                                'title': 'New ${postType.replaceAll('_', ' ')} Posted',
+                                                'body': 'Instructor posted: ${titleController.text.trim()}',
+                                                'created_at': DateTime.now()
+                                                    .toUtc()
+                                                    .toIso8601String(),
+                                              },
+                                            )
+                                            .toList();
+
+                                        // 3. Batch insert all notifications
+                                        await _supabase
+                                            .from('notifications')
+                                            .insert(notifications);
+                                      }
+                                    } catch (notifError) {
+                                      debugPrint(
+                                        'Notification fail: $notifError',
+                                      );
                                     }
 
                                     if (mounted) {
@@ -1177,103 +1478,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 ),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-  void _showDeleteTopicConfirmation(Map<String, dynamic> topic) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: context.surfaceColor,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: context.borderColor),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 48),
-              const SizedBox(height: 12),
-              Text(
-                'Delete Topic?',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: context.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'This will permanently delete "${topic['title']}". Any posts inside this topic will become uncategorized.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 13,
-                  color: context.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: context.cardColor,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: context.borderColor),
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              color: context.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.error,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        minimumSize: const Size(double.infinity, 48),
-                        elevation: 0,
-                      ),
-                      onPressed: () async {
-                        Navigator.pop(context);
-                        try {
-                          await _supabase.from('topics').delete().eq('id', topic['id']);
-                          await _loadCoursework();
-                        } catch (e) {
-                          debugPrint('Error deleting topic: $e');
-                        }
-                      },
-                      child: const Text(
-                        'Delete',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
           ),
         ),
       ),
@@ -1549,11 +1753,22 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   String _getScheduleStatus(String? scheduledTime) {
     if (scheduledTime == null) return 'none';
-    final scheduled = DateTime.parse(scheduledTime);
-    final now = DateTime.now();
-    if (now.isBefore(scheduled)) return 'upcoming';
-    if (now.isAfter(scheduled.add(const Duration(hours: 2)))) return 'ended';
-    return 'live';
+
+    try {
+      // 1. Parse and convert back to YOUR LOCAL TIME
+      final scheduled = DateTime.parse(scheduledTime).toLocal();
+
+      // 2. Get current device time
+      final now = DateTime.now();
+
+      final int diff = now.difference(scheduled).inMinutes;
+
+      if (diff < 0) return 'upcoming';
+      if (diff >= 0 && diff <= 15) return 'live';
+      return 'ended';
+    } catch (e) {
+      return 'none';
+    }
   }
 
   String _formatDate(String dateStr) {
@@ -1578,33 +1793,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       'Dec',
     ];
     return '${months[date.month - 1]} ${date.day}';
-  }
-
-  String _formatScheduleTime(String? scheduledTime) {
-    if (scheduledTime == null) return '';
-    final dt = DateTime.parse(scheduledTime);
-    final months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final hour = dt.hour > 12
-        ? dt.hour - 12
-        : dt.hour == 0
-        ? 12
-        : dt.hour;
-    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-    final min = dt.minute.toString().padLeft(2, '0');
-    return '${months[dt.month - 1]} ${dt.day}, $hour:$min $ampm';
   }
 
   IconData _getPostIcon(String type) {
@@ -1642,7 +1830,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       case '3d_meet':
         return '3D Meet';
       case 'material':
-        return 'Material';
+        return 'Lesson Material';
       case 'assignment':
         return 'Assignment';
       case 'announcement':
@@ -1658,10 +1846,12 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     TextEditingController controller,
     IconData icon, {
     int maxLines = 1,
+    TextInputType keyboardType = TextInputType.text, // <--- Add this line
   }) {
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
+      keyboardType: keyboardType, // <--- Add this line
       style: TextStyle(
         fontFamily: 'Poppins',
         color: context.textPrimary,
@@ -1704,38 +1894,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAttachmentButton(String label, IconData icon, Color color) {
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.25)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 13,
-                  color: color,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Icon(Icons.attach_file_outlined, color: color, size: 18),
-          ],
         ),
       ),
     );
@@ -1879,52 +2037,61 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   }
 
   Widget _buildTopBar() {
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
+          // ─── 1. PREMIUM OPACITY-ONLY BACK BUTTON ───
+          PressableScale(
+            onPressed: () => Navigator.pop(context),
+            scaleFactor: 1.0, // ─── FIXED: NO MOVEMENT ───
+            opacityFactor: 0.5, // ─── FIXED: DIMMING ONLY ───
             child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: context.cardColor,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: context.borderColor),
-              ),
+              padding: const EdgeInsets.all(10),
               child: Icon(
-                Icons.arrow_back,
-                color: context.textPrimary,
-                size: 20,
+                Icons.arrow_back_ios_new_rounded,
+                color: textColor,
+                size: 25, // Balanced size for top bar
               ),
             ),
           ),
+
           const Spacer(),
+
+          // ─── 2. PREMIUM OPACITY-ONLY SETTINGS BUTTON ───
           if (widget.isInstructor)
-            GestureDetector(
-              onTap: () async {
-                await Navigator.push(
+            PressableScale(
+              onPressed: () async {
+                // 1. Wait for the result from the settings screen
+                final bool? wasUpdated = await Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => ClassSettingsScreen(course: widget.course),
                   ),
                 );
-                // Re-fetch course details when returning
-                _loadCurrentUser();
-                _loadStream();
-                _loadCoursework();
+
+                // 2. Only refresh the UI if an update actually happened
+                if (wasUpdated == true && mounted) {
+                  debugPrint('Refresh triggered: Class name updated.');
+                  _loadCurrentUser(); // Refresh student count/instructor data
+                  _loadStream();      // Refresh class name in stream
+                  _loadCoursework();  // Refresh topics
+                  
+                  // OPTIONAL: If you want to update the Hero Banner Title immediately,
+                  // you can add a setState here to update the local 'widget.course' map
+                  // or just call your main data fetcher.
+                }
               },
+              scaleFactor: 1.0, 
+              opacityFactor: 0.5,
               child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: context.cardColor,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: context.borderColor),
-                ),
+                padding: const EdgeInsets.all(10),
                 child: Icon(
-                  Icons.settings_outlined,
-                  color: context.textPrimary,
-                  size: 20,
+                  Icons.settings_outlined, 
+                  color: textColor, 
+                  size: 25, 
                 ),
               ),
             ),
@@ -2401,549 +2568,183 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   }
 
   Widget _buildStreamCard(Map<String, dynamic> post) {
-    final postId = post['id'] as String;
-    final isExpanded = _expandedPosts[postId] ?? false;
     final type = post['type'] as String;
     final postColor = _getPostColor(type);
-    final postIcon = _getPostIcon(type);
-    final comments = _comments[postId] ?? [];
-    final isAnnouncement = type == 'announcement';
-    final instructorName =
-        post['users']?['name'] ??
-        widget.course['instructor_name'] ??
-        'Instructor';
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    final comments = _comments[post['id']] ?? [];
+    final int commentCount =
+        (post['comments'] != null && (post['comments'] as List).isNotEmpty)
+        ? post['comments'][0]['count'] as int
+        : 0;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.borderColor),
-        boxShadow: context.isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-      ),
-      child: Column(
-        children: [
-          GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => post['type'] == 'assignment'
-                    ? AssignmentDetailScreen(
-                        post: post,
-                        course: widget.course,
-                        isInstructor: widget.isInstructor,
-                      )
-                    : PostDetailScreen(
-                        post: post,
-                        course: widget.course,
-                        isInstructor: widget.isInstructor,
-                      ),
-              ),
-            ).then((_) => _loadStream()),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return Padding(
+      // ─── 1. FIX WIDTH ───
+      // Removed horizontal 16px. Now it only uses the ListView's padding
+      // to align perfectly with the top Course Card.
+      padding: const EdgeInsets.only(bottom: 12),
+      child: PressableScale(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => type == 'assignment'
+                ? AssignmentDetailScreen(
+                    post: post,
+                    course: widget.course,
+                    isInstructor: widget.isInstructor,
+                  )
+                : PostDetailScreen(
+                    post: post,
+                    course: widget.course,
+                    isInstructor: widget.isInstructor,
+                  ),
+          ),
+        ).then((_) => _loadStream()),
+        scaleFactor: 0.98,
+        child: Container(
+          decoration: BoxDecoration(
+            color: context.cardColor,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: context.isDark
+                ? []
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.03),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: postColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: isAnnouncement
-                            ? Center(
-                                child: Text(
-                                  instructorName.substring(0, 1).toUpperCase(),
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: postColor,
-                                  ),
-                                ),
-                              )
-                            : Icon(postIcon, color: postColor, size: 20),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              isAnnouncement
-                                  ? instructorName
-                                  : post['title'] ?? '',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: context.textPrimary,
+                  Container(width: 4, color: postColor),
+                  Expanded(
+                    child: Padding(
+                      // ─── 2. REDUCE HEIGHT ───
+                      // Reduced vertical padding to 10px to make the card slimmer
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Tighter Header
+                          Row(
+                            children: [
+                              _buildTonalBadge(
+                                _getPostTypeLabel(type).toUpperCase(),
+                                postColor,
                               ),
-                            ),
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                Text(
-                                  _formatDate(post['created_at']),
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 11,
-                                    color: context.textSecondary,
-                                  ),
+                              const Spacer(),
+                              Text(
+                                _formatDate(post['created_at']),
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 10,
+                                  color: textColor.withValues(alpha: 0.4),
                                 ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: postColor.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    _getPostTypeLabel(type),
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: postColor,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      // ─── 3 dot menu (instructor only) ──────
-                      if (widget.isInstructor)
-                        GestureDetector(
-                          onTap: () => _showPostOptions(post),
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 4),
-                            child: Icon(
-                              Icons.more_vert,
-                              color: context.textSecondary,
-                              size: 20,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6), // Smaller gap
+                          // Title (Ellipsis prevents height growth)
+                          Text(
+                            post['title'] ?? '',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: textColor,
                             ),
                           ),
-                        )
-                      else
-                        Icon(
-                          isExpanded
-                              ? Icons.keyboard_arrow_up
-                              : Icons.keyboard_arrow_down,
-                          color: context.textSecondary,
-                          size: 20,
-                        ),
-                    ],
-                  ),
-                  if (post['instructions'] != null && !isExpanded) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      post['instructions'],
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 13,
-                        color: context.textSecondary,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
 
-          if (isExpanded) ...[
-            Divider(color: context.borderColor, height: 1),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (post['instructions'] != null) ...[
-                    Text(
-                      post['instructions'],
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 13,
-                        color: context.textPrimary,
-                        height: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (post['material_url'] != null)
-                    _buildFileAttachment(
-                      post['material_name'] ?? 'Lesson Material',
-                      Icons.picture_as_pdf_outlined,
-                      AppColors.primary,
-                      post['material_url'],
-                    ),
-                  if (post['assessment_url'] != null)
-                    _buildFileAttachment(
-                      post['assessment_name'] ?? 'Assessment Instructions',
-                      Icons.assignment_outlined,
-                      const Color(0xFFFF6B35),
-                      post['assessment_url'],
-                    ),
-                  if (post['scheduled_time'] != null) ...[
-                    const SizedBox(height: 12),
-                    _buildJoin3DButton(post['scheduled_time']),
-                  ],
-                  const SizedBox(height: 16),
-                  _buildCommentsSection(postId, comments),
-                ],
-              ),
-            ),
-          ],
-
-          if (!isExpanded) ...[
-            Divider(color: context.borderColor, height: 1),
-            GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => post['type'] == 'assignment'
-                      ? AssignmentDetailScreen(
-                          post: post,
-                          course: widget.course,
-                          isInstructor: widget.isInstructor,
-                        )
-                      : PostDetailScreen(
-                          post: post,
-                          course: widget.course,
-                          isInstructor: widget.isInstructor,
-                        ),
-                ),
-              ).then((_) => _loadStream()),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 14,
-                      backgroundColor: AppColors.primary.withValues(
-                        alpha: 0.15,
-                      ),
-                      child: Text(
-                        (_currentUser?.name ?? 'U')
-                            .substring(0, 1)
-                            .toUpperCase(),
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Add class comment...',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 13,
-                        color: context.textHint,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFileAttachment(
-    String name,
-    IconData icon,
-    Color color, [
-    String? url,
-  ]) {
-    return GestureDetector(
-      onTap: url != null
-          ? () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    FileViewerScreen(url: url, fileName: name),
-              ),
-            )
-          : null,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                name,
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 13,
-                  color: color,
-                  fontWeight: FontWeight.w500,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (url != null) ...[
-              Icon(Icons.visibility_outlined, color: color, size: 15),
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right, color: color, size: 15),
-            ] else
-              Icon(Icons.attach_file_outlined, color: color, size: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildJoin3DButton(String scheduledTime) {
-    final status = _getScheduleStatus(scheduledTime);
-    final isLive = status == 'live';
-    final isUpcoming = status == 'upcoming';
-    final Color btnColor = isLive ? const Color(0xFF22C55E) : Colors.grey;
-
-    // Proper icon instead of 🎮
-    final icon = isLive
-        ? Icons.videogame_asset_rounded
-        : Icons.videogame_asset_outlined;
-
-    return GestureDetector(
-      onTap: isLive
-          ? () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Launching 3D Classroom...'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            }
-          : null,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(
-          color: isLive ? btnColor : btnColor.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: isLive
-              ? [
-                  BoxShadow(
-                    color: btnColor.withValues(alpha: 0.3),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : [],
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 10),
-            Column(
-              children: [
-                Text(
-                  isLive
-                      ? 'Join 3D Classroom'
-                      : isUpcoming
-                      ? '3D Meet Scheduled'
-                      : 'Session Ended',
-                  style: const TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-                Text(
-                  isLive
-                      ? 'Session is live now!'
-                      : _formatScheduleTime(scheduledTime),
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 11,
-                    color: Colors.white.withValues(alpha: 0.8),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCommentsSection(String postId, List<Map<String, dynamic>> comments) {
-  final controller = _commentControllers[postId] ?? (_commentControllers[postId] = TextEditingController());
-  final isSubmitting = _submittingComment[postId] ?? false;
-  final currentUserId = _supabase.auth.currentUser?.id;
-
-  // Exact Colors from your reference image
-  const cardBg = Colors.white;
-  final bubbleBg = const Color(0xFFEBEBEB); // Light gray background
-  final avatarBg = const Color(0xFFD6EBFF); // Very light blue
-  final avatarTextColor = const Color(0xFF007BFF); // Bright blue
-  final nameColor = const Color(0xFF0D1B4B); // Navy Blue
-  final dividerColor = Colors.grey.withOpacity(0.2);
-
-  return Container(
-    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    decoration: BoxDecoration(
-      color: cardBg,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: dividerColor),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ─── Header ───
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-          child: Text('Class comments',
-              style: TextStyle(fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.bold, color: nameColor)),
-        ),
-        Divider(color: dividerColor, height: 1),
-
-        // ─── Comment List ───
-        ...comments.map((comment) {
-          final isOwn = comment['user_id'] == currentUserId;
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0), // Consistent spacing for all
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Avatar (Unified for everyone)
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: avatarBg,
-                  child: Text(
-                    (comment['user_name'] as String? ?? 'U').substring(0, 1).toUpperCase(),
-                    style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.bold, color: avatarTextColor)),
-                ),
-                const SizedBox(width: 12),
-                
-                // Comment Bubble (Unified for everyone)
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: bubbleBg,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(comment['user_name'] ?? '',
-                                style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.bold, color: nameColor)),
-                            Row(
-                              children: [
-                                Text('Today', // Or use _formatDate(comment['created_at'])
-                                    style: const TextStyle(fontFamily: 'Poppins', fontSize: 12, color: Colors.grey)),
-                                // Only show menu if user owns comment or is instructor
-                                if (isOwn || widget.isInstructor)
-                                  PopupMenuButton<String>(
-                                    icon: const Icon(Icons.more_vert, size: 18, color: Colors.grey),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(),
-                                    onSelected: (value) {
-                                      if (value == 'delete') _deleteComment(comment['id'], postId);
-                                      if (value == 'edit') _showEditCommentDialog(comment, postId);
-                                    },
-                                    itemBuilder: (context) => [
-                                      if (isOwn) const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                                      const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
-                                    ],
-                                  ),
-                              ],
+                          // Compact Subtitle
+                          if (post['instructions'] != null)
+                            Text(
+                              post['instructions'],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 12,
+                                color: textColor.withValues(alpha: 0.5),
+                              ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(comment['text'] ?? '',
-                            style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: nameColor.withOpacity(0.9), height: 1.3)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
 
-        // ─── Input Field ───
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 20,
-                backgroundColor: avatarBg,
-                child: Text((_currentUser?.name ?? 'U').substring(0, 1).toUpperCase(),
-                    style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.bold, color: avatarTextColor)),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: controller,
-                  style: TextStyle(fontFamily: 'Poppins', fontSize: 14, color: nameColor),
-                  decoration: InputDecoration(
-                    hintText: 'Add class comment..',
-                    hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
-                    filled: true,
-                    fillColor: bubbleBg,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                    suffixIcon: IconButton(
-                      onPressed: () => _submitComment(postId),
-                      icon: isSubmitting
-                          ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2, color: Colors.blue))
-                          : const Icon(Icons.send, color: Colors.blue, size: 20),
+                          const SizedBox(height: 10), // Reduced from 16
+                          // Footer Row
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.chat_bubble_outline_rounded,
+                                size: 12,
+                                color: textColor.withValues(alpha: 0.3),
+                              ),
+                              const SizedBox(width: 4),
+                              // ─── THE FIX: Use the commentCount variable here ───
+                              Text(
+                                '$commentCount',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 11,
+                                  color: textColor.withValues(alpha: 0.3),
+                                ),
+                              ),
+                              const Spacer(),
+                              if (type == 'assignment')
+                                Text(
+                                  '${post['points'] ?? 100} pts',
+                                  style: const TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFFFF6B35),
+                                  ),
+                                ),
+                              if (type == '3d_meet')
+                                const Icon(
+                                  Icons.videogame_asset_outlined,
+                                  size: 14,
+                                  color: Color(0xFF22C55E),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
-      ],
-    ),
-  );
-}
+      ),
+    );
+  }
+
+  // Helper for the new Badge style
+  Widget _buildTonalBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
 
   // ════════════════════════════════════════════════════════
   // COURSEWORK TAB
@@ -2986,25 +2787,21 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           ),
           const SizedBox(height: 12),
         ],
-        ..._topics
-            .map(
-              (topic) => Column(
-                key: ValueKey('topic_col_${topic['id']}'), // Added Key here
-                children: [
-                  _buildTopicSection(
-                    topic['title'],
-                    topic['id'],
-                    topicMap[topic['id']] ?? [],
-                    topic: topic,
-                    key: ValueKey(
-                      'topic_section_${topic['id']}',
-                    ), // Added Key here
-                  ),
-                  const SizedBox(height: 12),
-                ],
+        ..._topics.map(
+          (topic) => Column(
+            key: ValueKey('topic_col_${topic['id']}'), // Added Key here
+            children: [
+              _buildTopicSection(
+                topic['title'],
+                topic['id'],
+                topicMap[topic['id']] ?? [],
+                topic: topic,
+                key: ValueKey('topic_section_${topic['id']}'), // Added Key here
               ),
-            )
-            .toList(),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -3020,10 +2817,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return Container(
-      key: key,
+      key: key, // Use the key here
       decoration: BoxDecoration(
         color: context.cardColor,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(20), // Matches your dashboard cards
         border: Border.all(color: context.borderColor),
         boxShadow: context.isDark
             ? []
@@ -3037,78 +2834,60 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       ),
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                // Icon and Title wrap in Expanded GestureDetector to trigger toggle
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _expandedTopics[topicKey] = !isExpanded),
-                    behavior: HitTestBehavior.opaque,
-                    child: Row(
-                      children: [
-                        const Icon(Icons.folder_rounded, color: AppColors.primary, size: 20),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
+          GestureDetector(
+            onTap: () =>
+                setState(() => _expandedTopics[topicKey] = !isExpanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              child: Row(
+                children: [
+                  // ─── Proper Icon instead of Folder Emoji ───
+                  const Icon(
+                    Icons.folder_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
                     ),
                   ),
-                ),
-                
-                // ─── Replacement: 3-dot menu for Instructor ───
-                if (widget.isInstructor && topic != null)
-                  PopupMenuButton<String>(
-                    icon: Icon(Icons.more_vert, color: textColor.withValues(alpha: 0.4), size: 20),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onSelected: (value) {
-                      if (value == 'delete') _showDeleteTopicConfirmation(topic);
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete_outline, color: AppColors.error, size: 18),
-                            SizedBox(width: 8),
-                            Text('Delete Topic', 
-                              style: TextStyle(
-                                fontFamily: 'Poppins', 
-                                color: AppColors.error, 
-                                fontSize: 13, 
-                                fontWeight: FontWeight.w600
-                              )),
-                          ],
-                        ),
+                  const Spacer(),
+                  // Count indicator
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${posts.length}',
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
                       ),
-                    ],
+                    ),
                   ),
-                
-                const SizedBox(width: 4),
-                
-                // Expansion Arrow
-                GestureDetector(
-                  onTap: () => setState(() => _expandedTopics[topicKey] = !isExpanded),
-                  child: Icon(
-                    isExpanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                  const SizedBox(width: 8),
+                  Icon(
+                    isExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
                     color: textColor.withValues(alpha: 0.4),
-                    size: 22,
+                    size: 20,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           if (isExpanded) ...[
@@ -3135,54 +2914,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             ],
           ],
         ],
-      ),
-    );
-  }
-
-  void _showTopicOptions(Map<String, dynamic> topic) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: context.surfaceColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: context.borderColor,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              '${topic['title']}',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: context.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            _buildOptionTile(
-              Icons.delete_outline,
-              'Delete Topic',
-              AppColors.error,
-              () async {
-                Navigator.pop(context);
-                await _supabase.from('topics').delete().eq('id', topic['id']);
-                await _loadCoursework();
-              },
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -3343,22 +3074,30 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       );
     }
 
+    final currentUserId = _supabase.auth.currentUser?.id;
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
       children: [
+        // --- Instructors Section ---
         Text(
           'Instructors',
           style: TextStyle(
             fontFamily: 'Poppins',
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: context.textPrimary,
+            color: textColor,
           ),
         ),
-        Divider(color: context.borderColor),
+        const SizedBox(height: 8),
+        Divider(color: context.borderColor.withOpacity(0.5)),
         if (_instructor != null)
-          _buildPersonTile(_instructor!, showMenu: false),
-        const SizedBox(height: 20),
+          _buildPersonTile(_instructor!, isInstructorTile: true),
+
+        const SizedBox(height: 32),
+
+        // --- Students Section ---
         Row(
           children: [
             Text(
@@ -3367,14 +3106,14 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 fontFamily: 'Poppins',
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: context.textPrimary,
+                color: textColor,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
+                color: AppColors.primary.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -3382,19 +3121,21 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 style: const TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 12,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.bold,
                   color: AppColors.primary,
                 ),
               ),
             ),
           ],
         ),
-        Divider(color: context.borderColor),
+        const SizedBox(height: 8),
+        Divider(color: context.borderColor.withOpacity(0.5)),
+
         if (_students.isEmpty)
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(vertical: 32),
             child: Text(
-              'No students enrolled yet',
+              'No classmates enrolled yet',
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 13,
@@ -3402,23 +3143,35 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               ),
               textAlign: TextAlign.center,
             ),
-          ),
-        ..._students.map(
-          (s) => _buildPersonTile(s, showMenu: widget.isInstructor),
-        ),
+          )
+        else
+          ..._students.map((student) {
+            final isMe = student['id'] == currentUserId;
+            return _buildPersonTile(
+              student,
+              isMe: isMe,
+              isInstructorTile: false,
+            );
+          }),
       ],
     );
   }
 
-  Widget _buildPersonTile(Map<String, dynamic> user, {required bool showMenu}) {
+  Widget _buildPersonTile(
+    Map<String, dynamic> user, {
+    bool isMe = false,
+    bool isInstructorTile = false,
+  }) {
     final name = user['name'] as String? ?? 'User';
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
           CircleAvatar(
             radius: 20,
-            backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+            backgroundColor: AppColors.primary.withOpacity(0.15),
             child: Text(
               name.substring(0, 1).toUpperCase(),
               style: const TextStyle(
@@ -3429,19 +3182,38 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
-            child: Text(
-              name,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: context.textPrimary,
-              ),
+            child: Row(
+              children: [
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 15,
+                    fontWeight: isMe ? FontWeight.w700 : FontWeight.w500,
+                    color: textColor,
+                  ),
+                ),
+                if (isMe) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '(You)',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 12,
+                      color: context.textHint,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (showMenu)
+
+          // Only show the 3-dot menu if the current user IS the instructor
+          // and we are NOT looking at the instructor tile itself.
+          if (widget.isInstructor && !isInstructorTile)
             GestureDetector(
               onTap: () => _showRemoveStudentDialog(user),
               child: Icon(
@@ -3577,298 +3349,238 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   Widget _buildRankingTab() {
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    if (_isLoadingPeople)
-      return const Center(
-        child: CircularProgressIndicator(color: AppColors.primary),
-      );
-    final ranked = [..._students]
-      ..sort((a, b) => (b['xp'] as int? ?? 0).compareTo(a['xp'] as int? ?? 0));
     final currentUserId = _supabase.auth.currentUser?.id;
+
+    if (_isLoadingPeople) {
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+    }
+
+    // Sort students by XP
+    final ranked = [..._students]
+      ..sort((a, b) {
+        // 1. Primary sort: XP (Descending)
+        int xpCompare = (b['xp'] as int? ?? 0).compareTo(a['xp'] as int? ?? 0);
+        if (xpCompare != 0) return xpCompare;
+
+        // 2. Tie-breaker: Name (Ascending)
+        // This ensures "Aaron" stays #1 over "Joshua" if both have 0 XP
+        return (a['name'] as String? ?? '').toLowerCase().compareTo(
+          (b['name'] as String? ?? '').toLowerCase(),
+        );
+      });
+
     if (ranked.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.leaderboard_outlined,
-              size: 64,
-              color: textColor.withValues(alpha: 0.2),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No students yet',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: textColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Rankings will appear once students join.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 13,
-                color: context.textSecondary,
-              ),
-            ),
-          ],
-        ),
+      return _buildEmptyState(
+        Icons.leaderboard_outlined,
+        'No rankings yet',
+        'Rankings will appear once students earn XP.',
       );
     }
+
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+      physics: const BouncingScrollPhysics(),
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.emoji_events_rounded,
-                color: AppColors.gold,
-                size: 26,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Class Rankings',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                ),
-              ),
-            ],
-          ),
-        ),
+        // ─── 1. PODIUM (TOP 3) ───
         if (ranked.length >= 3) ...[
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: _buildRankPodiumItem(ranked[1], 2, 100, textColor),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildRankPodiumItem(ranked[0], 1, 130, textColor),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildRankPodiumItem(ranked[2], 3, 80, textColor),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          _buildPodium(ranked.take(3).toList()),
+          const SizedBox(height: 24),
         ],
+
+        // ─── 2. LIST (RANK 4+) ───
         ...ranked.asMap().entries.map((entry) {
           final index = entry.key;
           final student = entry.value;
-          final rank = index + 1;
-          final isCurrentUser = student['id'] == currentUserId;
-          final xp = student['xp'] as int? ?? 0;
-          final medalColors = {
-            1: AppColors.gold,
-            2: const Color(0xFFC0C0C0),
-            3: const Color(0xFFCD7F32),
-          };
-          return Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: isCurrentUser
-                  ? const LinearGradient(
-                      colors: [Color(0xFF1565C0), Color(0xFF1E90FF)],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    )
-                  : null,
-              color: isCurrentUser ? null : context.cardColor,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: isCurrentUser ? Colors.transparent : context.borderColor,
-              ),
-              boxShadow: context.isDark
-                  ? []
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-            ),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 36,
-                  child: rank <= 3
-                      ? Icon(
-                          Icons.workspace_premium_rounded,
-                          color: medalColors[rank],
-                          size: 24,
-                        )
-                      : Text(
-                          '#$rank',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: isCurrentUser
-                                ? Colors.white70
-                                : textColor.withValues(alpha: 0.5),
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                ),
-                const SizedBox(width: 12),
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: isCurrentUser
-                      ? Colors.white24
-                      : AppColors.primary.withValues(alpha: 0.15),
-                  child: Text(
-                    (student['name'] as String).substring(0, 1).toUpperCase(),
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontWeight: FontWeight.w700,
-                      color: isCurrentUser ? Colors.white : AppColors.primary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        student['name'] ?? '',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isCurrentUser ? Colors.white : textColor,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        _getLevelTitle(xp),
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 11,
-                          color: isCurrentUser
-                              ? Colors.white70
-                              : context.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '$xp XP',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        color: isCurrentUser ? Colors.white : AppColors.gold,
-                      ),
-                    ),
-                    if (isCurrentUser)
-                      const Text(
-                        'You',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white70,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          );
+
+          // If we have a podium, skip the first 3 in the list
+          if (ranked.length >= 3 && index < 3) return const SizedBox.shrink();
+
+          return _buildRankRow(student, index + 1, currentUserId, textColor);
         }),
       ],
     );
   }
 
-  Widget _buildRankPodiumItem(
-    Map<String, dynamic> student,
-    int rank,
-    double height,
-    Color textColor,
-  ) {
+  Widget _buildPodium(List<Map<String, dynamic>> top3) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Expanded(child: _buildPodiumItem(top3[1], 2, 120)),
+        const SizedBox(width: 12),
+        Expanded(child: _buildPodiumItem(top3[0], 1, 160)),
+        const SizedBox(width: 12),
+        Expanded(child: _buildPodiumItem(top3[2], 3, 100)),
+      ],
+    );
+  }
+
+  Widget _buildPodiumItem(Map<String, dynamic> user, int rank, double height) {
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
     final medalColors = {
-      1: AppColors.gold,
-      2: const Color(0xFFC0C0C0),
-      3: const Color(0xFFCD7F32),
+      1: const Color(0xFFFFD700), // Gold
+      2: const Color(0xFFC0C0C0), // Silver
+      3: const Color(0xFFCD7F32), // Bronze
     };
-    final xp = student['xp'] as int? ?? 0;
-    return Container(
-      height: height,
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-        ),
-        border: Border.all(
-          color: medalColors[rank]!.withValues(alpha: 0.5),
-          width: 2,
-        ),
-        boxShadow: context.isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.workspace_premium_rounded,
-            color: medalColors[rank],
-            size: rank == 1 ? 28 : 22,
+
+    return PressableScale(
+      onPressed: () {},
+      child: Container(
+        height: height,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: context.cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(
+            color: medalColors[rank]!.withValues(alpha: 0.2),
+            width: 2,
           ),
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              (student['name'] as String).split(' ').first,
+          boxShadow: [
+            // Only 1st Place gets the "Aura" glow
+            if (rank == 1)
+              BoxShadow(
+                color: medalColors[rank]!.withValues(alpha: 0.2),
+                blurRadius: 25,
+                spreadRadius: 2,
+                offset: const Offset(0, -5),
+              ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Icon
+            Icon(
+              Icons.workspace_premium_rounded,
+              color: medalColors[rank],
+              size: rank == 1 ? 36 : 26,
+            ),
+            const SizedBox(height: 8),
+
+            // ─── SPECIAL NAME EFFECTS ───
+            Text(
+              (user['name'] as String? ?? 'User').split(' ').first,
               style: TextStyle(
                 fontFamily: 'Poppins',
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w900, // Extra Bold
+                fontSize: rank == 1 ? 14 : 12,
                 color: textColor,
+                // Text Glow Effect
+                shadows: [
+                  Shadow(
+                    color: medalColors[rank]!.withValues(alpha: 0.5),
+                    blurRadius: 8.0,
+                    offset: const Offset(0, 0),
+                  ),
+                ],
               ),
-              textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-          ),
-          Text(
-            '$xp XP',
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 10,
-              color: medalColors[rank],
-              fontWeight: FontWeight.w800,
+
+            Text(
+              '${user['xp'] ?? 0} XP',
+              style: TextStyle(
+                fontSize: 10,
+                color: medalColors[rank],
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.0, // Wider for premium feel
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRankRow(
+    Map<String, dynamic> user,
+    int rank,
+    String? currentUserId,
+    Color themeColor,
+  ) {
+    final isMe = user['id'] == currentUserId;
+    final rowColor = isMe ? AppColors.primary : themeColor;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: PressableScale(
+        onPressed: () {},
+        scaleFactor: 0.98,
+        opacityFactor: 0.8,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isMe
+                ? AppColors.primary.withValues(alpha: 0.08)
+                : context.cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isMe
+                  ? AppColors.primary.withValues(alpha: 0.2)
+                  : Colors.transparent,
             ),
           ),
-        ],
+          child: Row(
+            children: [
+              SizedBox(
+                width: 32,
+                child: Text(
+                  '#$rank',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: rowColor.withValues(alpha: 0.4),
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: rowColor.withValues(alpha: 0.1),
+                child: Text(
+                  (user['name'] as String? ?? 'U')[0].toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: rowColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user['name'] ?? '',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontWeight: FontWeight.w700,
+                        color: themeColor,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      _getLevelTitle(user['xp'] ?? 0),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: themeColor.withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${user['xp']} XP',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.gold,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

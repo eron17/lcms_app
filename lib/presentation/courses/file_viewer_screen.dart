@@ -6,6 +6,7 @@ import 'package:chewie/chewie.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import 'dart:io';
+import '../../shared/widgets/pressable_scale.dart';
 
 class FileViewerScreen extends StatefulWidget {
   final String url;
@@ -24,7 +25,6 @@ class FileViewerScreen extends StatefulWidget {
 }
 
 class _FileViewerScreenState extends State<FileViewerScreen> {
-
   // ─── Video State ─────────────────────────────────────────
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
@@ -108,25 +108,22 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
             ? Colors.white
             : context.textPrimary,
         elevation: 0,
-        leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            margin: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: _fileType == 'video'
-                  ? Colors.white.withValues(alpha: 0.1)
-                  : context.bgColor,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
+        leadingWidth: 70, // Increased to support the box
+        leading: Center(
+          child: PressableScale(
+            onPressed: () => Navigator.pop(context),
+            scaleFactor: 1.0, // Opacity only
+            opacityFactor: 0.5,
+            child: Container(
+              margin: const EdgeInsets.only(left: 8),
+              padding: const EdgeInsets.all(10),
+              child: Icon(
+                Icons.arrow_back_ios_new_rounded,
                 color: _fileType == 'video'
-                    ? Colors.white.withValues(alpha: 0.2)
-                    : context.borderColor,
+                    ? Colors.white
+                    : context.textPrimary,
+                size: 25,
               ),
-            ),
-            child: Icon(
-              Icons.arrow_back,
-              color: _fileType == 'video' ? Colors.white : context.textPrimary,
-              size: 20,
             ),
           ),
         ),
@@ -139,7 +136,9 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                 fontFamily: 'Poppins',
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: _fileType == 'video' ? Colors.white : context.textPrimary,
+                color: _fileType == 'video'
+                    ? Colors.white
+                    : context.textPrimary,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -161,7 +160,8 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
             ? [
                 IconButton(
                   icon: Icon(Icons.zoom_in, color: context.textPrimary),
-                  onPressed: () => _pdfController.zoomLevel = _pdfController.zoomLevel + 0.25,
+                  onPressed: () => _pdfController.zoomLevel =
+                      _pdfController.zoomLevel + 0.25,
                 ),
                 IconButton(
                   icon: Icon(Icons.zoom_out, color: context.textPrimary),
@@ -259,8 +259,11 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.error_outline,
-                        size: 64, color: AppColors.error),
+                    const Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: AppColors.error,
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'Failed to load PDF',
@@ -295,7 +298,8 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ],
@@ -349,9 +353,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       );
     }
 
-    return Center(
-      child: Chewie(controller: _chewieController!),
-    );
+    return Center(child: Chewie(controller: _chewieController!));
   }
 
   // ─── Image Viewer ─────────────────────────────────────────
@@ -369,7 +371,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                 color: AppColors.primary,
                 value: loadingProgress.expectedTotalBytes != null
                     ? loadingProgress.cumulativeBytesLoaded /
-                        loadingProgress.expectedTotalBytes!
+                          loadingProgress.expectedTotalBytes!
                     : null,
               ),
             );
@@ -377,12 +379,19 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
           errorBuilder: (context, error, stackTrace) => Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.broken_image_outlined,
-                  size: 64, color: context.textSecondary),
+              Icon(
+                Icons.broken_image_outlined,
+                size: 64,
+                color: context.textSecondary,
+              ),
               const SizedBox(height: 12),
-              Text('Failed to load image',
-                  style: TextStyle(
-                      fontFamily: 'Poppins', color: context.textSecondary)),
+              Text(
+                'Failed to load image',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  color: context.textSecondary,
+                ),
+              ),
             ],
           ),
         ),
@@ -398,8 +407,11 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.insert_drive_file_outlined,
-                size: 64, color: context.textSecondary),
+            Icon(
+              Icons.insert_drive_file_outlined,
+              size: 64,
+              color: context.textSecondary,
+            ),
             const SizedBox(height: 16),
             Text(
               'Cannot preview this file',

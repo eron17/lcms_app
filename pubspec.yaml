@@ -64,6 +64,7 @@ dependencies:
   # ─── Icons ──────────────────────────────────────────────────
   cupertino_icons: ^1.0.8
   phosphor_flutter: ^2.1.0
+  pinput: ^6.0.2
 
 dev_dependencies:
   flutter_test:

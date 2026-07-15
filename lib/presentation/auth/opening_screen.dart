@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_colors.dart';
+import '../../shared/widgets/pressable_scale.dart';
 
 class OpeningScreen extends ConsumerStatefulWidget {
   const OpeningScreen({super.key});
@@ -40,10 +41,8 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _logoFade = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _logoController, curve: Curves.easeOut));
+    _logoFade = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _logoController, curve: Curves.easeOut));
     _logoScale = Tween<double>(begin: 0.7, end: 1.0).animate(
       CurvedAnimation(parent: _logoController, curve: Curves.elasticOut),
     );
@@ -52,26 +51,21 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-    _textFade = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _textController, curve: Curves.easeOut));
-    _textSlide = Tween<Offset>(
-      begin: const Offset(0, 0.05),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _textController, curve: Curves.easeOut));
+    _textFade = Tween<double>(begin: 0.0, end: 1.0).animate(
+        CurvedAnimation(parent: _textController, curve: Curves.easeOut));
+    _textSlide = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
+        .animate(
+            CurvedAnimation(parent: _textController, curve: Curves.easeOut));
 
     _buttonController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
     _buttonFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _buttonController, curve: Curves.easeOut),
-    );
+        CurvedAnimation(parent: _buttonController, curve: Curves.easeOut));
     _buttonSlide = Tween<Offset>(begin: const Offset(0, 0.4), end: Offset.zero)
         .animate(
-          CurvedAnimation(parent: _buttonController, curve: Curves.easeOut),
-        );
+            CurvedAnimation(parent: _buttonController, curve: Curves.easeOut));
 
     _glowController = AnimationController(
       vsync: this,
@@ -149,7 +143,6 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                               'assets/images/app_name.png',
                               width: size.width * 0.7,
                               fit: BoxFit.contain,
-                              // color: context.isDark ? null : context.textPrimary, // REMOVED TO KEEP ORIGINAL COLOR
                             ),
                           ),
                         ),
@@ -204,9 +197,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withValues(
-                    alpha: _glowAnimation.value,
-                  ),
+                  color: AppColors.primary.withOpacity(_glowAnimation.value),
                   blurRadius: 100,
                   spreadRadius: 20,
                 ),
@@ -219,14 +210,14 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   }
 
   Widget _buildGetStartedButton(BuildContext context) {
-    return GestureDetector(
-      onTap: () => context.go(AppRoutes.register),
+    return PressableScale(
+      onPressed: () => context.go(AppRoutes.register),
       child: AnimatedBuilder(
         animation: _glowAnimation,
         builder: (context, child) {
           return Container(
             width: double.infinity,
-            height: 58,
+            height: 60,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
                 colors: [AppColors.primaryDark, AppColors.primary],
@@ -236,9 +227,9 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               borderRadius: BorderRadius.circular(32),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.5),
+                  color: AppColors.primary.withOpacity(0.4 * _glowAnimation.value),
                   blurRadius: 15,
-                  offset: const Offset(0, 4),
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
@@ -261,16 +252,21 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   }
 
   Widget _buildLoginLink(BuildContext context) {
-    return GestureDetector(
-      onTap: () => context.go(AppRoutes.login),
-      child: Text(
-        'I already have an account',
-        style: TextStyle(
-          fontFamily: 'Poppins',
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-          color: context.textSecondary,
-          letterSpacing: 0.2,
+    return PressableScale(
+      onPressed: () => context.go(AppRoutes.login),
+      scaleFactor: 1.0,   
+      opacityFactor: 0.6, 
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        color: Colors.transparent, 
+        child: const Text(
+          'I already have an account',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1E90FF), 
+          ),
         ),
       ),
     );

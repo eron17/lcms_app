@@ -1,6 +1,5 @@
 // lib/presentation/courses/post_detail_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -10,6 +9,8 @@ import 'dart:convert';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import 'file_viewer_screen.dart';
+import 'dart:async';
+import '../../shared/widgets/pressable_scale.dart';
 
 class PostDetailScreen extends StatefulWidget {
   final Map<String, dynamic> post;
@@ -36,6 +37,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   bool _materialSaved = false;
   bool _assessmentSaved = false;
   String? _currentUserName;
+  Timer? _refreshTimer;
+  RealtimeChannel? _commentChannel;
 
   @override
   void initState() {
@@ -43,11 +46,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     _loadComments();
     _loadCurrentUser();
     _checkAlreadySaved();
+    _subscribeToComments();
+
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _commentController.dispose();
+    _commentChannel?.unsubscribe();
     super.dispose();
   }
 
@@ -55,9 +65,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
-      final data = await _supabase.from('users').select('name').eq('id', userId).single();
+      final data = await _supabase
+          .from('users')
+          .select('name')
+          .eq('id', userId)
+          .single();
       if (mounted) setState(() => _currentUserName = data['name']);
-    } catch (e) { debugPrint('User load: $e'); }
+    } catch (e) {
+      debugPrint('User load: $e');
+    }
   }
 
   Future<void> _loadComments() async {
@@ -67,56 +83,277 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           .select()
           .eq('post_id', widget.post['id'])
           .order('created_at', ascending: true);
-      if (mounted) setState(() => _comments = List<Map<String, dynamic>>.from(data));
-    } catch (e) { debugPrint('Comments: $e'); }
+      if (mounted) {
+        setState(() => _comments = List<Map<String, dynamic>>.from(data));
+      }
+    } catch (e) {
+      debugPrint('Comments: $e');
+    }
   }
 
   Future<void> _submitComment() async {
     if (_commentController.text.trim().isEmpty) return;
     final text = _commentController.text.trim();
     setState(() => _isSubmittingComment = true);
+
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
+
+      // 1. Save the actual comment to the DB
       await _supabase.from('comments').insert({
         'post_id': widget.post['id'],
         'user_id': userId,
         'user_name': _currentUserName ?? 'User',
         'text': text,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
+
+      // 2. ─── CONSOLIDATED NOTIFICATION LOGIC ───
+      try {
+        if (widget.isInstructor) {
+          // --- CASE A: Instructor comments (Notify ALL students) ---
+          final studentsData = await _supabase
+              .from('enrollments')
+              .select('student_id')
+              .eq('course_id', widget.course['id']);
+
+          final List students = studentsData as List;
+          if (students.isNotEmpty) {
+            final List<Map<String, dynamic>> notifs = students.map((s) => {
+              'user_id': s['student_id'],
+              'course_id': widget.course['id'],
+              'post_id': widget.post['id'],
+              'type': 'class_comment',
+              'title': 'Instructor commented',
+              'body': '${widget.post['title']}: $text',
+              'created_at': DateTime.now().toUtc().toIso8601String(),
+            }).toList();
+            await _supabase.from('notifications').insert(notifs);
+          }
+        } else {
+          // --- CASE B: Student comments (Notify Instructor IF NOT MUTED) ---
+          // 1. Fetch Instructor ID and their notification preference
+          final courseSettings = await _supabase
+              .from('courses')
+              .select('notify_on_comments, instructor_id')
+              .eq('id', widget.course['id'])
+              .single();
+
+          // 2. Only fire if they have it turned ON (true)
+          if (courseSettings['notify_on_comments'] == true) {
+            await _supabase.from('notifications').insert({
+              'user_id': courseSettings['instructor_id'],
+              'course_id': widget.course['id'],
+              'post_id': widget.post['id'],
+              'type': 'class_comment',
+              'title': 'New comment from $_currentUserName',
+              'body': '${widget.post['title']}: $text',
+              'created_at': DateTime.now().toUtc().toIso8601String(),
+            });
+          }
+        }
+      } catch (notifErr) {
+        debugPrint('Comment Notification Error: $notifErr');
+      }
+
       _commentController.clear();
       await _loadComments();
-    } catch (e) { debugPrint('Comment submit: $e'); }
-    finally { if (mounted) setState(() => _isSubmittingComment = false); }
+    } catch (e) {
+      debugPrint('Comment submit error: $e');
+    } finally {
+      if (mounted) setState(() => _isSubmittingComment = false);
+    }
+  }
+
+  void _subscribeToComments() {
+  _commentChannel = _supabase
+      .channel('public:comments:post_${widget.post['id']}')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'comments',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'post_id',
+          value: widget.post['id'],
+        ),
+        callback: (payload) => _loadComments(), // Refresh UI when DB changes
+      )
+      .subscribe();
+}
+
+  void _showCommentOptions(Map<String, dynamic> comment) {
+    final isOwn = comment['user_id'] == _supabase.auth.currentUser?.id;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: context.cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle Bar
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: context.borderColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Only show Edit if it's the user's own comment
+            if (isOwn)
+              ListTile(
+                leading: const Icon(
+                  Icons.edit_outlined,
+                  color: AppColors.primary,
+                ),
+                title: const Text(
+                  'Edit comment',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showEditCommentDialog(comment);
+                },
+              ),
+
+            // Instructors can delete anyone's comment; Users can delete their own
+            ListTile(
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.redAccent,
+              ),
+              title: const Text(
+                'Delete comment',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w500,
+                  color: Colors.redAccent,
+                ),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _deleteComment(comment['id']);
+              },
+            ),
+            const SizedBox(height: 20), // Bottom breathing room
+          ],
+        ),
+      ),
+    );
   }
 
   // ─── NEW: EDIT COMMENT DIALOG ───
   void _showEditCommentDialog(Map<String, dynamic> comment) {
     final controller = TextEditingController(text: comment['text']);
+    bool isSaving = false;
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfaceColor,
-        title: Text('Edit Comment', 
-          style: TextStyle(color: context.isDark ? Colors.white : const Color(0xFF0D1B4B), 
-          fontFamily: 'Poppins', fontSize: 16, fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: controller,
-          style: TextStyle(color: context.isDark ? Colors.white : const Color(0xFF0D1B4B), fontFamily: 'Poppins'),
-          decoration: InputDecoration(hintText: 'Type something...', hintStyle: TextStyle(color: context.textHint)),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              await _supabase.from('comments').update({'text': controller.text.trim()}).eq('id', comment['id']);
-              Navigator.pop(context);
-              _loadComments();
-            },
-            child: const Text('Save'),
+      barrierDismissible: false, // Prevent closing while saving
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: context.surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
           ),
-        ],
+          title: const Text(
+            'Edit Comment',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            style: TextStyle(color: context.textPrimary, fontFamily: 'Poppins'),
+            decoration: InputDecoration(
+              hintText: 'Edit your message...',
+              hintStyle: TextStyle(color: context.textHint),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              onPressed: isSaving
+                  ? null
+                  : () async {
+                      final newText = controller.text.trim();
+                      if (newText.isEmpty || newText == comment['text']) {
+                        Navigator.pop(context);
+                        return;
+                      }
+
+                      setDialogState(() => isSaving = true);
+
+                      try {
+                        // 1. Await the database update
+                        await _supabase
+                            .from('comments')
+                            .update({'text': newText})
+                            .eq('id', comment['id']);
+
+                        if (mounted) {
+                          Navigator.pop(context); // Close dialog
+                          _loadComments(); // Refresh UI list
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Comment updated')),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => isSaving = false);
+                        debugPrint('Edit Error: $e');
+                        // This will show you exactly why it failed (usually RLS)
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Update failed: $e'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    },
+              child: isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : const Text(
+                      'Save',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -125,25 +362,33 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     try {
       await _supabase.from('comments').delete().eq('id', commentId);
       await _loadComments();
-    } catch (e) { debugPrint('Delete comment: $e'); }
+    } catch (e) {
+      debugPrint('Delete comment: $e');
+    }
   }
 
   Future<void> _checkAlreadySaved() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final filesJson = prefs.getStringList('offline_files') ?? [];
-      final files = filesJson.map((f) => Map<String, dynamic>.from(jsonDecode(f))).toList();
+      final files = filesJson
+          .map((f) => Map<String, dynamic>.from(jsonDecode(f)))
+          .toList();
       final materialUrl = widget.post['material_url'];
       final assessmentUrl = widget.post['assessment_url'];
       if (mounted) {
         setState(() {
-          _materialSaved = materialUrl != null &&
+          _materialSaved =
+              materialUrl != null &&
               files.any((f) => f['source_url'] == materialUrl);
-          _assessmentSaved = assessmentUrl != null &&
+          _assessmentSaved =
+              assessmentUrl != null &&
               files.any((f) => f['source_url'] == assessmentUrl);
         });
       }
-    } catch (e) { debugPrint('Check saved: $e'); }
+    } catch (e) {
+      debugPrint('Check saved: $e');
+    }
   }
 
   Future<void> _saveFilesOffline() async {
@@ -154,8 +399,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
     if (materialUrl == null && assessmentUrl == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No files attached to this post.'),
-            behavior: SnackBarBehavior.floating));
+        const SnackBar(
+          content: Text('No files attached to this post.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return;
     }
 
@@ -164,43 +412,52 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final filesJson = prefs.getStringList('offline_files') ?? [];
-      final tempDir = await getApplicationDocumentsDirectory(); // Internal storage safer for offline
+      final tempDir =
+          await getApplicationDocumentsDirectory(); // Internal storage safer for offline
       int savedCount = 0;
 
       if (materialUrl != null && !_materialSaved && materialName != null) {
         final response = await http.get(Uri.parse(materialUrl));
         if (response.statusCode == 200) {
-          final fileName = '${DateTime.now().millisecondsSinceEpoch}_$materialName';
+          final fileName =
+              '${DateTime.now().millisecondsSinceEpoch}_$materialName';
           final filePath = '${tempDir.path}/$fileName';
           await File(filePath).writeAsBytes(response.bodyBytes);
-          filesJson.add(jsonEncode({
-            'name': materialName,
-            'path': filePath,
-            'source_url': materialUrl,
-            'course_title': widget.course['title'],
-            'post_title': widget.post['title'],
-            'saved_at': DateTime.now().toIso8601String(),
-            'type': 'material',
-          }));
+          filesJson.add(
+            jsonEncode({
+              'name': materialName,
+              'path': filePath,
+              'source_url': materialUrl,
+              'course_title': widget.course['title'],
+              'post_title': widget.post['title'],
+              'saved_at': DateTime.now().toIso8601String(),
+              'type': 'material',
+            }),
+          );
           savedCount++;
         }
       }
 
-      if (assessmentUrl != null && !_assessmentSaved && assessmentName != null) {
+      if (assessmentUrl != null &&
+          !_assessmentSaved &&
+          assessmentName != null) {
         final response = await http.get(Uri.parse(assessmentUrl));
         if (response.statusCode == 200) {
-          final fileName = '${DateTime.now().millisecondsSinceEpoch}_$assessmentName';
+          final fileName =
+              '${DateTime.now().millisecondsSinceEpoch}_$assessmentName';
           final filePath = '${tempDir.path}/$fileName';
           await File(filePath).writeAsBytes(response.bodyBytes);
-          filesJson.add(jsonEncode({
-            'name': assessmentName,
-            'path': filePath,
-            'source_url': assessmentUrl,
-            'course_title': widget.course['title'],
-            'post_title': widget.post['title'],
-            'saved_at': DateTime.now().toIso8601String(),
-            'type': 'assessment',
-          }));
+          filesJson.add(
+            jsonEncode({
+              'name': assessmentName,
+              'path': filePath,
+              'source_url': assessmentUrl,
+              'course_title': widget.course['title'],
+              'post_title': widget.post['title'],
+              'saved_at': DateTime.now().toIso8601String(),
+              'type': 'assessment',
+            }),
+          );
           savedCount++;
         }
       }
@@ -214,12 +471,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(savedCount > 0
-                ? '$savedCount file${savedCount > 1 ? 's' : ''} saved for offline access!'
-                : 'Files already saved offline.'),
-            backgroundColor: savedCount > 0 ? Colors.green.shade700 : Colors.orange,
+            content: Text(
+              savedCount > 0
+                  ? '$savedCount file${savedCount > 1 ? 's' : ''} saved for offline access!'
+                  : 'Files already saved offline.',
+            ),
+            backgroundColor: savedCount > 0
+                ? Colors.green.shade700
+                : Colors.orange,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         );
       }
@@ -227,8 +490,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       if (mounted) {
         setState(() => _isSavingOffline = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving files: $e'),
-              backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
+          SnackBar(
+            content: Text('Error saving files: $e'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -236,18 +503,46 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   // ─── Helpers ───
   String _getScheduleStatus(String? scheduledTime) {
     if (scheduledTime == null) return 'none';
-    final scheduled = DateTime.parse(scheduledTime);
-    final now = DateTime.now();
-    if (now.isBefore(scheduled)) return 'upcoming';
-    if (now.isAfter(scheduled.add(const Duration(hours: 2)))) return 'ended';
-    return 'live';
+
+    try {
+      // 1. Parse and convert back to YOUR LOCAL TIME
+      final scheduled = DateTime.parse(scheduledTime).toLocal();
+
+      // 2. Get current device time
+      final now = DateTime.now();
+
+      final int diff = now.difference(scheduled).inMinutes;
+
+      if (diff < 0) return 'upcoming';
+      if (diff >= 0 && diff <= 15) return 'live';
+      return 'ended';
+    } catch (e) {
+      return 'none';
+    }
   }
 
   String _formatScheduleTime(String? scheduledTime) {
     if (scheduledTime == null) return '';
     final dt = DateTime.parse(scheduledTime);
-    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    final hour = dt.hour > 12 ? dt.hour - 12 : dt.hour == 0 ? 12 : dt.hour;
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final hour = dt.hour > 12
+        ? dt.hour - 12
+        : dt.hour == 0
+        ? 12
+        : dt.hour;
     final ampm = dt.hour >= 12 ? 'PM' : 'AM';
     final min = dt.minute.toString().padLeft(2, '0');
     return '${months[dt.month - 1]} ${dt.day}, $hour:$min $ampm';
@@ -260,350 +555,105 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (diff.inDays == 0) return 'Today';
     if (diff.inDays == 1) return 'Yesterday';
     if (diff.inDays < 7) return '${diff.inDays} days ago';
-    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     return '${months[date.month - 1]} ${date.day}';
   }
 
   Color _getPostColor(String type) {
     switch (type) {
-      case '3d_meet': return const Color(0xFF22C55E);
-      case 'material': return AppColors.primary;
-      case 'assignment': return const Color(0xFFFF6B35);
-      case 'announcement': return AppColors.accent;
-      default: return AppColors.primary;
+      case '3d_meet':
+        return const Color(0xFF22C55E);
+      case 'material':
+        return AppColors.primary;
+      case 'assignment':
+        return const Color(0xFFFF6B35);
+      case 'announcement':
+        return AppColors.accent;
+      default:
+        return AppColors.primary;
     }
   }
 
+  @override
   @override
   Widget build(BuildContext context) {
     final post = widget.post;
     final type = post['type'] as String? ?? 'material';
     final postColor = _getPostColor(type);
-    final currentUserId = _supabase.auth.currentUser?.id;
-    final hasFiles = post['material_url'] != null || post['assessment_url'] != null;
-    final allSaved = _materialSaved && _assessmentSaved;
-    
-    // Using your system dark blue for light mode
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+
+    final hasFiles =
+        post['material_url'] != null || post['assessment_url'] != null;
+    final allSaved = _materialSaved && _assessmentSaved;
 
     return Scaffold(
       backgroundColor: context.bgColor,
+      // 1. Updated AppBar without redundant title
+      appBar: _buildPremiumAppBar(context, textColor),
       body: Stack(
         children: [
           Container(decoration: context.scaffoldGradient),
           SafeArea(
             child: Column(
+              // ─── Using a Column to split Scrollable vs Fixed ───
               children: [
-                // ─── Top Bar ───
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: context.cardColor,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: context.borderColor),
-                          ),
-                          child: Icon(Icons.arrow_back_ios_new, color: textColor, size: 20),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Text(post['title'] ?? '',
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 16,
-                              fontWeight: FontWeight.w700, color: textColor),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ),
-                    ],
-                  ),
-                ),
-
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                    physics: const BouncingScrollPhysics(),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // ─── Post Header Card ───
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: context.cardColor,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: context.borderColor),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 44, height: 44,
-                                    decoration: BoxDecoration(
-                                      color: postColor.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Icon(_getPostIcon(type), color: postColor, size: 22),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(post['title'] ?? '',
-                                          style: TextStyle(fontFamily: 'Poppins', fontSize: 17,
-                                              fontWeight: FontWeight.w700, color: textColor)),
-                                        Row(
-                                          children: [
-                                            Text(_formatDate(post['created_at']),
-                                              style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: textColor.withValues(alpha: 0.5))),
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                              decoration: BoxDecoration(
-                                                color: postColor.withValues(alpha: 0.1),
-                                                borderRadius: BorderRadius.circular(20),
-                                              ),
-                                              child: Text(_getPostTypeLabel(type),
-                                                style: TextStyle(fontFamily: 'Poppins', fontSize: 10,
-                                                    fontWeight: FontWeight.bold, color: postColor)),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-
-                              if (post['instructions'] != null) ...[
-                                const SizedBox(height: 16),
-                                Divider(color: context.borderColor),
-                                const SizedBox(height: 16),
-                                Text(post['instructions'],
-                                  style: TextStyle(fontFamily: 'Poppins', fontSize: 14,
-                                      color: textColor, height: 1.6)),
-                              ],
-                            ],
-                          ),
+                        _buildPremiumHeader(post, type, postColor, textColor),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20),
+                          child: Divider(thickness: 0.5),
                         ),
 
-                        const SizedBox(height: 16),
-
-                        // ─── Files ───
-                        if (post['material_url'] != null)
-                          _buildFileCard(
-                            name: post['material_name'] ?? 'Lesson Material',
-                            icon: Icons.picture_as_pdf_rounded,
-                            color: AppColors.primary,
-                            url: post['material_url'],
-                            isSaved: _materialSaved,
+                        if (post['instructions'] != null)
+                          _buildInstructionBody(
+                            post['instructions'],
+                            textColor,
                           ),
 
-                        if (post['assessment_url'] != null)
-                          _buildFileCard(
-                            name: post['assessment_name'] ?? 'Assessment Instructions',
-                            icon: Icons.assignment_rounded,
-                            color: const Color(0xFFFF6B35),
-                            url: post['assessment_url'],
-                            isSaved: _assessmentSaved,
-                          ),
+                        if (hasFiles)
+                          _buildPremiumAttachmentSection(post, textColor),
 
-                        // ─── 3D Classroom Button ───
-                        if (post['scheduled_time'] != null) ...[
-                          const SizedBox(height: 4),
-                          _build3DButton(post['scheduled_time']),
-                        ],
-
-                        // ─── Save Offline Button ───
-                        if (hasFiles && !widget.isInstructor) ...[
-                          const SizedBox(height: 12),
-                          GestureDetector(
-                            onTap: (_isSavingOffline || allSaved) ? null : _saveFilesOffline,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              decoration: BoxDecoration(
-                                color: allSaved ? Colors.green.shade700 : context.cardColor,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: allSaved ? Colors.green.shade700 : AppColors.primary.withValues(alpha: 0.3),
-                                  width: 1.5,
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  if (_isSavingOffline)
-                                    const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
-                                  else
-                                    Icon(
-                                      allSaved ? Icons.check_circle_outline_rounded : Icons.cloud_download_outlined,
-                                      color: allSaved ? Colors.white : AppColors.primary,
-                                      size: 20,
-                                    ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    allSaved ? 'Files Saved Offline ✓' : 'Save Files Offline',
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: allSaved ? Colors.white : AppColors.primary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
+                        _buildUniversalActionZone(
+                          post,
+                          type,
+                          hasFiles,
+                          allSaved,
+                        ),
 
                         const SizedBox(height: 24),
-
-                        // ─── Comments Section ───
-                        Container(
-                          decoration: BoxDecoration(
-                            color: context.cardColor,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: context.borderColor),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Text('Class Comments',
-                                  style: TextStyle(fontFamily: 'Poppins', fontSize: 15,
-                                      fontWeight: FontWeight.bold, color: textColor)),
-                              ),
-                              Divider(color: context.borderColor, height: 1),
-
-                              if (_comments.isEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.all(32),
-                                  child: Center(
-                                    child: Text('No comments yet. Be the first to comment!',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: textColor.withValues(alpha: 0.4))),
-                                  ),
-                                ),
-
-                              ..._comments.map((comment) {
-                                final isOwn = comment['user_id'] == currentUserId;
-                                return Padding(
-                                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                                  child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      CircleAvatar(
-                                        radius: 16,
-                                        backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                                        child: Text(
-                                          (comment['user_name'] as String).substring(0, 1).toUpperCase(),
-                                          style: const TextStyle(fontFamily: 'Poppins', fontSize: 11,
-                                              fontWeight: FontWeight.bold, color: AppColors.primary)),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Container(
-                                          padding: const EdgeInsets.all(12),
-                                          decoration: BoxDecoration(
-                                            color: context.bgColor,
-                                            borderRadius: BorderRadius.circular(14),
-                                            border: Border.all(color: context.borderColor),
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Text(comment['user_name'] ?? '',
-                                                    style: TextStyle(fontFamily: 'Poppins', fontSize: 12,
-                                                        fontWeight: FontWeight.bold, color: textColor)),
-                                                  const Spacer(),
-                                                  Text(_formatDate(comment['created_at']),
-                                                    style: TextStyle(fontFamily: 'Poppins', fontSize: 10, color: context.textHint)),
-                                                  
-                                                  // ─── 3-DOT MENU ───
-                                                  if (isOwn || widget.isInstructor)
-                                                    PopupMenuButton<String>(
-                                                      icon: Icon(Icons.more_vert, size: 16, color: context.textHint),
-                                                      padding: EdgeInsets.zero,
-                                                      constraints: const BoxConstraints(minWidth: 0, minHeight: 0),
-                                                      onSelected: (value) {
-                                                        if (value == 'delete') {
-                                                          _deleteComment(comment['id']);
-                                                        } else if (value == 'edit') {
-                                                          _showEditCommentDialog(comment);
-                                                        }
-                                                      },
-                                                      itemBuilder: (context) => [
-                                                        if (isOwn && widget.isInstructor)
-                                                          const PopupMenuItem(value: 'edit', child: Text('Edit', style: TextStyle(fontSize: 13))),
-                                                        const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(fontSize: 13, color: Colors.red))),
-                                                      ],
-                                                    ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(comment['text'] ?? '',
-                                                style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: textColor)),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              }),
-
-                              Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 16,
-                                      backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                                      child: Text((_currentUserName ?? 'U').substring(0, 1).toUpperCase(),
-                                        style: const TextStyle(fontFamily: 'Poppins', fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _commentController,
-                                        style: TextStyle(fontFamily: 'Poppins', fontSize: 13, color: textColor),
-                                        decoration: InputDecoration(
-                                          hintText: 'Add class comment...',
-                                          hintStyle: TextStyle(fontSize: 13, color: context.textHint),
-                                          filled: true, fillColor: context.bgColor,
-                                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: context.borderColor)),
-                                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide(color: context.borderColor)),
-                                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
-                                          suffixIcon: IconButton(
-                                            onPressed: _submitComment,
-                                            icon: _isSubmittingComment
-                                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
-                                                : const Icon(Icons.send_rounded, color: AppColors.primary, size: 20),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20),
+                          child: Divider(thickness: 0.5),
                         ),
+
+                        // ─── Comment List Only ───
+                        _buildCommentsHeader(textColor),
+                        _buildCommentListOnly(textColor),
                       ],
                     ),
                   ),
                 ),
+
+                // ─── 2. DOCKED INPUT BAR (The fixed bottom section) ───
+                _buildDockedCommentInput(textColor),
               ],
             ),
           ),
@@ -612,21 +662,411 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
-  Widget _buildFileCard({required String name, required IconData icon, required Color color, required String url, required bool isSaved}) {
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(color: context.cardColor, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.borderColor)),
-      child: ListTile(
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => FileViewerScreen(url: url, fileName: name))),
-        leading: Container(
-          width: 44, height: 44,
-          decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-          child: Icon(icon, color: color, size: 22),
+  PreferredSizeWidget _buildPremiumAppBar(
+    BuildContext context,
+    Color textColor,
+  ) {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      // ─── INCREASE WIDTH TO SUPPORT THE BOXED ICON ───
+      leadingWidth: 70,
+      leading: Center(
+        child: PressableScale(
+          onPressed: () => Navigator.pop(context),
+          scaleFactor: 1.0, // ─── FIXED: NO MOVEMENT ───
+          opacityFactor: 0.5, // ─── FIXED: DIMMING ONLY ───
+          child: Container(
+            margin: const EdgeInsets.only(
+              left: 8,
+            ), // Slight offset from screen edge
+            padding: const EdgeInsets.all(10),
+            child: Icon(
+              Icons.arrow_back_ios_new_rounded,
+              color: textColor,
+              size: 25, // Pro-ratio for AppBar icons
+            ),
+          ),
         ),
-        title: Text(name, style: TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.bold, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: Text(isSaved ? '✓ Saved offline' : 'Tap to view', style: TextStyle(fontSize: 11, color: isSaved ? Colors.green : context.textHint)),
-        trailing: Icon(Icons.chevron_right, color: textColor.withValues(alpha: 0.3), size: 20),
+      ),
+      title: null,
+      centerTitle: true,
+    );
+  }
+
+  Widget _buildPremiumCommentBubble(
+    Map<String, dynamic> comment,
+    Color textColor,
+  ) {
+    final isOwn = comment['user_id'] == _supabase.auth.currentUser?.id;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: GestureDetector(
+        // Tapping the bubble opens the edit/delete menu
+        onTap: (isOwn || widget.isInstructor)
+            ? () => _showCommentOptions(comment)
+            : null,
+        behavior: HitTestBehavior.opaque,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: const Color(0xFFD6EBFF),
+              child: Text(
+                (comment['user_name'] as String? ?? 'U')[0].toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF007BFF),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        comment['user_name'] ?? 'User',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          color: textColor,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _formatDate(comment['created_at']),
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 11,
+                          color: textColor.withValues(alpha: 0.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    comment['text'] ?? '',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: textColor.withValues(alpha: 0.9),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUniversalActionZone(
+    Map post,
+    String type,
+    bool hasFiles,
+    bool allSaved,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: Column(
+        children: [
+          // 1. Save Offline Button (Now moved to TOP)
+          if (hasFiles && !widget.isInstructor)
+            _buildSimpleOfflineButton(allSaved),
+
+          // Add a smaller gap if both buttons exist
+          if (type == '3d_meet' && hasFiles && !widget.isInstructor)
+            const SizedBox(height: 12),
+
+          // 2. Join 3D Meet Button (Now moved to BOTTOM)
+          if (type == '3d_meet' && post['scheduled_time'] != null)
+            _build3DButton(post['scheduled_time']),
+        ],
+      ),
+    );
+  }
+
+  // 1. Separate the list from the input field
+  Widget _buildCommentListOnly(Color textColor) {
+    if (_comments.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+        child: Text(
+          'No comments yet. Be the first to comment!',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 13,
+            color: textColor.withValues(alpha: 0.4),
+          ),
+        ),
+      );
+    }
+    return Column(
+      children: _comments
+          .map((comment) => _buildPremiumCommentBubble(comment, textColor))
+          .toList(),
+    );
+  }
+
+  // 2. The Floating/Docked Input bar
+  Widget _buildDockedCommentInput(Color textColor) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        border: Border(
+          top: BorderSide(color: textColor.withValues(alpha: 0.1), width: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          // ─── UPDATED: Consistent White/Light Blue Circle Avatar ───
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: const Color(0xFFD6EBFF), // Matches Assignment design
+            child: Text(
+              (_currentUserName ?? 'U')[0].toUpperCase(),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF007BFF), // Matches Assignment design
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: TextField(
+              controller: _commentController,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                color: textColor,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Add class comment...',
+                hintStyle: TextStyle(fontSize: 14, color: context.textHint),
+                filled: true,
+                fillColor: context.isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : const Color(0xFFF1F4F8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(24),
+                  borderSide: BorderSide.none,
+                ),
+                suffixIcon: IconButton(
+                  onPressed: _submitComment,
+                  icon: _isSubmittingComment
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.send_rounded,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPremiumHeader(
+    Map post,
+    String type,
+    Color color,
+    Color textColor,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // Styled Type Badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _getPostTypeLabel(type).toUpperCase(),
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                _formatDate(post['created_at']),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 12,
+                  color: textColor.withOpacity(0.5),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            post['title'] ?? '',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              color: textColor,
+              height: 1.2,
+            ),
+          ),
+
+          if (type == 'assignment') ...[
+            const SizedBox(height: 8),
+            Text(
+              '${post['points'] ?? 100} points',
+              style: const TextStyle(
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFFF6B35),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInstructionBody(String text, Color textColor) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 15,
+          color: textColor.withOpacity(0.8),
+          height: 1.6,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumAttachmentSection(Map post, Color textColor) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Text(
+              'ATTACHMENTS',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w800,
+                fontSize: 11,
+                letterSpacing: 1.1,
+                color: textColor.withOpacity(0.4),
+              ),
+            ),
+          ),
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: textColor.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                if (post['material_url'] != null)
+                  _buildSimpleFileRow(
+                    name: post['material_name'] ?? 'Lesson Material',
+                    icon: Icons.picture_as_pdf_rounded,
+                    color: AppColors.primary,
+                    url: post['material_url'],
+                    isSaved: _materialSaved,
+                  ),
+                if (post['assessment_url'] != null)
+                  _buildSimpleFileRow(
+                    name: post['assessment_name'] ?? 'Assignment Instructions',
+                    icon: Icons.assignment_rounded,
+                    color: const Color(0xFFFF6B35),
+                    url: post['assessment_url'],
+                    isSaved: _assessmentSaved,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommentsHeader(Color textColor) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+      child: Row(
+        children: [
+          Icon(
+            Icons.chat_bubble_outline_rounded,
+            size: 18,
+            color: textColor.withValues(alpha: 0.7),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Class Comments',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: textColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              '${_comments.length}',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -634,29 +1074,81 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Widget _build3DButton(String scheduledTime) {
     final status = _getScheduleStatus(scheduledTime);
     final isLive = status == 'live';
-    final Color btnColor = isLive ? const Color(0xFF22C55E) : Colors.grey;
-    final icon = isLive ? Icons.videogame_asset_rounded : Icons.videogame_asset_outlined;
+    final isUpcoming = status == 'upcoming';
+
+    // Tonal theme based on status
+    final Color themeColor = isLive
+        ? const Color(0xFF22C55E)
+        : (isUpcoming
+              ? AppColors.primary
+              : context.textPrimary.withOpacity(0.4));
+
+    final IconData icon = isLive
+        ? Icons.videogame_asset_rounded
+        : Icons.view_in_ar_rounded;
 
     return GestureDetector(
-      onTap: isLive ? () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Launching 3D Classroom...'))) : null,
+      onTap: isLive
+          ? () => ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Launching 3D Classroom...')),
+            )
+          : null,
       child: Container(
-        width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16),
+        width: double.infinity,
+        // Standard button height padding (12px-14px)
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
         decoration: BoxDecoration(
-          color: isLive ? btnColor : btnColor.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: isLive ? [BoxShadow(color: btnColor.withValues(alpha: 0.3), blurRadius: 12, offset: const Offset(0, 4))] : [],
+          color: themeColor.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(12), // Sleek rounded corners
+          border: Border.all(color: themeColor.withOpacity(0.15), width: 1),
+          boxShadow: isLive
+              ? [
+                  BoxShadow(
+                    color: themeColor.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [],
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.center, // This centers the group
+          mainAxisSize: MainAxisSize.max,
           children: [
-            Icon(icon, color: Colors.white, size: 24),
+            // 1. Icon on the left
+            Icon(icon, color: themeColor, size: 20),
             const SizedBox(width: 12),
+
+            // 2. Text bundle (Title + Date)
             Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment
+                  .start, // Left align text relative to the icon
               children: [
-                Text(isLive ? 'Join 3D Classroom' : '3D Meet Scheduled', 
-                  style: const TextStyle(fontFamily: 'Poppins', fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
-                Text(isLive ? 'Session is live now!' : _formatScheduleTime(scheduledTime), 
-                  style: TextStyle(fontFamily: 'Poppins', fontSize: 11, color: Colors.white.withValues(alpha: 0.8))),
+                Text(
+                  isLive
+                      ? 'Join 3D Classroom'
+                      : isUpcoming
+                      ? '3D Meet Scheduled'
+                      : 'Session Expired',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: themeColor,
+                  ),
+                ),
+                Text(
+                  isLive
+                      ? 'The session is live now'
+                      : _formatScheduleTime(scheduledTime),
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 11,
+                    color: themeColor.withOpacity(0.6),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
           ],
@@ -665,21 +1157,248 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
-  IconData _getPostIcon(String type) {
-    switch (type) {
-      case '3d_meet': return Icons.view_in_ar_rounded;
-      case 'material': return Icons.bookmark_rounded;
-      case 'assignment': return Icons.assignment_rounded;
-      default: return Icons.article_rounded;
-    }
+  // Simplified File Row
+  Widget _buildSimpleFileRow({
+    required String name,
+    required IconData icon,
+    required Color color,
+    required String url,
+    required bool isSaved,
+  }) {
+    return ListTile(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => FileViewerScreen(url: url, fileName: name),
+        ),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      leading: Icon(icon, color: color, size: 24),
+      title: Text(
+        name,
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 14,
+          color: context.textPrimary,
+        ),
+      ),
+      subtitle: isSaved
+          ? const Text(
+              '✓ Saved offline',
+              style: TextStyle(fontSize: 11, color: Colors.green),
+            )
+          : null,
+      trailing: Icon(Icons.chevron_right, color: context.textHint, size: 20),
+    );
+  }
+
+  Widget _buildSimpleOfflineButton(bool isSaved) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8), // Added subtle spacing
+        child: TextButton.icon(
+          onPressed: (_isSavingOffline || isSaved) ? null : _saveFilesOffline,
+          icon: _isSavingOffline
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.primary,
+                  ),
+                )
+              : Icon(
+                  isSaved
+                      ? Icons.check_circle_rounded
+                      : Icons.cloud_download_outlined,
+                  size: 20,
+                  color: isSaved ? Colors.green : AppColors.primary,
+                ),
+          label: Text(
+            isSaved ? 'FILES SAVED' : 'SAVE FILES OFFLINE',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontWeight: FontWeight.w800,
+              fontSize: 12,
+              letterSpacing: 1.1,
+              color: isSaved ? Colors.green : AppColors.primary,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCommentsSection() {
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    final currentUserId = _supabase.auth.currentUser?.id;
+
+    return Column(
+      children: [
+        if (_comments.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(32),
+            child: Text(
+              'No comments yet. Be the first to comment!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                color: textColor.withValues(alpha: 0.4),
+              ),
+            ),
+          ),
+
+        ..._comments.map((comment) {
+          final isOwn = comment['user_id'] == currentUserId;
+          final canManage = isOwn || widget.isInstructor;
+
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: GestureDetector(
+              // 1. Tapping the comment triggers the options sheet
+              onTap: canManage ? () => _showCommentOptions(comment) : null,
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: AppColors.primary.withOpacity(0.1),
+                    child: Text(
+                      (comment['user_name'] as String)[0].toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              comment['user_name'] ?? '',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: textColor,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              _formatDate(comment['created_at']),
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 11,
+                                color: context.textHint,
+                              ),
+                            ),
+                            // 2. THE 3-DOT ICON IS REMOVED HERE
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          comment['text'] ?? '',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            color: textColor.withOpacity(0.9),
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 16,
+                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
+                child: Text(
+                  (_currentUserName ?? 'U')[0].toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _commentController,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 13,
+                    color: textColor,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Add class comment...',
+                    hintStyle: TextStyle(fontSize: 13, color: context.textHint),
+                    filled: true,
+                    fillColor: context.cardColor,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide(color: context.borderColor),
+                    ),
+                    suffixIcon: IconButton(
+                      onPressed: _submitComment,
+                      icon: _isSubmittingComment
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(
+                              Icons.send_rounded,
+                              color: AppColors.primary,
+                              size: 20,
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   String _getPostTypeLabel(String type) {
     switch (type) {
-      case '3d_meet': return '3D Meet';
-      case 'material': return 'Material';
-      case 'assignment': return 'Assignment';
-      default: return 'Post';
+      case '3d_meet':
+        return '3D Meet';
+      case 'material':
+        return 'Lesson Material';
+      case 'assignment':
+        return 'Assignment';
+      default:
+        return 'Announcement';
     }
   }
 }

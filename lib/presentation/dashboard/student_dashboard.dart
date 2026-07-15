@@ -11,6 +11,7 @@ import '../../core/constants/app_colors.dart';
 import '../courses/offline_files_screen.dart';
 import '../profile/edit_profile_screen.dart';
 import '../notifications/notifications_screen.dart';
+import '../../shared/widgets/pressable_scale.dart';
 
 class StudentDashboard extends ConsumerStatefulWidget {
   const StudentDashboard({super.key});
@@ -34,6 +35,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   String? _selectedLeaderboardCourseId; // null = All Classes
   final _searchController = TextEditingController();
   String _courseFilter = 'Active';
+  bool _hasUnreadNotifications = false;
 
   // ─── Animation ───────────────────────────────────────────
   late AnimationController _fabController;
@@ -53,6 +55,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   @override
   void initState() {
     super.initState();
+    _initNotificationListener();
     _fabController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -186,7 +189,16 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           .limit(20);
 
       if (mounted) {
-        setState(() => _leaderboard = List<Map<String, dynamic>>.from(data));
+        final List<Map<String, dynamic>> sortedData = List<Map<String, dynamic>>.from(data);
+        
+        // Apply the exact same sorting logic here
+        sortedData.sort((a, b) {
+          int xpCompare = (b['xp'] as int? ?? 0).compareTo(a['xp'] as int? ?? 0);
+          if (xpCompare != 0) return xpCompare;
+          return (a['name'] as String? ?? '').toLowerCase().compareTo((b['name'] as String? ?? '').toLowerCase());
+        });
+
+        setState(() => _leaderboard = sortedData);
       }
     } catch (e) {
       debugPrint('Leaderboard error: $e');
@@ -213,10 +225,30 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     }
   }
 
+  void _initNotificationListener() {
+  final userId = _supabase.auth.currentUser?.id;
+  if (userId == null) return;
+
+  // Real-time listener for the notifications table
+  _supabase
+    .channel('public:notifications')
+    .onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'notifications',
+      callback: (payload) {
+        // If the new notification is for ME, show the red dot
+        if (payload.newRecord['user_id'] == userId) {
+          if (mounted) setState(() => _hasUnreadNotifications = true);
+        }
+      },
+    )
+    .subscribe();
+}
+
   void _showJoinClassDialog() {
     final codeController = TextEditingController();
     bool isJoining = false;
-    // Use your system's Dark Blue for text in Light Mode
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     showDialog(
@@ -238,6 +270,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // --- Header ---
                   Row(
                     children: [
                       Container(
@@ -248,11 +281,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                           ),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(
-                          Icons.add_circle_outline,
-                          color: Colors.white,
-                          size: 22,
-                        ),
+                        child: const Icon(Icons.add_circle_outline, color: Colors.white, size: 22),
                       ),
                       const SizedBox(width: 12),
                       Text(
@@ -276,6 +305,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                     ),
                   ),
                   const SizedBox(height: 20),
+
+                  // --- Input Field ---
                   TextField(
                     controller: codeController,
                     textCapitalization: TextCapitalization.characters,
@@ -287,40 +318,27 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                       letterSpacing: 4,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'kfs1fy',
-                      hintStyle: TextStyle(
-                        color: context.textHint,
-                        letterSpacing: 1,
-                      ),
+                      hintText: 'e.g. kfs1fy',
+                      hintStyle: TextStyle(color: context.textHint, letterSpacing: 1),
                       filled: true,
                       fillColor: context.cardColor,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 16,
-                      ),
+                      contentPadding: const EdgeInsets.all(16),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: context.borderColor),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: context.borderColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: AppColors.primary,
-                          width: 1.5,
-                        ),
-                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
+
+                  // --- Buttons ---
                   Row(
                     children: [
                       Expanded(
-                        child: GestureDetector(
-                          onTap: () => Navigator.pop(context),
+                        child: PressableScale(
+                          onPressed: () => Navigator.pop(context),
+                          scaleFactor: 0.98,
+                          opacityFactor: 0.6,
                           child: Container(
                             height: 50,
                             decoration: BoxDecoration(
@@ -343,38 +361,39 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: GestureDetector(
-                          onTap: isJoining
+                        child: PressableScale(
+                          onPressed: isJoining
                               ? null
                               : () async {
-                                  final code = codeController.text
-                                      .trim()
-                                      .toLowerCase();
+                                  final code = codeController.text.trim().toLowerCase();
                                   if (code.isEmpty) return;
                                   setDialogState(() => isJoining = true);
                                   await _joinClass(code);
                                   if (mounted) Navigator.pop(context);
                                 },
+                          scaleFactor: 0.96,
+                          opacityFactor: 0.7,
                           child: Container(
                             height: 50,
                             decoration: BoxDecoration(
                               gradient: const LinearGradient(
-                                colors: [
-                                  AppColors.primaryDark,
-                                  AppColors.primary,
-                                ],
+                                colors: [AppColors.primaryDark, AppColors.primary],
                               ),
                               borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primary.withValues(alpha: 0.3),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                )
+                              ],
                             ),
                             child: Center(
                               child: isJoining
                                   ? const SizedBox(
                                       width: 20,
                                       height: 20,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                                     )
                                   : const Text(
                                       'Join',
@@ -444,18 +463,28 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       // Refresh data
       await _loadEnrolledCourses();
 
+       try {
+        await _supabase.from('notifications').insert({
+          'user_id': courseData['instructor_id'], // Teacher receives this
+          'course_id': courseData['id'],
+          'type': 'student_joined',
+          'title': 'Class Enrollment 👤',
+          'body': '${_currentUser?.name ?? 'A student'} has joined ${courseData['title']}',
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+        });
+      } catch (notifErr) {
+        // Log error but don't stop the student from seeing success
+        debugPrint('Instructor Notification Error: $notifErr');
+      }
+      // ──────────────────────────────────────────
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Successfully joined ${courseData['title']}! 🎉',
-              style: const TextStyle(fontFamily: 'Poppins'),
-            ),
+            content: Text('Successfully joined ${courseData['title']}! 🎉'),
             backgroundColor: Colors.green.shade700,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
@@ -678,34 +707,60 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   Widget _buildBackground() => Container(decoration: context.scaffoldGradient);
 
   Widget _buildTopBar() {
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Row(
         children: [
-          Image.asset(
-            'assets/images/app_name.png',
-            height: 28,
-            fit: BoxFit.contain,
-          ),
+          Image.asset('assets/images/app_name.png', height: 28, fit: BoxFit.contain),
           const Spacer(),
-          GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const NotificationsScreen(isInstructor: false),
-              ),
-            ),
+          
+          // ─── CORRECTED PRESSABLE NOTIFICATION BUTTON ───
+          PressableScale(
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  // Pass 'true' directly since this is the Instructor Dashboard
+                  builder: (_) => const NotificationsScreen(isInstructor: false), 
+                ),
+              );
+              // Clear badge when returning
+              if (mounted) setState(() => _hasUnreadNotifications = false);
+            },
+            scaleFactor: 0.94, 
+            opacityFactor: 0.6, 
             child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: context.cardColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.borderColor),
-              ),
-              child: Icon(
-                Icons.notifications_outlined,
-                color: context.isDark ? Colors.white : const Color(0xFF0D1B4B),
-                size: 22,
+              padding: const EdgeInsets.all(10),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    Icons.notifications_outlined,
+                    color: textColor,
+                    size: 25, 
+                  ),
+                  
+                  // ─── THE RED NOTIFICATION DOT ───
+                  if (_hasUnreadNotifications)
+                    Positioned(
+                      top: -1,
+                      right: -1,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: context.cardColor, 
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -715,11 +770,13 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   }
 
   Widget _buildFAB() {
-    return AnimatedBuilder(
-      animation: _glowAnimation,
-      builder: (context, child) => GestureDetector(
-        onTap: _showJoinClassDialog, // ✅ CHANGED: Now it calls the dialog
-        child: Container(
+    return PressableScale(
+      onPressed: _showJoinClassDialog,
+      scaleFactor: 0.94, // Slightly more "squish" for the FAB feels premium
+      opacityFactor: 0.8, // Subtle dimming so the gradient remains vibrant
+      child: AnimatedBuilder(
+        animation: _glowAnimation,
+        builder: (context, child) => Container(
           width: 56,
           height: 56,
           decoration: BoxDecoration(
@@ -859,7 +916,13 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
             Column(
               children: _enrolledCourses
                   .take(3)
-                  .map((e) => _buildCourseCard(e, _enrolledCourses.indexOf(e)))
+                  .map(
+                    (e) => _buildCourseCard(
+                      e,
+                      _enrolledCourses.indexOf(e),
+                      tagSuffix: '_home',
+                    ),
+                  ) // Add this
                   .toList(),
             ),
           const SizedBox(height: 100),
@@ -874,16 +937,18 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     final levelTitle = _getLevelTitle(xp);
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [Color(0xFF7B2FBE), Color(0xFF1E90FF)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
             color: AppColors.primary.withValues(alpha: 0.3),
-            blurRadius: 15,
+            blurRadius: 20,
             offset: const Offset(0, 8),
           ),
         ],
@@ -892,52 +957,53 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Welcome back,',
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Welcome back,',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontFamily: 'Poppins',
                     ),
-                    Text(
-                      _currentUser?.name.split(' ').first ?? 'Student',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
+                  ),
+                  Text(
+                    _currentUser?.name.split(' ').first ?? 'Student',
+                    style: const TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1.1,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              // ─── UPDATED STREAK BADGE ─────────────────
+              // --- STREAK BADGE ---
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(
-                    alpha: 0.15,
-                  ), // Semi-transparent white
+                  color: Colors.white.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
                     const Icon(
-                      Icons.local_fire_department_rounded, // Proper Fire Icon
+                      Icons.local_fire_department_rounded,
                       color: Colors.white,
-                      size: 18,
+                      size: 20,
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     Text(
-                      '${_currentUser?.streak ?? 0} days',
+                      '${_currentUser?.streak ?? 0}',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
@@ -945,12 +1011,12 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '$levelTitle • $xp XP',
+                '$levelTitle • Level ${_currentUser?.level ?? 1}',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
@@ -958,19 +1024,23 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                 ),
               ),
               Text(
-                '$nextXp XP',
-                style: const TextStyle(color: Colors.white70, fontSize: 11),
+                '$xp / $nextXp XP',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: LinearProgressIndicator(
               value: (xp / nextXp).clamp(0.0, 1.0),
               backgroundColor: Colors.white.withValues(alpha: 0.2),
               valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-              minHeight: 6,
+              minHeight: 8,
             ),
           ),
         ],
@@ -1012,52 +1082,34 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     Color color,
   ) {
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: context.cardColor,
+          color: color.withValues(alpha: 0.05), // Tonal Background
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: context.borderColor),
-          boxShadow: context.isDark
-              ? []
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
         ),
         child: Column(
           children: [
-            // Icon with a soft background tint
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 24),
-            ),
+            Icon(icon, color: color, size: 22),
             const SizedBox(height: 10),
             Text(
               value,
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: color,
+                fontWeight: FontWeight.w800,
+                color: textColor,
               ),
             ),
             Text(
-              label,
+              label.toUpperCase(),
               style: TextStyle(
                 fontFamily: 'Poppins',
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: textColor.withValues(alpha: 0.6),
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: textColor.withValues(alpha: 0.4),
+                letterSpacing: 1,
               ),
             ),
           ],
@@ -1217,51 +1269,56 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     );
   }
 
-  Widget _buildCourseCard(Map<String, dynamic> course, int index) {
+  Widget _buildCourseCard(
+    Map<String, dynamic> course,
+    int index, {
+    String tagSuffix = '',
+  }) {
     final gradient = _cardGradients[index % _cardGradients.length];
-    // Use system Dark Blue for Light Mode text
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: context.borderColor),
-        boxShadow: context.isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.03),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+    return PressableScale(
+      onPressed: () => context.push(
+        AppRoutes.courseDetail,
+        extra: {'course': course, 'isInstructor': false},
       ),
-      child: Column(
-        children: [
-          // ─── Header Gradient Section ───────────────────
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: gradient,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(20),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ─── TOP ROW: Badge and Menu (HIGHER POSITION) ───
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      scaleFactor: 0.98,
+      opacityFactor: 0.9,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: context.cardColor,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: context.isDark
+              ? []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+        ),
+        child: Column(
+          children: [
+            Hero(
+              tag: 'course_header_${course['id']}$tagSuffix',
+              child: Container(
+                height: 70,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: gradient,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
+                ),
+                child: Row(
                   children: [
-                    // Course Code Badge
+                    // --- Course Code Badge ---
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
@@ -1272,106 +1329,76 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        course['course_code'] ?? 'CPC113',
+                        course['course_code'] ?? 'CODE',
                         style: const TextStyle(
                           color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
-                          letterSpacing: 0.5,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 10,
+                          letterSpacing: 1,
                         ),
                       ),
                     ),
-                    // 3-Dot Menu Button (Aligned to the top right)
+                    const Spacer(),
+
                     GestureDetector(
-                      onTap: () => _showLeaveClassDialog(course),
+                      onTap: () {
+                        _showLeaveClassDialog(course);
+                      },
                       child: Container(
-                        padding: const EdgeInsets.all(4),
+                        padding: const EdgeInsets.all(8),
                         child: const Icon(
-                          Icons.more_vert,
+                          Icons.more_vert_rounded,
                           color: Colors.white,
-                          size: 22,
+                          size: 20,
                         ),
                       ),
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 12),
-
-                // ─── TITLE: Below the badge ───
-                Text(
-                  course['title'] ?? '',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    height: 1.2,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+              ),
             ),
-          ),
-
-          // ─── Body Section ──────────────────────────────
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.person_outline,
-                      size: 18,
-                      color: textColor.withValues(alpha: 0.6),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    course['title'] ?? '',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: textColor,
+                      height: 1.2,
                     ),
-                    const SizedBox(width: 10),
-                    Text(
-                      course['instructor_name'] ?? 'Instructor',
-                      style: TextStyle(
-                        color: textColor,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 12,
+                        backgroundColor: gradient[0].withValues(alpha: 0.1),
+                        child: Icon(
+                          Icons.person_outline_rounded,
+                          size: 14,
+                          color: gradient[0],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: () {
-                    context.push(
-                      AppRoutes.courseDetail,
-                      extra: {'course': course, 'isInstructor': false},
-                    );
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: gradient,
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'See class',
+                      const SizedBox(width: 10),
+                      Text(
+                        course['instructor_name'] ?? 'Instructor',
                         style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                          color: textColor.withValues(alpha: 0.6),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1576,7 +1603,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                                 )
                               : null,
                           color: isActive ? null : context.cardColor,
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: isActive
                                 ? Colors.transparent
@@ -1619,8 +1646,11 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                   padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
                   physics: const BouncingScrollPhysics(),
                   itemCount: filtered.length,
-                  itemBuilder: (context, index) =>
-                      _buildCourseCard(filtered[index], index),
+                  itemBuilder: (context, index) => _buildCourseCard(
+                    filtered[index],
+                    index,
+                    tagSuffix: '_list',
+                  ),
                 ),
         ),
       ],
@@ -1805,145 +1835,19 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
         const SizedBox(height: 16),
 
         // ─── Ranking List ───
-        Expanded(
+         Expanded(
           child: _leaderboard.isEmpty
               ? _buildEmptyLeaderboard(themeColor)
               : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  // 100 padding at bottom ensures the list isn't hidden by the bottom nav
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
                   physics: const BouncingScrollPhysics(),
-                  itemCount: _leaderboard.length,
+                  // We subtract 3 because the top 3 are already in the Podium
+                  itemCount: _leaderboard.length > 3 ? _leaderboard.length - 3 : 0,
                   itemBuilder: (context, index) {
-                    final user = _leaderboard[index];
-                    final isCurrentUser = user['id'] == currentUserId;
-                    final rank = index + 1;
-
-                    final dynamicTextColor = isCurrentUser
-                        ? Colors.white
-                        : themeColor;
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        gradient: isCurrentUser
-                            ? const LinearGradient(
-                                colors: [Color(0xFF1565C0), Color(0xFF1E90FF)],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              )
-                            : null,
-                        color: isCurrentUser ? null : context.cardColor,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                          color: isCurrentUser
-                              ? Colors.transparent
-                              : context.borderColor,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          // ─── Rank Medals instead of Emojis ───
-                          SizedBox(
-                            width: 32,
-                            child: rank <= 3
-                                ? Icon(
-                                    Icons
-                                        .workspace_premium_rounded, // Proper Medal Icon
-                                    color: rank == 1
-                                        ? AppColors.gold
-                                        : rank == 2
-                                        ? const Color(0xFFC0C0C0) // Silver
-                                        : const Color(0xFFCD7F32), // Bronze
-                                    size: 24,
-                                  )
-                                : Text(
-                                    '#$rank',
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      color: dynamicTextColor.withValues(
-                                        alpha: 0.6,
-                                      ),
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                          ),
-                          const SizedBox(width: 12),
-
-                          // Avatar
-                          CircleAvatar(
-                            radius: 20,
-                            backgroundColor: isCurrentUser
-                                ? Colors.white24
-                                : context.borderColor,
-                            child: Text(
-                              (user['name'] as String)
-                                  .substring(0, 1)
-                                  .toUpperCase(),
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontWeight: FontWeight.w700,
-                                color: dynamicTextColor,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  user['name'] ?? '',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: dynamicTextColor,
-                                  ),
-                                ),
-                                Text(
-                                  _getLevelTitle(user['xp'] ?? 0),
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 11,
-                                    color: isCurrentUser
-                                        ? Colors.white70
-                                        : context.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // XP
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                '${user['xp']} XP',
-                                style: const TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFFFFD700),
-                                ),
-                              ),
-                              if (isCurrentUser)
-                                const Text(
-                                  'You',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 11,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
+                    // index + 3 gets the students starting from Rank #4
+                    final user = _leaderboard[index + 3]; 
+                    return _buildRankRow(user, index + 4, currentUserId, themeColor);
                   },
                 ),
         ),
@@ -1993,19 +1897,14 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // 2nd place (Left)
-          if (top3.length > 1)
-            Expanded(child: _buildPodiumItem(top3[1], 2, 90)),
+          // 2nd Place
+          if (top3.length > 1) Expanded(child: _buildPodiumItem(top3[1], 2, 120)),
           const SizedBox(width: 12),
-
-          // 1st place (Center - Tallest)
-          if (top3.isNotEmpty)
-            Expanded(child: _buildPodiumItem(top3[0], 1, 125)),
+          // 1st Place
+          if (top3.isNotEmpty) Expanded(child: _buildPodiumItem(top3[0], 1, 160)),
           const SizedBox(width: 12),
-
-          // 3rd place (Right)
-          if (top3.length > 2)
-            Expanded(child: _buildPodiumItem(top3[2], 3, 75)),
+          // 3rd Place
+          if (top3.length > 2) Expanded(child: _buildPodiumItem(top3[2], 3, 100)),
         ],
       ),
     );
@@ -2016,67 +1915,109 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     final medalColors = {
       1: const Color(0xFFFFD700), // Gold
       2: const Color(0xFFC0C0C0), // Silver
-      3: const Color(0xFFCD7F32), // Bronze
+      3: const Color(0xFFCD7F32)  // Bronze
     };
-    final emoji = {1: '🥇', 2: '🥈', 3: '🥉'};
 
-    return Container(
-      height: height,
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-        border: Border.all(
-          color: medalColors[rank]!.withValues(alpha: 0.5),
-          width: 2,
-        ),
-        boxShadow: context.isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            emoji[rank]!,
-            style: const TextStyle(fontSize: 24),
-          ), // ← smaller emoji
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              (user['name'] as String).split(' ').first,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: textColor,
+    return PressableScale(
+      onPressed: () {}, 
+      child: Container(
+        height: height,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: context.cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(color: medalColors[rank]!.withValues(alpha: 0.2), width: 2),
+          boxShadow: [
+            // Only 1st Place gets the "Aura" glow
+            if (rank == 1) 
+              BoxShadow(
+                color: medalColors[rank]!.withValues(alpha: 0.2), 
+                blurRadius: 25, 
+                spreadRadius: 2,
+                offset: const Offset(0, -5),
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Icon
+            Icon(Icons.workspace_premium_rounded, color: medalColors[rank], size: rank == 1 ? 36 : 26),
+            const SizedBox(height: 8),
+            
+            // ─── SPECIAL NAME EFFECTS ───
+            Text(
+              (user['name'] as String? ?? 'User').split(' ').first, 
+              style: TextStyle(
+                fontFamily: 'Poppins', 
+                fontWeight: FontWeight.w900, // Extra Bold
+                fontSize: rank == 1 ? 14 : 12,
+                color: textColor,
+                // Text Glow Effect
+                shadows: [
+                  Shadow(
+                    color: medalColors[rank]!.withValues(alpha: 0.5),
+                    blurRadius: 8.0,
+                    offset: const Offset(0, 0),
+                  ),
+                ],
+              ),
+              maxLines: 1, overflow: TextOverflow.ellipsis,
             ),
-          ),
-          Text(
-            '${user['xp']} XP',
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 10,
-              color: medalColors[rank],
-              fontWeight: FontWeight.w800,
+            
+            Text(
+              '${user['xp'] ?? 0} XP', 
+              style: TextStyle(
+                fontSize: 10, 
+                color: medalColors[rank], 
+                fontWeight: FontWeight.w900, 
+                letterSpacing: 1.0, // Wider for premium feel
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRankRow(Map<String, dynamic> user, int rank, String? currentUserId, Color themeColor) {
+    final isMe = user['id'] == currentUserId;
+    final rowColor = isMe ? AppColors.primary : themeColor;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: PressableScale(
+        onPressed: () {},
+        scaleFactor: 0.98,
+        opacityFactor: 0.8,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isMe ? AppColors.primary.withValues(alpha: 0.08) : context.cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: isMe ? AppColors.primary.withValues(alpha: 0.2) : Colors.transparent),
           ),
-        ],
+          child: Row(
+            children: [
+              SizedBox(width: 32, child: Text('#$rank', style: TextStyle(fontWeight: FontWeight.w800, color: rowColor.withValues(alpha: 0.4), fontSize: 13))),
+              CircleAvatar(
+                radius: 18, backgroundColor: rowColor.withValues(alpha: 0.1),
+                child: Text((user['name'] as String)[0].toUpperCase(), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: rowColor)),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(user['name'] ?? '', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, color: themeColor, fontSize: 14)),
+                    Text(_getLevelTitle(user['xp'] ?? 0), style: TextStyle(fontSize: 11, color: themeColor.withValues(alpha: 0.4))),
+                  ],
+                ),
+              ),
+              Text('${user['xp']} XP', style: const TextStyle(fontWeight: FontWeight.w900, color: AppColors.gold, fontSize: 14)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -2123,369 +2064,268 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     final xp = user?.xp ?? 0;
     final nextXp = _getNextLevelXp(xp);
     final levelTitle = _getLevelTitle(xp);
-
-    // Flexible color: Interstellar Blue in Light Mode, White in Dark Mode
-    final themeColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       physics: const BouncingScrollPhysics(),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ─── Profile Header (Stays colorful, text stays white) ───
-          Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7B2FBE), Color(0xFF1E90FF)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.3),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                // ─── EDITABLE AVATAR ───
-                GestureDetector(
-                  onTap: () async {
-                    final updated = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => EditProfileScreen(user: user!),
-                      ),
-                    );
-                    if (updated == true) _loadUser();
-                  },
-                  child: Stack(
-                    alignment: Alignment.bottomRight,
-                    children: [
-                      CircleAvatar(
-                        radius: 45,
-                        backgroundColor: Colors.white.withValues(alpha: 0.2),
-                        // Add this line to show the image from Supabase Storage
-                        backgroundImage:
-                            user?.avatarUrl != null &&
-                                user!.avatarUrl!.isNotEmpty
-                            ? NetworkImage(user.avatarUrl!)
-                            : null,
-                        // Only show the letter if there is NO image
-                        child:
-                            user?.avatarUrl == null || user!.avatarUrl!.isEmpty
-                            ? Text(
-                                (user?.name ?? 'S')
-                                    .substring(0, 1)
-                                    .toUpperCase(),
-                                style: const TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : null,
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: const Color(0xFF1E90FF),
-                            width: 2,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.edit_rounded,
-                          color: Colors.white,
-                          size: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  user?.name ?? 'Student',
-                  style: const TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                Text(
-                  user?.email ?? '',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 14,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Role Badge (Proper Icon replaces emoji)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.bolt_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        '$levelTitle • Level ${user?.level ?? 1}',
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '$xp XP',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
-                    Text(
-                      '$nextXp XP',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    value: (xp / nextXp).clamp(0.0, 1.0),
-                    backgroundColor: Colors.white.withValues(alpha: 0.2),
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      Colors.white,
-                    ),
-                    minHeight: 8,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // ─── 1. IDENTITY HERO CARD ───
+          _buildIdentityCard(user, levelTitle, xp, nextXp),
 
           const SizedBox(height: 24),
 
-          // ─── Badges Section (Proper Icon replaces emoji) ───
-          _buildProfileSection(
-            'Badges Earned',
-            Icons.military_tech_rounded,
-            user?.badges.isEmpty ?? true
-                ? Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Center(
-                      child: Text(
-                        'No badges yet. Keep learning!',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          color: themeColor.withValues(alpha: 0.5),
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  )
-                : Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: (user?.badges ?? [])
-                          .map(
-                            (badge) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(
-                                  0xFF7B2FBE,
-                                ).withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: const Color(
-                                    0xFF7B2FBE,
-                                  ).withValues(alpha: 0.3),
-                                ),
-                              ),
-                              child: Text(
-                                badge,
-                                style: const TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFF7B2FBE),
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-          ),
+          // ─── 2. PREMIUM 3D AVATAR BUTTON ───
+          _build3DAvatarButton(textColor),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 32),
 
-          // ─── Settings Section (Proper Icon replaces emoji) ───
-          _buildProfileSection(
-            'Settings',
-            Icons.settings_rounded,
-            Column(
-              children: [
-                _buildSettingsItem(
-                  Icons.dark_mode_outlined,
-                  'Dark Mode',
-                  trailing: Switch(
-                    value: ref.watch(themeProvider) == ThemeMode.dark,
-                    onChanged: (_) =>
-                        ref.read(themeProvider.notifier).toggleTheme(),
-                    activeThumbColor: AppColors.primary,
-                  ),
-                ),
-                _buildSettingsItem(
-                  Icons.download_outlined,
-                  'Offline Files',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const OfflineFilesScreen(),
-                    ),
-                  ),
-                ),
-                Divider(color: context.borderColor, height: 1),
-                _buildSettingsItem(
-                  Icons.logout_rounded,
-                  'Logout',
-                  color: Colors.redAccent,
-                  onTap: _logout,
-                ),
-              ],
-            ),
-          ),
+          // ─── 3. BADGES SECTION (Simplified) ───
+          _buildPremiumSectionHeader('ACHIEVEMENTS', Icons.military_tech_rounded, textColor),
+          _buildBadgesContent(user, textColor),
+
+          const SizedBox(height: 32),
+
+          // ─── 4. SETTINGS SECTION (Unified List) ───
+          _buildPremiumSectionHeader('PREFERENCES & ACCOUNT', Icons.settings_suggest_rounded, textColor),
+          const SizedBox(height: 8),
+          _buildSettingsList(),
+
           const SizedBox(height: 100),
         ],
       ),
     );
   }
 
-  // ─── Profile Section Container Helper ───
-  Widget _buildProfileSection(String title, IconData icon, Widget content) {
-    final themeColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+  // ─── COMPONENT BUILDERS ────────────────────────────────────────────────────
 
+  Widget _buildIdentityCard(user, levelTitle, xp, nextXp) {
     return Container(
-      width: double.infinity,
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: context.borderColor),
-        boxShadow: context.isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+        gradient: const LinearGradient(
+          colors: [Color(0xFF7B2FBE), Color(0xFF1E90FF)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(color: AppColors.primary.withValues(alpha: 0.3), blurRadius: 25, offset: const Offset(0, 10)),
+        ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
-            child: Row(
+          // Avatar with Scale Interaction
+          PressableScale(
+            onPressed: () async {
+              final updated = await Navigator.push(context, MaterialPageRoute(builder: (_) => EditProfileScreen(user: user!)));
+              if (updated == true) _loadUser();
+            },
+            child: Stack(
+              alignment: Alignment.bottomRight,
               children: [
-                Icon(icon, color: themeColor, size: 20),
-                const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: themeColor,
-                  ),
+                CircleAvatar(
+                  radius: 48,
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                  backgroundImage: user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty ? NetworkImage(user.avatarUrl!) : null,
+                  child: user?.avatarUrl == null || user!.avatarUrl!.isEmpty 
+                      ? Text((user?.name ?? 'S')[0].toUpperCase(), style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: Colors.white)) 
+                      : null,
+                ),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(color: AppColors.primary, shape: BoxShape.circle, border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2)),
+                  child: const Icon(Icons.edit_rounded, color: Colors.white, size: 14),
                 ),
               ],
             ),
           ),
-          content,
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
+          Text(user?.name ?? 'Student', style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.5)),
+          Text(user?.email ?? '', style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.6), fontWeight: FontWeight.w500)),
+          const SizedBox(height: 20),
+          // Level Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+            child: Text('$levelTitle • Level ${user?.level ?? 1}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: 0.5)),
+          ),
+          const SizedBox(height: 24),
+          // XP Bar
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('$xp XP', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11)),
+              Text('$nextXp XP', style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 11, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: (xp / nextXp).clamp(0.0, 1.0),
+              backgroundColor: Colors.white.withValues(alpha: 0.15),
+              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+              minHeight: 6,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // ─── Settings Row Helper ───
-  Widget _buildSettingsItem(
-    IconData icon,
-    String label, {
-    Color? color,
-    Widget? trailing,
-    VoidCallback? onTap,
-  }) {
-    final themeColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    final effectiveColor = color ?? themeColor;
-
-    return ListTile(
-      onTap: onTap,
-      leading: Container(
-        padding: const EdgeInsets.all(8),
+  Widget _build3DAvatarButton(Color textColor) {
+    return PressableScale(
+      onPressed: () {
+        // Navigate to 3D Avatar Customization
+      },
+      scaleFactor: 0.96, // Physical movement for primary action
+      opacityFactor: 0.7, // Active state dimming
+      child: Container(
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: effectiveColor.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(10),
+          color: context.isDark ? textColor.withValues(alpha: 0.05) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: textColor.withValues(alpha: 0.08)),
+          boxShadow: context.isDark ? [] : [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))
+          ],
         ),
-        child: Icon(icon, color: effectiveColor, size: 20),
-      ),
-      title: Text(
-        label,
-        style: TextStyle(
-          fontFamily: 'Poppins',
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: effectiveColor,
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.accessibility_new_rounded, color: AppColors.primary, size: 22),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('3D Avatar', 
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: textColor, fontFamily: 'Poppins')),
+                  Text('Customize your 3D avatar', 
+                    style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.5), fontFamily: 'Poppins')),
+                ],
+              ),
+            ),
+            Icon(Icons.arrow_forward_ios_rounded, size: 14, color: textColor.withValues(alpha: 0.2)),
+          ],
         ),
       ),
-      trailing:
-          trailing ??
-          Icon(
-            Icons.chevron_right,
-            color: themeColor.withValues(alpha: 0.3),
-            size: 20,
+    );
+  }
+
+  Widget _buildPremiumSectionHeader(String title, IconData icon, Color textColor) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: textColor.withValues(alpha: 0.4)),
+          const SizedBox(width: 8),
+          Text(title, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: textColor.withValues(alpha: 0.4), letterSpacing: 1.5)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsList() {
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    return Container(
+      clipBehavior: Clip.antiAlias, // Ensures the ripples/dimming don't leak past corners
+      decoration: BoxDecoration(
+        color: context.isDark ? textColor.withValues(alpha: 0.03) : Colors.white.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        children: [
+          // Dark Mode Toggle (Toggle itself handles its own animation)
+          _buildPremiumSettingsItem(
+            Icons.dark_mode_outlined, 'Dark Mode',
+            trailing: _buildAnimatedToggle(
+              value: ref.watch(themeProvider) == ThemeMode.dark, 
+              onTap: () => ref.read(themeProvider.notifier).toggleTheme()
+            ),
+            showChevron: false,
           ),
+          _buildPremiumDivider(),
+          // Offline Content (Now with Dimming)
+          _buildPremiumSettingsItem(
+            Icons.cloud_download_outlined, 'Offline Content',
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OfflineFilesScreen())),
+          ),
+          _buildPremiumDivider(),
+          // Logout (Now with Dimming)
+          _buildPremiumSettingsItem(
+            Icons.logout_rounded, 'Logout',
+            color: Colors.redAccent,
+            onTap: _logout,
+            showChevron: false,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPremiumSettingsItem(IconData icon, String label, {Color? color, Widget? trailing, VoidCallback? onTap, bool showChevron = true}) {
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    final effectiveColor = color ?? textColor;
+
+    return PressableScale(
+      onPressed: onTap,
+      scaleFactor: 0.98, // Subtle scale for list items
+      opacityFactor: 0.6, // Noticeable dimming for row selection
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        color: Colors.transparent, // Ensures the entire row is tappable
+        child: Row(
+          children: [
+            Icon(icon, color: color ?? textColor.withValues(alpha: 0.8), size: 22),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                label, 
+                style: TextStyle(
+                  fontFamily: 'Poppins', 
+                  fontSize: 14, 
+                  fontWeight: FontWeight.w600, 
+                  color: effectiveColor
+                ),
+              ),
+            ),
+            if (trailing != null) trailing,
+            if (trailing == null && showChevron)
+              Icon(Icons.arrow_forward_ios_rounded, size: 14, color: textColor.withValues(alpha: 0.2)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumDivider() => Padding(padding: const EdgeInsets.symmetric(horizontal: 20), child: Divider(height: 1, thickness: 0.5, color: context.borderColor.withValues(alpha: 0.5)));
+
+  Widget _buildBadgesContent(user, textColor) {
+    if (user?.badges.isEmpty ?? true) {
+      return Padding(
+        padding: const EdgeInsets.all(20),
+        child: Text('No badges earned yet. Complete lessons to unlock!', style: TextStyle(fontSize: 13, color: textColor.withValues(alpha: 0.4), fontStyle: FontStyle.italic)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Wrap(
+        spacing: 10, runSpacing: 10,
+        children: (user?.badges ?? []).map<Widget>((badge) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(color: const Color(0xFF7B2FBE).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF7B2FBE).withValues(alpha: 0.2))),
+          child: Text(badge, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF7B2FBE))),
+        )).toList(),
+      ),
     );
   }
 
@@ -2528,4 +2368,47 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       ),
     );
   }
+
+  Widget _buildAnimatedToggle({
+    required bool value,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        width: 48,
+        height: 26,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: value ? AppColors.primary : Colors.black12,
+          boxShadow: value
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.4),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : [],
+        ),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            width: 20,
+            height: 20,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
+
+

@@ -5,7 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/router/app_router.dart';
-
+import 'package:pinput/pinput.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../../shared/widgets/pressable_scale.dart';
 class LoginScreen extends StatefulWidget {
   final bool showRegister;
   const LoginScreen({super.key, this.showRegister = false});
@@ -35,6 +37,9 @@ class _LoginScreenState extends State<LoginScreen>
   final _secretController = TextEditingController();
   final _forgotEmailController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   // ─── Supabase ────────────────────────────────────────────
   final _supabase = Supabase.instance.client;
@@ -78,10 +83,11 @@ class _LoginScreenState extends State<LoginScreen>
     try {
       final canCheck = await _localAuth.canCheckBiometrics;
       final isSupported = await _localAuth.isDeviceSupported();
-      if (mounted)
+      if (mounted) {
         setState(
           () => _biometricsAvailable = !kIsWeb && canCheck && isSupported,
         );
+      }
     } catch (e) {
       debugPrint('Biometrics check error: $e');
     }
@@ -89,24 +95,44 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _authenticateWithBiometrics() async {
     try {
+      // 1. Check if we have saved credentials first
+      final savedEmail = await _storage.read(key: 'user_email');
+      final savedPassword = await _storage.read(key: 'user_password');
+
+      if (savedEmail == null || savedPassword == null) {
+        _showError(
+          'Please sign in with email and password first to enable biometrics.',
+        );
+        return;
+      }
+
+      // 2. Trigger the Fingerprint/FaceID scanner
       final authenticated = await _localAuth.authenticate(
-        localizedReason: 'Authenticate to sign in to Code Lab 3D',
+        localizedReason: 'Scan your fingerprint to sign in',
         options: const AuthenticationOptions(
-          biometricOnly: false,
+          biometricOnly: true, // Force fingerprint/FaceID
           stickyAuth: true,
         ),
       );
+
       if (authenticated && mounted) {
-        // Get last signed-in user from Supabase session
-        final session = _supabase.auth.currentSession;
-        if (session != null) {
-          _navigateToDashboard(session.user.id);
-        } else {
-          _showError('No saved session. Please sign in with email first.');
+        setState(() => _isLoading = true);
+
+        // 3. Log in to Supabase using the SECURELY stored credentials
+        final response = await _supabase.auth.signInWithPassword(
+          email: savedEmail,
+          password: savedPassword,
+        );
+
+        if (response.user != null && mounted) {
+          _navigateToDashboard(response.user!.id);
         }
       }
     } catch (e) {
+      debugPrint('Biometric Error: $e');
       if (mounted) _showError('Biometric authentication failed.');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -123,6 +149,16 @@ class _LoginScreenState extends State<LoginScreen>
           password: _passwordController.text.trim(),
         );
         if (response.user != null && mounted) {
+          // ─── NEW: Save credentials for future biometric login ───
+          await _storage.write(
+            key: 'user_email',
+            value: _emailController.text.trim(),
+          );
+          await _storage.write(
+            key: 'user_password',
+            value: _passwordController.text.trim(),
+          );
+
           _navigateToDashboard(response.user!.id);
         }
       } else {
@@ -194,7 +230,21 @@ class _LoginScreenState extends State<LoginScreen>
         }
       }
     } catch (e) {
-      if (mounted) _showError(e.toString());
+      if (mounted) {
+        String errorMessage = e.toString();
+
+        // Check if the error is about wrong credentials
+        if (errorMessage.contains('invalid_credentials') ||
+            errorMessage.toLowerCase().contains('invalid login credentials')) {
+          errorMessage =
+              'The email and password you entered did not match our records. Please try again.';
+        } else if (errorMessage.contains('network_error')) {
+          errorMessage =
+              'Connection error. Please check your internet and try again.';
+        }
+
+        _showError(errorMessage);
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -221,31 +271,16 @@ class _LoginScreenState extends State<LoginScreen>
     final otpController = TextEditingController();
     bool isSending = false;
     bool isVerifying = false;
-    int step = 1; // 1 = enter email, 2 = enter OTP
+    int step = 1;
 
-    // Capture theme before dialog opens
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dialogBg = isDark ? const Color(0xFF0D1B4B) : Colors.white;
-    final borderColor = isDark
-        ? const Color(0xFF1E3A6E)
-        : const Color(0xFFDDE3F0);
-    final fillColor = isDark
-        ? const Color(0xFF0A1128)
-        : const Color(0xFFF5F7FF);
+    final borderColor = isDark ? const Color(0xFF1E3A6E) : const Color(0xFFDDE3F0);
+    final fillColor = isDark ? const Color(0xFF0A1128) : const Color(0xFFF5F7FF);
     final textColor = isDark ? Colors.white : const Color(0xFF0D1B4B);
-    final hintColor = isDark
-        ? Colors.white.withValues(alpha: 0.5)
-        : const Color(0xFF0D1B4B).withValues(alpha: 0.4);
-    final iconColor = isDark
-        ? Colors.white.withValues(alpha: 0.3)
-        : const Color(0xFF0D1B4B).withValues(alpha: 0.4);
-    final subtitleColor = isDark
-        ? Colors.white.withValues(alpha: 0.6)
-        : const Color(0xFF0D1B4B).withValues(alpha: 0.5);
+    final subtitleColor = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF0D1B4B).withValues(alpha: 0.5);
     final cancelBg = isDark ? const Color(0xFF0A1128) : const Color(0xFFF0F4FF);
-    final cancelTextColor = isDark
-        ? Colors.white.withValues(alpha: 0.7)
-        : const Color(0xFF0D1B4B).withValues(alpha: 0.7);
+    final cancelTextColor = isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF0D1B4B).withValues(alpha: 0.7);
 
     showDialog(
       context: context,
@@ -253,441 +288,147 @@ class _LoginScreenState extends State<LoginScreen>
       builder: (context) => StatefulBuilder(
         builder: (context, setDialog) => Dialog(
           backgroundColor: dialogBg,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: borderColor),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: borderColor)),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ─── Header ──────────────────────────────
+                // ─── Header ───
                 Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E90FF).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        step == 1
-                            ? Icons.lock_reset_outlined
-                            : Icons.pin_outlined,
-                        color: const Color(0xFF1E90FF),
-                        size: 22,
-                      ),
+                      decoration: BoxDecoration(color: const Color(0xFF1E90FF).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                      child: Icon(step == 1 ? Icons.lock_reset_outlined : Icons.pin_outlined, color: const Color(0xFF1E90FF), size: 22),
                     ),
                     const SizedBox(width: 12),
-                    Text(
-                      step == 1 ? 'Forgot Password' : 'Enter OTP',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: textColor,
-                      ),
-                    ),
+                    Text(step == 1 ? 'Forgot Password' : 'Enter OTP',
+                        style: TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w700, color: textColor)),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  step == 1
-                      ? 'Enter your email and we\'ll send you an OTP code.'
-                      : 'Enter the OTP sent to\n${_forgotEmailController.text.trim()}',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 12,
-                    color: subtitleColor,
-                    height: 1.4,
-                  ),
+                  step == 1 ? 'Enter your email and we\'ll send you an OTP code.' : 'Enter the OTP sent to\n${_forgotEmailController.text.trim()}',
+                  style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: subtitleColor, height: 1.4),
                 ),
                 const SizedBox(height: 20),
 
-                // ─── Step 1: Email ─────────────────────────
+                // ─── Step 1: Email ───
                 if (step == 1) ...[
-                  TextFormField(
-                    controller: _forgotEmailController,
-                    keyboardType: TextInputType.emailAddress,
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      color: textColor,
-                      fontSize: 14,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'Email Address',
-                      labelStyle: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 13,
-                        color: hintColor,
-                      ),
-                      floatingLabelStyle: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 12,
-                        color: Color(0xFF1E90FF),
-                        fontWeight: FontWeight.w600,
-                      ),
-                      prefixIcon: Icon(
-                        Icons.email_outlined,
-                        color: iconColor,
-                        size: 20,
-                      ),
-                      filled: true,
-                      fillColor: fillColor,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 16,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: borderColor),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: borderColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF1E90FF),
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
+                  _buildField(label: 'Email Address', controller: _forgotEmailController, icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress),
                   const SizedBox(height: 20),
                   Row(
                     children: [
                       Expanded(
-                        child: GestureDetector(
-                          onTap: () => Navigator.pop(context),
+                        child: PressableScale(
+                          onPressed: () => Navigator.pop(context),
+                          scaleFactor: 0.98,
                           child: Container(
                             height: 48,
-                            decoration: BoxDecoration(
-                              color: cancelBg,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: borderColor),
-                            ),
-                            child: Center(
-                              child: Text(
-                                'Cancel',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  color: cancelTextColor,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
+                            decoration: BoxDecoration(color: cancelBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor)),
+                            child: Center(child: Text('Cancel', style: TextStyle(fontFamily: 'Poppins', color: cancelTextColor, fontWeight: FontWeight.w600))),
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1E90FF),
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(double.infinity, 48),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                        child: PressableScale(
+                          onPressed: isSending ? null : () async {
+                            final email = _forgotEmailController.text.trim();
+                            if (email.isEmpty || !email.contains('@')) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid email.'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+                              return;
+                            }
+                            setDialog(() => isSending = true);
+                            try {
+                              await _supabase.auth.resetPasswordForEmail(email, redirectTo: 'com.psulubao.it.lcms_app://reset-password');
+                              setDialog(() { isSending = false; step = 2; });
+                            } catch (e) {
+                              setDialog(() => isSending = false);
+                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+                            }
+                          },
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(color: const Color(0xFF1E90FF), borderRadius: BorderRadius.circular(12)),
+                            child: Center(
+                              child: isSending
+                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                  : const Text('Send OTP', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, color: Colors.white)),
                             ),
-                            elevation: 0,
                           ),
-                          onPressed: isSending
-                              ? null
-                              : () async {
-                                  final email = _forgotEmailController.text
-                                      .trim();
-                                  if (email.isEmpty || !email.contains('@')) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text('Enter a valid email.'),
-                                        backgroundColor: Colors.red,
-                                        behavior: SnackBarBehavior.floating,
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  setDialog(() => isSending = true);
-                                  try {
-                                    await _supabase.auth.resetPasswordForEmail(
-                                      email,
-                                      redirectTo:
-                                          'com.psulubao.it.lcms_app://reset-password',
-                                    );
-                                    setDialog(() {
-                                      isSending = false;
-                                      step = 2;
-                                    });
-                                    // Show bottom notification
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Row(
-                                            children: [
-                                              const Icon(
-                                                Icons.mark_email_read_outlined,
-                                                color: Colors.white,
-                                                size: 18,
-                                              ),
-                                              const SizedBox(width: 10),
-                                              Expanded(
-                                                child: Text(
-                                                  'OTP sent to $email 📧',
-                                                  style: const TextStyle(
-                                                    fontFamily: 'Poppins',
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          backgroundColor:
-                                              Colors.green.shade700,
-                                          behavior: SnackBarBehavior.floating,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              12,
-                                            ),
-                                          ),
-                                          duration: const Duration(seconds: 3),
-                                        ),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    setDialog(() => isSending = false);
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Error: $e'),
-                                          backgroundColor: Colors.red,
-                                          behavior: SnackBarBehavior.floating,
-                                        ),
-                                      );
-                                    }
-                                  }
-                                },
-                          child: isSending
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text(
-                                  'Send OTP',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
                         ),
                       ),
                     ],
                   ),
                 ],
 
-                // ─── Step 2: OTP Only ──────────────────────
+                // ─── Step 2: OTP Only ───
                 if (step == 2) ...[
-                  TextFormField(
-                    controller: otpController,
-                    keyboardType: TextInputType.number,
-                    maxLength: 8,
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      color: textColor,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 8,
-                    ),
-                    textAlign: TextAlign.center,
-                    decoration: InputDecoration(
-                      labelText: 'OTP Code',
-                      counterText: '',
-                      labelStyle: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 13,
-                        color: hintColor,
-                      ),
-                      floatingLabelStyle: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 12,
-                        color: Color(0xFF1E90FF),
-                        fontWeight: FontWeight.w600,
-                      ),
-                      prefixIcon: Icon(
-                        Icons.pin_outlined,
-                        color: iconColor,
-                        size: 20,
-                      ),
-                      filled: true,
-                      fillColor: fillColor,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 18,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: borderColor),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: borderColor),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF1E90FF),
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 10),
+                  Center(child: Pinput(length: 6, controller: otpController, mainAxisAlignment: MainAxisAlignment.spaceBetween, defaultPinTheme: PinTheme(width: 45, height: 55, textStyle: TextStyle(fontFamily: 'Poppins', fontSize: 20, fontWeight: FontWeight.bold, color: textColor), decoration: BoxDecoration(color: fillColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: borderColor))))),
+                  const SizedBox(height: 30),
                   Row(
                     children: [
                       Expanded(
-                        child: GestureDetector(
-                          onTap: () => setDialog(() => step = 1),
+                        child: PressableScale(
+                          onPressed: () => setDialog(() => step = 1),
+                          scaleFactor: 0.98,
                           child: Container(
                             height: 48,
-                            decoration: BoxDecoration(
-                              color: cancelBg,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: borderColor),
-                            ),
-                            child: Center(
-                              child: Text(
-                                'Back',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  color: cancelTextColor,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
+                            decoration: BoxDecoration(color: cancelBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor)),
+                            child: Center(child: Text('Back', style: TextStyle(fontFamily: 'Poppins', color: cancelTextColor, fontWeight: FontWeight.w600))),
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1E90FF),
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size(double.infinity, 48),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                        child: PressableScale(
+                          onPressed: isVerifying ? null : () async {
+                            final otp = otpController.text.trim();
+                            if (otp.length < 6) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter the 6-digit code.'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+                              return;
+                            }
+                            setDialog(() => isVerifying = true);
+                            try {
+                              await _supabase.auth.verifyOTP(email: _forgotEmailController.text.trim(), token: otp, type: OtpType.recovery);
+                              if (mounted) { Navigator.pop(context); context.push(AppRoutes.resetPassword); }
+                            } catch (e) {
+                              setDialog(() => isVerifying = false);
+                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid or expired OTP.'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+                            }
+                          },
+                          child: Container(
+                            height: 48,
+                            decoration: BoxDecoration(color: const Color(0xFF1E90FF), borderRadius: BorderRadius.circular(12)),
+                            child: Center(
+                              child: isVerifying
+                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                  : const Text('Verify', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15, color: Colors.white)),
                             ),
-                            elevation: 0,
                           ),
-                          onPressed: isVerifying
-                              ? null
-                              : () async {
-                                  final otp = otpController.text.trim();
-                                  if (otp.length < 6) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Enter the complete OTP code.',
-                                        ),
-                                        backgroundColor: Colors.red,
-                                        behavior: SnackBarBehavior.floating,
-                                      ),
-                                    );
-                                    return;
-                                  }
-                                  setDialog(() => isVerifying = true);
-                                  try {
-                                    // Verify OTP — this creates a session
-                                    await _supabase.auth.verifyOTP(
-                                      email: _forgotEmailController.text.trim(),
-                                      token: otp,
-                                      type: OtpType.recovery,
-                                    );
-                                    // OTP correct — close dialog, go to ResetPasswordScreen
-                                    if (mounted) {
-                                      Navigator.pop(context);
-                                      context.push(AppRoutes.resetPassword);
-                                    }
-                                  } catch (e) {
-                                    setDialog(() => isVerifying = false);
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text(
-                                            'Invalid OTP or expired. Try again.',
-                                          ),
-                                          backgroundColor: Colors.red,
-                                          behavior: SnackBarBehavior.floating,
-                                        ),
-                                      );
-                                    }
-                                  }
-                                },
-                          child: isVerifying
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text(
-                                  'Verify',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 15,
-                                  ),
-                                ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 20),
                   Center(
-                    child: GestureDetector(
-                      onTap: () async {
+                    child: PressableScale(
+                      onPressed: () async {
                         try {
-                          await _supabase.auth.resetPasswordForEmail(
-                            _forgotEmailController.text.trim(),
-                            redirectTo:
-                                'com.psulubao.it.lcms_app://reset-password',
-                          );
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'New OTP sent! Check your email.',
-                                ),
-                                backgroundColor: Colors.blue,
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          debugPrint('Resend: $e');
-                        }
+                          await _supabase.auth.resetPasswordForEmail(_forgotEmailController.text.trim(), redirectTo: 'com.psulubao.it.lcms_app://reset-password');
+                        } catch (e) { debugPrint('Resend error: $e'); }
                       },
-                      child: Text(
-                        'Didn\'t receive it? Resend OTP',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 12,
-                          color: const Color(0xFF1E90FF).withValues(alpha: 0.8),
-                          decoration: TextDecoration.underline,
+                      scaleFactor: 1.0, // No movement
+                      opacityFactor: 0.6,
+                      child: const Padding(
+                        padding: EdgeInsets.all(8.0),
+                        child: Text(
+                          'Didn\'t receive it? Resend OTP',
+                          style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: Color(0xFF1E90FF), fontWeight: FontWeight.w600),
                         ),
                       ),
                     ),
@@ -808,8 +549,9 @@ class _LoginScreenState extends State<LoginScreen>
                                 controller: _nameController,
                                 icon: Icons.person_outline,
                                 validator: (v) {
-                                  if (!_isSignIn && (v == null || v.isEmpty))
+                                  if (!_isSignIn && (v == null || v.isEmpty)) {
                                     return 'Enter your full name';
+                                  }
                                   return null;
                                 },
                               ),
@@ -1050,10 +792,12 @@ class _LoginScreenState extends State<LoginScreen>
                               icon: Icons.email_outlined,
                               keyboardType: TextInputType.emailAddress,
                               validator: (v) {
-                                if (v == null || v.isEmpty)
+                                if (v == null || v.isEmpty) {
                                   return 'Enter your email';
-                                if (!v.contains('@'))
+                                }
+                                if (!v.contains('@')) {
                                   return 'Enter a valid email';
+                                }
                                 return null;
                               },
                             ),
@@ -1073,8 +817,9 @@ class _LoginScreenState extends State<LoginScreen>
                                 validator: (v) {
                                   if (!_isSignIn &&
                                       !_isStudent &&
-                                      (v == null || v.isEmpty))
+                                      (v == null || v.isEmpty)) {
                                     return 'Enter the faculty secret code';
+                                  }
                                   return null;
                                 },
                               ),
@@ -1091,10 +836,12 @@ class _LoginScreenState extends State<LoginScreen>
                                 () => _passwordVisible = !_passwordVisible,
                               ),
                               validator: (v) {
-                                if (v == null || v.isEmpty)
+                                if (v == null || v.isEmpty) {
                                   return 'Enter your password';
-                                if (v.length < 6)
+                                }
+                                if (v.length < 6) {
                                   return 'At least 6 characters';
+                                }
                                 return null;
                               },
                             ),
@@ -1114,10 +861,12 @@ class _LoginScreenState extends State<LoginScreen>
                                 ),
                                 validator: (v) {
                                   if (!_isSignIn) {
-                                    if (v == null || v.isEmpty)
+                                    if (v == null || v.isEmpty) {
                                       return 'Confirm your password';
-                                    if (v != _passwordController.text)
+                                    }
+                                    if (v != _passwordController.text) {
                                       return 'Passwords do not match';
+                                    }
                                   }
                                   return null;
                                 },
@@ -1131,15 +880,25 @@ class _LoginScreenState extends State<LoginScreen>
                                 padding: const EdgeInsets.only(bottom: 8),
                                 child: Align(
                                   alignment: Alignment.centerRight,
-                                  child: GestureDetector(
-                                    onTap: _showForgotPasswordDialog,
-                                    child: const Text(
-                                      'Forgot Password?',
-                                      style: TextStyle(
-                                        fontFamily: 'Poppins',
-                                        fontSize: 13,
-                                        color: Color(0xFF1E90FF),
-                                        fontWeight: FontWeight.w600,
+                                  child: PressableScale(
+                                    onPressed: _showForgotPasswordDialog,
+                                    scaleFactor:
+                                        1.0, // DISABLES the shrink/animation
+                                    opacityFactor:
+                                        0.5, // ENABLES the dimming effect
+                                    child: const Padding(
+                                      padding: EdgeInsets.symmetric(
+                                        vertical: 8,
+                                        horizontal: 4,
+                                      ),
+                                      child: Text(
+                                        'Forgot Password?',
+                                        style: TextStyle(
+                                          fontFamily: 'Poppins',
+                                          fontSize: 13,
+                                          color: Color(0xFF1E90FF),
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -1158,8 +917,10 @@ class _LoginScreenState extends State<LoginScreen>
                       // ─── Biometrics Button (Sign In only) ─
                       if (_isSignIn && _biometricsAvailable) ...[
                         const SizedBox(height: 16),
-                        GestureDetector(
-                          onTap: _authenticateWithBiometrics,
+                        PressableScale(
+                          // 1. Wrap with the tactile effect
+                          scaleFactor: 0.98,
+                          onPressed: _authenticateWithBiometrics,
                           child: Container(
                             width: double.infinity,
                             height: 52,
@@ -1180,10 +941,10 @@ class _LoginScreenState extends State<LoginScreen>
                                 Icon(
                                   Icons.fingerprint,
                                   color: isDark
-                                      ? Colors.white.withValues(alpha: 0.7)
+                                      ? Colors.white.withOpacity(0.7)
                                       : const Color(
                                           0xFF0D1B4B,
-                                        ).withValues(alpha: 0.7),
+                                        ).withOpacity(0.7),
                                   size: 24,
                                 ),
                                 const SizedBox(width: 10),
@@ -1194,10 +955,10 @@ class _LoginScreenState extends State<LoginScreen>
                                     fontSize: 14,
                                     fontWeight: FontWeight.w600,
                                     color: isDark
-                                        ? Colors.white.withValues(alpha: 0.7)
+                                        ? Colors.white.withOpacity(0.7)
                                         : const Color(
                                             0xFF0D1B4B,
-                                          ).withValues(alpha: 0.7),
+                                          ).withOpacity(0.7),
                                   ),
                                 ),
                               ],
@@ -1390,55 +1151,53 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildActionButton() {
-    return AnimatedBuilder(
+  return PressableScale(
+    onPressed: _isLoading ? null : _handleSubmit,
+    child: AnimatedBuilder(
       animation: _glowAnimation,
-      builder: (context, child) => GestureDetector(
-        onTap: _isLoading ? null : _handleSubmit,
-        child: Container(
-          width: double.infinity,
-          height: 56,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF1565C0), Color(0xFF1E90FF)],
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
+      builder: (context, child) => Container(
+        width: double.infinity,
+        height: 56,
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF1565C0), Color(0xFF1E90FF)],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1E90FF).withValues(alpha: _glowAnimation.value * 0.5),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
             ),
-            borderRadius: BorderRadius.circular(32),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(
-                  0xFF1E90FF,
-                ).withValues(alpha: _glowAnimation.value * 0.5),
-                blurRadius: 16,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Center(
-            child: _isLoading
-                ? const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2.5,
-                    ),
-                  )
-                : Text(
-                    _isSignIn ? 'Sign In' : 'Sign Up',
-                    style: const TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
-                    ),
+          ],
+        ),
+        child: Center(
+          child: _isLoading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2.5,
                   ),
-          ),
+                )
+              : Text(
+                  _isSignIn ? 'Sign In' : 'Sign Up',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildGridOverlay(Size size) {
     return Opacity(

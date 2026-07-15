@@ -12,6 +12,8 @@ import 'dart:math';
 import '../profile/edit_profile_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'package:flutter/services.dart';
+import '../../shared/widgets/pressable_scale.dart';
+
 
 class InstructorDashboard extends ConsumerStatefulWidget {
   const InstructorDashboard({super.key});
@@ -32,7 +34,8 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   bool _isLoadingCourses = true;
   final _searchController = TextEditingController();
   String _courseFilter = 'Active';
-
+  bool _hasUnreadNotifications = false;
+  
   // ─── Animations ──────────────────────────────────────────
   late AnimationController _glowController;
   late Animation<double> _glowAnimation;
@@ -51,6 +54,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   @override
   void initState() {
     super.initState();
+    _initNotificationListener();
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
@@ -142,6 +146,27 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
       debugPrint('Submissions error: $e');
     }
   }
+
+  void _initNotificationListener() {
+  final userId = _supabase.auth.currentUser?.id;
+  if (userId == null) return;
+
+  // Real-time listener for the notifications table
+  _supabase
+    .channel('public:notifications')
+    .onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'notifications',
+      callback: (payload) {
+        // If the new notification is for ME, show the red dot
+        if (payload.newRecord['user_id'] == userId) {
+          if (mounted) setState(() => _hasUnreadNotifications = true);
+        }
+      },
+    )
+    .subscribe();
+}
 
   // ─── Actions ─────────────────────────────────────────────
 
@@ -289,16 +314,9 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                           // ─── Create Button ───
                           SizedBox(
                             width: double.infinity,
-                            height: 54,
-                            child: ElevatedButton(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                elevation: 0,
-                              ),
+                            height: 54, // Keep original height
+                            child: PressableScale(
+                              // 1. Disable interaction if already creating
                               onPressed: isCreating
                                   ? null
                                   : () async {
@@ -307,7 +325,8 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                                       }
                                       setSheetState(() => isCreating = true);
 
-                                      await _createCourse(
+                                      final String?
+                                      generatedCode = await _createCourse(
                                         title: titleController.text.trim(),
                                         courseCode: courseCodeController.text
                                             .trim()
@@ -318,25 +337,76 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                                             .trim(),
                                       );
 
-                                      if (mounted) Navigator.pop(context);
+                                      if (mounted) {
+                                        Navigator.pop(
+                                          context,
+                                        ); // Close bottom sheet
+                                        if (generatedCode != null) {
+                                          final fullTitle =
+                                              '${titleController.text.trim()} - ${programController.text.trim()} ${sectionController.text.trim()}';
+                                          _showClassCodeDialog(
+                                            generatedCode,
+                                            fullTitle,
+                                          );
+                                        } else {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Failed to create class. Please try again.',
+                                              ),
+                                            ),
+                                          );
+                                        }
+                                      }
                                     },
-                              child: isCreating
-                                  ? const SizedBox(
-                                      width: 24,
-                                      height: 24,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
+                              scaleFactor: 0.96, // Tactile shrink
+                              opacityFactor: 0.7, // Professional dimming
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  // 2. Applied consistent premium gradient
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      AppColors.primaryDark,
+                                      AppColors.primary,
+                                    ],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.3,
                                       ),
-                                    )
-                                  : const Text(
-                                      'Create Class',
-                                      style: TextStyle(
-                                        fontFamily: 'Poppins',
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
                                     ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: isCreating
+                                      ? const SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2.5,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Create Class',
+                                          style: TextStyle(
+                                            fontFamily: 'Poppins',
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                            color: Colors.white,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                ),
+                              ),
                             ),
                           ),
                         ],
@@ -352,7 +422,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     );
   }
 
-  Future<void> _createCourse({
+  Future<String?> _createCourse({
     required String title,
     required String courseCode,
     required String program,
@@ -361,7 +431,8 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   }) async {
     try {
       final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
+      if (userId == null) return null;
+
       final classCode = _generateClassCode();
       final fullTitle = '$title - $program $section';
 
@@ -378,17 +449,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         'enrolled_count': 0,
         'created_at': DateTime.now().toIso8601String(),
       });
+
       await _loadCourses();
-      if (mounted) _showClassCodeDialog(classCode, fullTitle);
+      return classCode; // Return the code so the UI can show it
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
+      debugPrint('Create Course Error: $e');
+      return null;
     }
   }
 
@@ -562,30 +628,70 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderColor, borderRadius: BorderRadius.circular(2))),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.borderColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
             const SizedBox(height: 20),
-            Text(course['title'] ?? '', style: TextStyle(fontWeight: FontWeight.w700, color: context.textPrimary), textAlign: TextAlign.center),
+            Text(
+              course['title'] ?? '',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: context.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 20),
-            _buildOptionItem(Icons.key_outlined, 'Show Class Code', AppColors.primary, () {
-              Navigator.pop(context);
-              _showClassCodeDialog(course['class_code'] ?? '', course['title'] ?? '');
-            }),
+            _buildOptionItem(
+              Icons.key_outlined,
+              'Show Class Code',
+              AppColors.primary,
+              () {
+                Navigator.pop(context);
+                _showClassCodeDialog(
+                  course['class_code'] ?? '',
+                  course['title'] ?? '',
+                );
+              },
+            ),
             // Changed: Removed Publish/Unpublish. Added Restore if archived.
             if (isArchived)
-              _buildOptionItem(Icons.restore_page_outlined, 'Restore Class', Colors.green, () async {
-                Navigator.pop(context);
-                await _supabase.from('courses').update({'is_archived': false, 'is_published': true}).eq('id', course['id']);
-                await _loadCourses();
-              })
+              _buildOptionItem(
+                Icons.restore_page_outlined,
+                'Restore Class',
+                Colors.green,
+                () async {
+                  Navigator.pop(context);
+                  await _supabase
+                      .from('courses')
+                      .update({'is_archived': false, 'is_published': true})
+                      .eq('id', course['id']);
+                  await _loadCourses();
+                },
+              )
             else
-              _buildOptionItem(Icons.archive_outlined, 'Archive Class', Colors.orange, () async {
+              _buildOptionItem(
+                Icons.archive_outlined,
+                'Archive Class',
+                Colors.orange,
+                () async {
+                  Navigator.pop(context);
+                  await _archiveCourse(course['id']);
+                },
+              ),
+            _buildOptionItem(
+              Icons.delete_outline,
+              'Delete Class',
+              AppColors.error,
+              () {
                 Navigator.pop(context);
-                await _archiveCourse(course['id']);
-              }),
-            _buildOptionItem(Icons.delete_outline, 'Delete Class', AppColors.error, () {
-              Navigator.pop(context);
-              _showDeleteConfirmation(course['id']); // Pass ID
-            }),
+                _showDeleteConfirmation(course['id']); // Pass ID
+              },
+            ),
           ],
         ),
       ),
@@ -608,18 +714,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     );
   }
 
-  Future<void> _togglePublish(Map<String, dynamic> course) async {
-    try {
-      await _supabase
-          .from('courses')
-          .update({'is_published': !(course['is_published'] ?? false)})
-          .eq('id', course['id']);
-      await _loadCourses();
-    } catch (e) {
-      debugPrint('Toggle error: $e');
-    }
-  }
-
   Future<void> _archiveCourse(String courseId) async {
     try {
       await _supabase
@@ -637,21 +731,35 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.surfaceColor,
-        title: Text('Delete Class?', style: TextStyle(color: context.textPrimary, fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to delete this class? All data will be lost permanently.', 
-          style: TextStyle(color: context.textSecondary)),
+        title: Text(
+          'Delete Class?',
+          style: TextStyle(
+            color: context.textPrimary,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Text(
+          'Are you sure you want to delete this class? All data will be lost permanently.',
+          style: TextStyle(color: context.textSecondary),
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context), 
-            child: Text('CANCEL', style: TextStyle(color: context.textSecondary))
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'CANCEL',
+              style: TextStyle(color: context.textSecondary),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () {
               Navigator.pop(context);
               _deleteCourse(courseId);
-            }, 
-            child: const Text('YES, DELETE', style: TextStyle(color: Colors.white))
+            },
+            child: const Text(
+              'YES, DELETE',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -719,34 +827,60 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   Widget _buildBackground() => Container(decoration: context.scaffoldGradient);
 
   Widget _buildTopBar() {
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Row(
         children: [
-          Image.asset(
-            'assets/images/app_name.png',
-            height: 28,
-            fit: BoxFit.contain,
-          ),
+          Image.asset('assets/images/app_name.png', height: 28, fit: BoxFit.contain),
           const Spacer(),
-          GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const NotificationsScreen(isInstructor: true),
-              ),
-            ),
+          
+          // ─── CORRECTED PRESSABLE NOTIFICATION BUTTON ───
+          PressableScale(
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  // Pass 'true' directly since this is the Instructor Dashboard
+                  builder: (_) => const NotificationsScreen(isInstructor: true), 
+                ),
+              );
+              // Clear badge when returning
+              if (mounted) setState(() => _hasUnreadNotifications = false);
+            },
+            scaleFactor: 0.94, 
+            opacityFactor: 0.6, 
             child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: context.cardColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: context.borderColor),
-              ),
-              child: Icon(
-                Icons.notifications_outlined,
-                color: context.isDark ? Colors.white : const Color(0xFF0D1B4B),
-                size: 22,
+              padding: const EdgeInsets.all(10),              
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(
+                    Icons.notifications_outlined,
+                    color: textColor,
+                    size: 25, 
+                  ),
+                  
+                  // ─── THE RED NOTIFICATION DOT ───
+                  if (_hasUnreadNotifications)
+                    Positioned(
+                      top: -1,
+                      right: -1,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: context.cardColor, 
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -756,11 +890,13 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   }
 
   Widget _buildFAB() {
-    return AnimatedBuilder(
-      animation: _glowAnimation,
-      builder: (context, child) => GestureDetector(
-        onTap: _showCreateCourseDialog,
-        child: Container(
+    return PressableScale(
+      onPressed: _showCreateCourseDialog,
+      scaleFactor: 0.94, // Deeper interaction for the small FAB
+      opacityFactor: 0.8,
+      child: AnimatedBuilder(
+        animation: _glowAnimation,
+        builder: (context, child) => Container(
           width: 56,
           height: 56,
           decoration: BoxDecoration(
@@ -1196,54 +1332,36 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     String label,
     Color color,
   ) {
-    // Interstellar Blue for Light Mode text, White for Dark Mode
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: context.cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: context.borderColor),
-          boxShadow: context.isDark
-              ? []
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+          color: color.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Icon with a soft background tint (Matches Student Side)
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, color: color, size: 22),
-            ),
+            Icon(icon, color: color, size: 20),
             const SizedBox(height: 12),
             Text(
               value,
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 24,
-                fontWeight: FontWeight.w700,
-                color: color,
+                fontWeight: FontWeight.w800,
+                color: textColor,
               ),
             ),
             Text(
-              label,
+              label.toUpperCase(),
               style: TextStyle(
                 fontFamily: 'Poppins',
-                fontSize: 11,
-                color: textColor.withValues(alpha: 0.6),
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: textColor.withValues(alpha: 0.4),
+                letterSpacing: 1.2,
               ),
             ),
           ],
@@ -1457,219 +1575,153 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   Widget _buildCourseCard(Map<String, dynamic> course, int index) {
     final gradient = _cardGradients[index % _cardGradients.length];
     final isPublished = course['is_published'] == true;
-    final enrolledCount = course['enrolled_count'] as int? ?? 0;
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: context.borderColor.withValues(alpha: 0.5)),
-        boxShadow: context.isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+    return PressableScale(
+      onPressed: () => context.push(
+        AppRoutes.courseDetail,
+        extra: {'course': course, 'isInstructor': true},
       ),
-      child: Column(
-        children: [
-          // ─── Header Gradient Section ───────────────────
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: gradient,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          // Course Code Badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              course['course_code'] ?? 'N/A',
-                              style: const TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Status Badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isPublished
-                                  ? Colors.green.withValues(alpha: 0.3)
-                                  : Colors.orange.withValues(alpha: 0.3),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              isPublished ? 'Published' : 'Draft',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: isPublished
-                                    ? Colors.greenAccent
-                                    : Colors.orange,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        course['title'] ?? '',
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+      scaleFactor: 0.98,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: context.cardColor,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: context.isDark
+              ? []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+        ),
+        child: Column(
+          children: [
+            Hero(
+              tag: 'course_header_${course['id']}',
+              child: Container(
+                height: 80,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: gradient,
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
                   ),
                 ),
-                GestureDetector(
-                  onTap: () => _showCourseOptions(course),
-                  child: const Icon(
-                    Icons.more_vert,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ─── Body Section ──────────────────────────────
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Row(
+                child: Row(
                   children: [
-                    Icon(
-                      Icons.people_outline,
-                      size: 16,
-                      color: textColor.withValues(alpha: 0.5),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$enrolledCount students enrolled',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 13,
-                        color: textColor.withValues(alpha: 0.7),
-                      ),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            course['course_code'] ?? 'CODE',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          isPublished ? 'PUBLISHED' : 'DRAFT',
+                          style: TextStyle(
+                            color: isPublished
+                                ? Colors.greenAccent
+                                : Colors.orangeAccent,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
                     ),
                     const Spacer(),
-                    // Class Code Chip (Blue tint)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E90FF).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: const Color(0xFF1E90FF).withValues(alpha: 0.3),
+                    PressableScale(
+                      onPressed: () => _showCourseOptions(course),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        child: const Icon(
+                          Icons.more_vert_rounded,
+                          color: Colors.white,
+                          size: 20,
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.key_outlined,
-                            size: 12,
-                            color: Color(0xFF1E90FF),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            course['class_code'] ?? '------',
-                            style: const TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF1E90FF),
-                              letterSpacing: 2,
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                // Manage Class Button
-                GestureDetector(
-                  onTap: () {
-                    context.push(
-                      AppRoutes.courseDetail,
-                      extra: {'course': course, 'isInstructor': true},
-                    );
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: gradient,
-                        begin: Alignment.centerLeft,
-                        end: Alignment.centerRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Manage Class',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          course['title'] ?? '',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: textColor,
+                            height: 1.2,
+                          ),
                         ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${course['enrolled_count'] ?? 0} students enrolled',
+                          style: TextStyle(
+                            color: textColor.withValues(alpha: 0.5),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      course['class_code'] ?? '---',
+                      style: const TextStyle(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        letterSpacing: 2,
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1949,15 +2001,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
 
   // ─── Profile Page ────────────────────────────────────────
   Widget _buildProfilePage() {
-    final user = _currentUser;
-    final titleColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
-      physics: const BouncingScrollPhysics(),
       child: Column(
         children: [
-          // ─── Header Profile Card ──────────────────────────
+          // Instructor Identity Card
           Container(
             padding: const EdgeInsets.all(24),
             width: double.infinity,
@@ -1967,9 +2016,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              borderRadius: BorderRadius.circular(
-                24,
-              ), // Matches student dashboard
+              borderRadius: BorderRadius.circular(28),
               boxShadow: [
                 BoxShadow(
                   color: const Color(0xFF7B2FBE).withValues(alpha: 0.3),
@@ -1980,12 +2027,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             ),
             child: Column(
               children: [
-                GestureDetector(
-                  onTap: () async {
+                PressableScale(
+                  onPressed: () async {
                     final updated = await Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => EditProfileScreen(user: user!),
+                        builder: (_) => EditProfileScreen(user: _currentUser!),
                       ),
                     );
                     if (updated == true) _loadUser();
@@ -1994,26 +2041,17 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                     alignment: Alignment.bottomRight,
                     children: [
                       CircleAvatar(
-                        radius: 45,
+                        radius: 48,
                         backgroundColor: Colors.white.withValues(alpha: 0.2),
-                        // Add this line to show the image from Supabase Storage
-                        backgroundImage:
-                            _currentUser?.avatarUrl != null &&
-                                _currentUser!.avatarUrl!.isNotEmpty
+                        backgroundImage: _currentUser?.avatarUrl != null
                             ? NetworkImage(_currentUser!.avatarUrl!)
                             : null,
-                        // Only show the letter if there is NO image
-                        child:
-                            _currentUser?.avatarUrl == null ||
-                                _currentUser!.avatarUrl!.isEmpty
+                        child: _currentUser?.avatarUrl == null
                             ? Text(
-                                (_currentUser?.name ?? 'I')
-                                    .substring(0, 1)
-                                    .toUpperCase(),
+                                (_currentUser?.name ?? 'I')[0].toUpperCase(),
                                 style: const TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.bold,
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.w800,
                                   color: Colors.white,
                                 ),
                               )
@@ -2036,188 +2074,157 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  user?.name ?? 'Instructor',
+                  _currentUser?.name ?? 'Instructor',
                   style: const TextStyle(
-                    fontFamily: 'Poppins',
                     fontSize: 22,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
                 Text(
-                  user?.email ?? '',
+                  _currentUser?.email ?? '',
                   style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 14,
-                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 13,
+                    color: Colors.white.withValues(alpha: 0.6),
                   ),
                 ),
                 const SizedBox(height: 16),
-
-                // ─── UPDATED INSTRUCTOR BADGE (No Emojis) ───
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+                    horizontal: 14,
+                    vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.school_rounded, color: Colors.white, size: 18),
-                      SizedBox(width: 8),
-                      Text(
-                        'Instructor',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
+                  child: const Text(
+                    'FACULTY INSTRUCTOR',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: 1.5,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-
-          const SizedBox(height: 16),
-
-          // ─── Stats Row ───────────────────────────────────
-          Row(
-            children: [
-              _buildStatCard(
-                Icons.auto_stories_rounded,
-                '${_courses.length}',
-                'Classes',
-                AppColors.primary,
-              ),
-              const SizedBox(width: 12),
-              _buildStatCard(
-                Icons.people_rounded,
-                '$_totalStudents',
-                'Students',
-                AppColors.accent,
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 16),
-
-          // ─── Settings List ────────────────────────────────
+          const SizedBox(height: 24),
+          // Unified Settings Area
           Container(
+            clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
-              color: context.cardColor,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: context.borderColor),
-              boxShadow: context.isDark
-                  ? []
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+              color: textColor.withValues(alpha: 0.03),
+              borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
               children: [
-                _buildSettingsItem(
+                _buildPremiumSettingsItem(
                   Icons.dark_mode_outlined,
                   'Dark Mode',
-                  trailing: Switch(
+                  trailing: _buildAnimatedToggle(
                     value: ref.watch(themeProvider) == ThemeMode.dark,
-                    onChanged: (_) =>
-                        ref.read(themeProvider.notifier).toggleTheme(),
-                    activeThumbColor: AppColors.primary,
+                    onTap: () => ref.read(themeProvider.notifier).toggleTheme(),
                   ),
                 ),
-                Divider(color: context.borderColor, height: 1),
-                _buildSettingsItem(
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Divider(
+                    height: 1,
+                    thickness: 0.5,
+                    color: context.borderColor.withValues(alpha: 0.5),
+                  ),
+                ),
+                _buildPremiumSettingsItem(
                   Icons.logout_rounded,
                   'Logout',
-                  color: AppColors.error,
+                  color: Colors.redAccent,
                   onTap: _logout,
+                  showChevron: false,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 32),
         ],
       ),
     );
   }
 
-  Widget _buildSettingsItem(
+  Widget _buildPremiumSettingsItem(
     IconData icon,
     String label, {
     Color? color,
     Widget? trailing,
     VoidCallback? onTap,
+    bool showChevron = true,
   }) {
-    final defaultColor = context.isDark
-        ? Colors.white
-        : const Color(0xFF0D1B4B);
-    final effectiveColor = color ?? defaultColor;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    return PressableScale(
+      onPressed: onTap,
+      scaleFactor: 0.98,
+      opacityFactor: 0.6,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        color: Colors.transparent,
         child: Row(
           children: [
-            Icon(icon, color: effectiveColor, size: 20),
-            const SizedBox(width: 12),
+            Icon(
+              icon,
+              color: color ?? textColor.withValues(alpha: 0.8),
+              size: 22,
+            ),
+            const SizedBox(width: 16),
             Expanded(
               child: Text(
                 label,
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 14,
-                  color: effectiveColor,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
+                  color: color ?? textColor,
                 ),
               ),
             ),
-            trailing ??
-                Icon(
-                  Icons.chevron_right,
-                  color: defaultColor.withValues(alpha: 0.3),
-                  size: 18,
-                ),
+            if (trailing != null) trailing,
+            if (trailing == null && showChevron)
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: textColor.withValues(alpha: 0.2),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildGlowEffect(Size size) => Positioned(
-    top: -60,
-    left: size.width * 0.5 - 120,
-    child: AnimatedBuilder(
-      animation: _glowAnimation,
-      builder: (context, child) => Container(
-        width: 240,
-        height: 240,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(
-                alpha: _glowAnimation.value * 0.5,
+  Widget _buildGlowEffect(Size size) {
+    return Positioned(
+      top: -60,
+      left: size.width * 0.5 - 120,
+      child: AnimatedBuilder(
+        animation: _glowAnimation,
+        builder: (context, child) => Container(
+          width: 240,
+          height: 240,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(
+                  alpha: _glowAnimation.value * 0.5,
+                ),
+                blurRadius: 100,
+                spreadRadius: 30,
               ),
-              blurRadius: 100,
-              spreadRadius: 30,
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _buildSheetField(
     String label,
@@ -2228,7 +2235,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     String? Function(String?)? validator,
   }) {
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-
     return TextFormField(
       controller: controller,
       maxLines: maxLines,
@@ -2237,44 +2243,16 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: TextStyle(
-          fontFamily: 'Poppins',
-          fontSize: 13,
-          color: textColor.withValues(alpha: 0.5),
-        ),
-        floatingLabelStyle: const TextStyle(
-          fontFamily: 'Poppins',
-          fontSize: 12,
-          color: AppColors.primary,
-          fontWeight: FontWeight.w600,
-        ),
-        hintStyle: TextStyle(
-          fontFamily: 'Poppins',
-          color: textColor.withValues(alpha: 0.2),
-          fontSize: 13,
-        ),
+        filled: true,
+        fillColor: context.cardColor,
         prefixIcon: Icon(
           icon,
           color: textColor.withValues(alpha: 0.3),
           size: 20,
         ),
-        filled: true,
-        fillColor: context.cardColor,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: context.borderColor),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: context.borderColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
         ),
       ),
     );
@@ -2284,4 +2262,43 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     0,
     (sum, item) => sum + (item['enrolled_count'] as int? ?? 0),
   );
+
+  Widget _buildAnimatedToggle({
+    required bool value,
+    required VoidCallback onTap,
+  }) {
+    return PressableScale(
+      onPressed: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        width: 48,
+        height: 26,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: value ? AppColors.primary : Colors.black12,
+          boxShadow: value
+              ? [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.4),
+                    blurRadius: 10,
+                  ),
+                ]
+              : [],
+        ),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 250),
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            width: 20,
+            height: 20,
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
