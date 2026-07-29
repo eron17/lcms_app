@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/router/app_router.dart';
 import 'package:lcms_app/presentation/courses/assignment_detail_screen.dart';
 import 'package:lcms_app/presentation/courses/post_detail_screen.dart';
+import 'package:lcms_app/presentation/courses/course_detail_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   final bool isInstructor;
@@ -98,20 +99,26 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _handleNotificationTap(Map<String, dynamic> notif) async {
-  final postId = notif['post_id'];
-  final courseId = notif['course_id'];
+    final postId = notif['post_id'];
+    final courseId = notif['course_id'];
 
-  if (postId == null || courseId == null) {
-    // If it's a general notification without a post link, just go to the course details
-    context.push(
-      AppRoutes.courseDetail, 
-      extra: {
-        'course': {'id': courseId}, 
-        'isInstructor': widget.isInstructor
-      }
-    );
-    return;
-  }
+    if (postId == null || courseId == null) {
+      // 1. FIXED: Correctly check for your 'student_joined' notification type
+      final isEnrollment = notif['type'] == 'student_joined';
+
+      // 2. Set the static variable to open the "People" tab (Index 2)
+      CourseDetailScreen.initialTabIndex = isEnrollment ? 2 : 0;
+
+      // 3. Navigate normally
+      context.push(
+        AppRoutes.courseDetail, 
+        extra: {
+          'course': {'id': courseId}, 
+          'isInstructor': widget.isInstructor,
+        }
+      );
+      return;
+    }
 
   // 1. Mark as read
   _markAsRead(notif['id']);

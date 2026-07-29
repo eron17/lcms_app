@@ -468,7 +468,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           'user_id': courseData['instructor_id'], // Teacher receives this
           'course_id': courseData['id'],
           'type': 'student_joined',
-          'title': 'Class Enrollment 👤',
+          'title': 'Class Enrollment',
           'body': '${_currentUser?.name ?? 'A student'} has joined ${courseData['title']}',
           'created_at': DateTime.now().toUtc().toIso8601String(),
         });
@@ -481,7 +481,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Successfully joined ${courseData['title']}! 🎉'),
+            content: Text('Successfully joined ${courseData['title']}!'),
             backgroundColor: Colors.green.shade700,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

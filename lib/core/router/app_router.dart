@@ -67,6 +67,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return CourseDetailScreen(
             course: extra['course'] as Map<String, dynamic>,
             isInstructor: extra['isInstructor'] as bool,
+            initialTab: extra['initialTab'] ?? 0,
           );
         },
       ),

@@ -18,11 +18,16 @@ import '../../shared/widgets/pressable_scale.dart';
 class CourseDetailScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> course;
   final bool isInstructor;
+  final int initialTab;
+
+
+  static int initialTabIndex = 0;
 
   const CourseDetailScreen({
     super.key,
     required this.course,
     required this.isInstructor,
+    this.initialTab = 0,
   });
 
   @override
@@ -32,10 +37,12 @@ class CourseDetailScreen extends ConsumerStatefulWidget {
 class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     with TickerProviderStateMixin {
   // ─── State ───────────────────────────────────────────────
-  int _currentTab = 0;
+  late int _currentTab;
   final _supabase = Supabase.instance.client;
   UserModel? _currentUser;
-
+  
+  Map<String, dynamic>? _localCourse;
+  Map<String, dynamic> get courseData => _localCourse ?? widget.course;
   // Stream data
   List<Map<String, dynamic>> _streamPosts = [];
   bool _isLoadingStream = true;
@@ -72,6 +79,31 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   @override
   void initState() {
     super.initState();
+    _currentTab = widget.initialTab; // Initialize the tab
+
+    _initializeData(); // Triggers self-loading if needed
+  }
+
+  Future<void> _initializeData() async {
+    // If we only have the ID (navigated from notification), fetch full course details first
+    if (widget.course['title'] == null) {
+      try {
+        final fullCourse = await _supabase
+            .from('courses')
+            .select()
+            .eq('id', widget.course['id'])
+            .single();
+        if (mounted) {
+          setState(() {
+            _localCourse = Map<String, dynamic>.from(fullCourse);
+          });
+        }
+      } catch (e) {
+        debugPrint('Error loading full course details: $e');
+      }
+    }
+
+    // Now safely load the rest of your course dependencies
     _loadCurrentUser();
     _loadStream();
     _loadCoursework();
@@ -107,9 +139,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     try {
       final data = await _supabase
           .from('posts')
-          // ─── THE FIX: Fetch post data AND comment count in one shot ───
           .select('*, users(name), comments:comments(count)')
-          .eq('course_id', widget.course['id'])
+          .eq('course_id', courseData['id']) // Changed from widget.course
           .order('created_at', ascending: false);
 
       if (mounted) {
@@ -128,19 +159,17 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       final topicsData = await _supabase
           .from('topics')
           .select()
-          .eq('course_id', widget.course['id'])
+          .eq('course_id', courseData['id']) // Changed from widget.course
           .order('order_index');
       final postsData = await _supabase
           .from('posts')
           .select('*, users(name)')
-          .eq('course_id', widget.course['id'])
+          .eq('course_id', courseData['id']) // Changed from widget.course
           .neq('type', 'announcement')
           .order('created_at', ascending: false);
 
       if (mounted) {
         setState(() {
-          // By using List.from, we ensure the UI sees a brand new list
-          // and stops showing the post in its old topic
           _topics = List<Map<String, dynamic>>.from(topicsData);
           _posts = List<Map<String, dynamic>>.from(postsData);
           _isLoadingCoursework = false;
@@ -153,24 +182,26 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   Future<void> _loadPeople() async {
     try {
+      final instructorId = courseData['instructor_id']; // Changed from widget.course
+      if (instructorId == null) return;
+
       // 1. Load Instructor Data
       final instructorData = await _supabase
           .from('users')
           .select()
-          .eq('id', widget.course['instructor_id'])
+          .eq('id', instructorId)
           .single();
 
       // 2. Load Enrollment Data AND the joined User data
       final enrollmentsData = await _supabase
           .from('enrollments')
           .select('users(*)')
-          .eq('course_id', widget.course['id']);
+          .eq('course_id', courseData['id']); // Changed from widget.course
 
       if (mounted) {
         setState(() {
           _instructor = instructorData;
 
-          // Filter out any null users to prevent crashes
           _students = enrollmentsData
               .where((e) => e['users'] != null)
               .map((e) => e['users'] as Map<String, dynamic>)
@@ -2064,11 +2095,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           if (widget.isInstructor)
             PressableScale(
               onPressed: () async {
-                // 1. Wait for the result from the settings screen
                 final bool? wasUpdated = await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => ClassSettingsScreen(course: widget.course),
+                    builder: (_) => ClassSettingsScreen(course: courseData), // CHANGED: widget.course -> courseData
                   ),
                 );
 
@@ -2102,23 +2132,20 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   Widget _buildCourseCard() {
     final gradientIndex =
-        (widget.course['title'] as String? ?? '').length %
+        (courseData['title'] as String? ?? '').length %
         _cardGradients.length;
     final gradient = _cardGradients[gradientIndex];
 
     return Container(
-      width: double
-          .infinity, // Ensures it matches the width of containers below it
-      margin: const EdgeInsets.only(bottom: 12), // Only vertical spacing
+      width: double.infinity, 
+      margin: const EdgeInsets.only(bottom: 12), 
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: gradient,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(
-          20,
-        ), // Standardized with announcement bar
+        borderRadius: BorderRadius.circular(20), 
         boxShadow: [
           BoxShadow(
             color: gradient[0].withValues(alpha: 0.35),
@@ -2156,7 +2183,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    widget.course['course_code'] ?? '',
+                    courseData['course_code'] ?? '', // CHANGED: widget.course -> courseData
                     style: const TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 12,
@@ -2168,7 +2195,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  widget.course['title'] ?? '',
+                  courseData['title'] ?? '', // CHANGED: widget.course -> courseData
                   style: const TextStyle(
                     fontFamily: 'Poppins',
                     fontSize: 20,
@@ -2189,7 +2216,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      widget.course['instructor_name'] ?? 'Instructor',
+                      courseData['instructor_name'] ?? 'Instructor', // CHANGED: widget.course -> courseData
                       style: const TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 13,
@@ -2215,7 +2242,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                           ),
                           const SizedBox(width: 5),
                           Text(
-                            '${widget.course['enrolled_count'] ?? 0}',
+                            '${courseData['enrolled_count'] ?? 0}', // CHANGED: widget.course -> courseData
                             style: const TextStyle(
                               fontFamily: 'Poppins',
                               fontSize: 12,
