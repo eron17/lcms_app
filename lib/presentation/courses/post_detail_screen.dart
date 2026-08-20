@@ -37,6 +37,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   bool _materialSaved = false;
   bool _assessmentSaved = false;
   String? _currentUserName;
+  String? _currentUserAvatarUrl;
   Timer? _refreshTimer;
   RealtimeChannel? _commentChannel;
 
@@ -48,7 +49,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     _checkAlreadySaved();
     _subscribeToComments();
 
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (mounted) setState(() {});
     });
   }
@@ -67,10 +68,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       if (userId == null) return;
       final data = await _supabase
           .from('users')
-          .select('name')
+          .select('name, avatar_url')
           .eq('id', userId)
           .single();
-      if (mounted) setState(() => _currentUserName = data['name']);
+      if (mounted) {
+        setState(() {
+          _currentUserName = data['name'];
+          _currentUserAvatarUrl = data['avatar_url'];
+        });
+      }
     } catch (e) {
       debugPrint('User load: $e');
     }
@@ -80,11 +86,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     try {
       final data = await _supabase
           .from('comments')
-          .select()
+          .select('*, users(avatar_url)')
           .eq('post_id', widget.post['id'])
           .order('created_at', ascending: true);
       if (mounted) {
-        setState(() => _comments = List<Map<String, dynamic>>.from(data));
+        setState(() {
+          _comments = List<Map<String, dynamic>>.from(data).map((c) {
+            return {
+              ...c,
+              'avatar_url': c['users']?['avatar_url'],
+            };
+          }).toList();
+        });
       }
     } catch (e) {
       debugPrint('Comments: $e');
@@ -711,17 +724,31 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: const Color(0xFFD6EBFF),
-              child: Text(
-                (comment['user_name'] as String? ?? 'U')[0].toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF007BFF),
-                ),
-              ),
+            Builder(
+              builder: (_) {
+                final url = comment['avatar_url'] as String?;
+                final name = comment['user_name'] as String? ?? 'U';
+                if (url != null && url.isNotEmpty) {
+                  return CircleAvatar(
+                    radius: 16,
+                    backgroundColor: const Color(0xFFD6EBFF),
+                    backgroundImage: NetworkImage(url),
+                    onBackgroundImageError: (_, __) {},
+                  );
+                }
+                return CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFFD6EBFF),
+                  child: Text(
+                    name[0].toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF007BFF),
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -831,17 +858,31 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       child: Row(
         children: [
           // ─── UPDATED: Consistent White/Light Blue Circle Avatar ───
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: const Color(0xFFD6EBFF), // Matches Assignment design
-            child: Text(
-              (_currentUserName ?? 'U')[0].toUpperCase(),
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF007BFF), // Matches Assignment design
-              ),
-            ),
+          Builder(
+            builder: (_) {
+              final url = _currentUserAvatarUrl;
+              final name = _currentUserName ?? 'U';
+              if (url != null && url.isNotEmpty) {
+                return CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFFD6EBFF),
+                  backgroundImage: NetworkImage(url),
+                  onBackgroundImageError: (_, __) {},
+                );
+              }
+              return CircleAvatar(
+                radius: 16,
+                backgroundColor: const Color(0xFFD6EBFF), // Matches Assignment design
+                child: Text(
+                  name[0].toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF007BFF), // Matches Assignment design
+                  ),
+                ),
+              );
+            },
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1076,77 +1117,77 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final isLive = status == 'live';
     final isUpcoming = status == 'upcoming';
 
-    // Tonal theme based on status
-    final Color themeColor = isLive
-        ? const Color(0xFF22C55E)
-        : (isUpcoming
-              ? AppColors.primary
-              : context.textPrimary.withOpacity(0.4));
+    Color btnColor;
+    IconData btnIcon;
+    String btnLabel;
+    String btnSub;
 
-    final IconData icon = isLive
-        ? Icons.videogame_asset_rounded
-        : Icons.view_in_ar_rounded;
+    if (isLive) {
+      btnColor = const Color(0xFF22C55E);
+      btnIcon = Icons.videogame_asset_rounded;
+      btnLabel = 'Join 3D Classroom';
+      btnSub = 'Session is live now';
+    } else if (isUpcoming) {
+      btnColor = Colors.grey;
+      btnIcon = Icons.videogame_asset_outlined;
+      btnLabel = '3D Meet Scheduled';
+      btnSub = 'Starts ${_formatScheduleTime(scheduledTime)}';
+    } else {
+      btnColor = Colors.grey;
+      btnIcon = Icons.videogame_asset_off_outlined;
+      btnLabel = 'Session Ended';
+      btnSub = _formatScheduleTime(scheduledTime);
+    }
 
     return GestureDetector(
       onTap: isLive
-          ? () => ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Launching 3D Classroom...')),
-            )
+          ? () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Launching 3D Classroom...'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
           : null,
       child: Container(
         width: double.infinity,
-        // Standard button height padding (12px-14px)
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: themeColor.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(12), // Sleek rounded corners
-          border: Border.all(color: themeColor.withOpacity(0.15), width: 1),
+          color: isLive ? btnColor : btnColor.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: isLive
               ? [
                   BoxShadow(
-                    color: themeColor.withOpacity(0.2),
-                    blurRadius: 8,
-                    offset: const Offset(0, 3),
+                    color: btnColor.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
                 ]
               : [],
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.center, // This centers the group
-          mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // 1. Icon on the left
-            Icon(icon, color: themeColor, size: 20),
-            const SizedBox(width: 12),
-
-            // 2. Text bundle (Title + Date)
+            Icon(btnIcon, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
             Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment
-                  .start, // Left align text relative to the icon
               children: [
                 Text(
-                  isLive
-                      ? 'Join 3D Classroom'
-                      : isUpcoming
-                      ? '3D Meet Scheduled'
-                      : 'Session Expired',
-                  style: TextStyle(
+                  btnLabel,
+                  style: const TextStyle(
                     fontFamily: 'Poppins',
+                    fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: themeColor,
+                    color: Colors.white,
                   ),
                 ),
                 Text(
-                  isLive
-                      ? 'The session is live now'
-                      : _formatScheduleTime(scheduledTime),
+                  btnSub,
                   style: TextStyle(
                     fontFamily: 'Poppins',
                     fontSize: 11,
-                    color: themeColor.withOpacity(0.6),
-                    fontWeight: FontWeight.w500,
+                    color: Colors.white.withValues(alpha: 0.85),
                   ),
                 ),
               ],

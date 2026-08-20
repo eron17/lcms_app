@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/router/app_router.dart';
 import 'package:lcms_app/presentation/courses/assignment_detail_screen.dart';
 import 'package:lcms_app/presentation/courses/post_detail_screen.dart';
+import 'package:lcms_app/presentation/courses/three_d_meet_detail_screen.dart';
 import 'package:lcms_app/presentation/courses/course_detail_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -25,6 +26,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _isLoading = true;
   RealtimeChannel? _channel;
   bool _hasUnreadNotifications = false;
+  String _activeFilter = 'all';
+  // Filter options: 'all', 'enrollment', 'comment', 'submission'
 
   @override
   void initState() {
@@ -63,21 +66,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _checkUnreadStatus() async {
-  try {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return;
-    
-    final count = await _supabase
-        .from('notifications')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('is_read', false); // Only select unread ones
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
 
-    if (mounted) {
-      setState(() => _hasUnreadNotifications = (count as List).isNotEmpty);
+      final count = await _supabase
+          .from('notifications')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('is_read', false); // Only select unread ones
+
+      if (mounted) {
+        setState(() => _hasUnreadNotifications = (count as List).isNotEmpty);
+      }
+    } catch (e) {
+      debugPrint('Badge check error: $e');
     }
-  } catch (e) { debugPrint('Badge check error: $e'); }
-}
+  }
 
   void _subscribeRealtime() {
     final userId = _supabase.auth.currentUser?.id;
@@ -111,78 +116,92 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
       // 3. Navigate normally
       context.push(
-        AppRoutes.courseDetail, 
+        AppRoutes.courseDetail,
         extra: {
-          'course': {'id': courseId}, 
+          'course': {'id': courseId},
           'isInstructor': widget.isInstructor,
-        }
+        },
       );
       return;
     }
 
-  // 1. Mark as read
-  _markAsRead(notif['id']);
+    // 1. Mark as read
+    _markAsRead(notif['id']);
 
-  // 2. SHOW LOADING SPINNER
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => const Center(
-      child: CircularProgressIndicator(color: Colors.white),
-    ),
-  );
+    // 2. SHOW LOADING SPINNER
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) =>
+          const Center(child: CircularProgressIndicator(color: Colors.white)),
+    );
 
-  try {
-    // 3. FETCH DATA FROM SUPABASE
-    final results = await Future.wait([
-      _supabase.from('posts').select('*, users(name)').eq('id', postId).single(),
-      _supabase.from('courses').select().eq('id', courseId).single(),
-    ]);
+    try {
+      // 3. FETCH DATA FROM SUPABASE
+      final results = await Future.wait([
+        _supabase
+            .from('posts')
+            .select('*, users(name)')
+            .eq('id', postId)
+            .single(),
+        _supabase.from('courses').select().eq('id', courseId).single(),
+      ]);
 
-    final postData = results[0];
-    final courseData = results[1];
+      final postData = results[0];
+      final courseData = results[1];
 
-    if (mounted) {
-      Navigator.pop(context); // Remove loading spinner
-    }
+      if (mounted) {
+        Navigator.pop(context); // Remove loading spinner
+      }
 
-    // 4. ROUTE TO THE CORRECT DETAIL SCREEN
-    if (postData['type'] == 'assignment') {
-      // Go to Assignment Details Screen
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => AssignmentDetailScreen(
-            post: postData,
-            course: courseData,
-            isInstructor: widget.isInstructor,
+      // 4. ROUTE TO THE CORRECT DETAIL SCREEN
+      if (postData['type'] == 'assignment') {
+        // Go to Assignment Details Screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AssignmentDetailScreen(
+              post: postData,
+              course: courseData,
+              isInstructor: widget.isInstructor,
+            ),
           ),
-        ),
-      );
-    } else {
-      // Go to Post Details Screen (Material, 3D Meet, Announcement)
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PostDetailScreen(
-            post: postData,
-            course: courseData,
-            isInstructor: widget.isInstructor,
+        );
+      } else if (postData['type'] == '3d_meet') {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ThreeDMeetDetailScreen(
+              post: postData,
+              course: courseData,
+              isInstructor: widget.isInstructor,
+            ),
           ),
-        ),
-      );
+        );
+      } else {
+        // Go to Post Details Screen (Material, Announcement)
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PostDetailScreen(
+              post: postData,
+              course: courseData,
+              isInstructor: widget.isInstructor,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Safety close spinner
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load post details: $e')),
+        );
+      }
+      debugPrint('Notification Navigation Error: $e');
     }
-  } catch (e) {
-    if (mounted) {
-      Navigator.pop(context); // Safety close spinner
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load post details: $e')),
-      );
-    }
-    debugPrint('Notification Navigation Error: $e');
   }
-}
-  
+
   Future<void> _markAsRead(String id) async {
     try {
       await _supabase
@@ -222,19 +241,64 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Future<void> _deleteNotification(String id) async {
-    try {
-      await _supabase.from('notifications').delete().eq('id', id);
-      if (mounted) {
-        setState(() => _notifications.removeWhere((n) => n['id'] == id));
-      }
-    } catch (e) {
-      debugPrint('Delete notif: $e');
-    }
-  }
-
   int get _unreadCount =>
       _notifications.where((n) => n['is_read'] == false).length;
+
+  // Notification `type` values are set when the row is inserted elsewhere
+  // in the app (course_detail_screen.dart, post_detail_screen.dart, etc.) —
+  // there is no generic 'enrollment'/'comment'/'submission' type, only the
+  // specific ones matched below.
+  List<Map<String, dynamic>> get _filteredNotifications {
+    if (_activeFilter == 'all') return _notifications;
+    return _notifications.where((n) {
+      final type = n['type'] as String? ?? '';
+      switch (_activeFilter) {
+        case 'enrollment':
+          return type == 'student_joined';
+        case 'comment':
+          return type == 'class_comment' || type == 'private_comment';
+        case 'submission':
+          return type == 'submission_received' || type == 'assignment_graded';
+        default:
+          return true;
+      }
+    }).toList();
+  }
+
+  Widget _buildFilterChip(String value, String label) {
+    final isActive = _activeFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _activeFilter = value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive
+              ? AppColors.primary
+              : context.isDark
+              ? const Color(0xFF111E3D)
+              : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive
+                ? AppColors.primary
+                : context.isDark
+                ? AppColors.darkBorder
+                : const Color(0xFFDDE3F0),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 12,
+            fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+            color: isActive ? Colors.white : context.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
 
   // --- REFINED BUILD METHOD ---
 
@@ -253,12 +317,29 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 // ─── PREMIUM TOP BAR ───
                 _buildTopBar(textColor),
 
+                // Filter chips row
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Row(
+                    children: [
+                      _buildFilterChip('all', 'All'),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('enrollment', 'Enrollment'),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('comment', 'Comments'),
+                      const SizedBox(width: 8),
+                      _buildFilterChip('submission', 'Submissions'),
+                    ],
+                  ),
+                ),
+
                 Expanded(
                   child: _isLoading
                       ? const Center(
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : _notifications.isEmpty
+                      : _filteredNotifications.isEmpty
                       ? _buildEmptyState(textColor)
                       : RefreshIndicator(
                           color: AppColors.primary,
@@ -268,9 +349,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               horizontal: 16,
                               vertical: 12,
                             ),
-                            itemCount: _notifications.length,
+                            itemCount: _filteredNotifications.length,
                             itemBuilder: (context, index) {
-                              final notif = _notifications[index];
+                              final notif = _filteredNotifications[index];
                               return _buildSwipeableNotification(
                                 notif,
                                 textColor,
@@ -340,128 +421,105 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     Map<String, dynamic> notif,
     Color textColor,
   ) {
-    final String id = notif['id'].toString();
     final bool isRead = notif['is_read'] == true;
     final String type = notif['type'] as String? ?? 'post';
     final Color typeColor = _getColor(type);
 
-    return Dismissible(
-      key: Key(id),
-      direction: DismissDirection.endToStart,
-      onDismissed: (_) {
-        HapticFeedback.mediumImpact();
-        _deleteNotification(id);
-      },
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        decoration: BoxDecoration(
-          color: Colors.redAccent.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: const Icon(
-          Icons.delete_outline_rounded,
-          color: Colors.redAccent,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: PressableScale(
-          onPressed: () => _handleNotificationTap(notif), 
-          scaleFactor: 0.98,
-          opacityFactor: 0.8,
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: isRead
-                  ? context.cardColor.withValues(alpha: 0.6)
-                  : context.cardColor,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: isRead
-                  ? []
-                  : [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Icon Badge
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: typeColor.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(_getIcon(type), color: typeColor, size: 22),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: PressableScale(
+        onPressed: () => _handleNotificationTap(notif),
+        scaleFactor: 0.98,
+        opacityFactor: 0.8,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isRead
+                ? context.cardColor.withValues(alpha: 0.6)
+                : context.cardColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: isRead
+                ? []
+                : [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Icon Badge
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: typeColor.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
                 ),
-                const SizedBox(width: 16),
-                // Text Content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        notif['title'] ?? '',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: isRead
-                              ? FontWeight.w600
-                              : FontWeight.w800,
-                          color: textColor,
-                        ),
+                child: Icon(_getIcon(type), color: typeColor, size: 22),
+              ),
+              const SizedBox(width: 16),
+              // Text Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      notif['title'] ?? '',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 14,
+                        fontWeight: isRead ? FontWeight.w600 : FontWeight.w800,
+                        color: textColor,
                       ),
-                      if (notif['body'] != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            notif['body'],
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 12,
-                              color: textColor.withValues(alpha: 0.5),
-                              height: 1.4,
-                            ),
+                    ),
+                    if (notif['body'] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          notif['body'],
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 12,
+                            color: textColor.withValues(alpha: 0.5),
+                            height: 1.4,
                           ),
                         ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _formatDate(notif['created_at']),
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: textColor.withValues(alpha: 0.3),
-                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _formatDate(notif['created_at']),
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: textColor.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Unread Indicator Pulse
+              if (!isRead)
+                Container(
+                  margin: const EdgeInsets.only(top: 4, left: 8),
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: typeColor,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: typeColor.withValues(alpha: 0.4),
+                        blurRadius: 6,
+                        spreadRadius: 2,
                       ),
                     ],
                   ),
                 ),
-                // Unread Indicator Pulse
-                if (!isRead)
-                  Container(
-                    margin: const EdgeInsets.only(top: 4, left: 8),
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: typeColor,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: typeColor.withValues(alpha: 0.4),
-                          blurRadius: 6,
-                          spreadRadius: 2,
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
+            ],
           ),
         ),
       ),
@@ -478,7 +536,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case '3d_meet_live':
         return Icons.videogame_asset_rounded;
       case 'milestone': // ─── ADD THIS ───
-        return Icons.emoji_events_rounded; 
+        return Icons.emoji_events_rounded;
       case 'student_joined':
         return Icons.person_add_alt_1_rounded;
       case 'submission_received':
@@ -503,7 +561,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'assignment_graded':
         return AppColors.primary; // Blue
       case 'milestone': // ─── ADD THIS ───
-        return AppColors.gold; 
+        return AppColors.gold;
       default:
         return AppColors.primary;
     }

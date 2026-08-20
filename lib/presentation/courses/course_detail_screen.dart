@@ -10,10 +10,72 @@ import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import '../../data/models/user_model.dart';
 import 'post_detail_screen.dart';
+import 'three_d_meet_detail_screen.dart';
 import 'assignment_detail_screen.dart';
 import 'class_settings_screen.dart';
 import 'dart:async';
 import '../../shared/widgets/pressable_scale.dart';
+
+const Map<String, List<String>> _cppKeywordCategories = {
+  'Control Flow': [
+    'for', 'while', 'do-while', 'if', 'else',
+    'switch', 'case', 'break', 'continue', 'return',
+  ],
+  'Data Types': [
+    'int', 'float', 'double', 'char', 'bool',
+    'string', 'long', 'short', 'void', 'auto',
+  ],
+  'OOP Concepts': [
+    'class', 'public', 'private', 'protected',
+    'virtual', 'override', 'static', 'this',
+    'new', 'delete', 'abstract',
+  ],
+  'Functions & Templates': [
+    'template', 'inline', 'operator',
+    'friend', 'explicit', 'typename',
+  ],
+  'Memory & Pointers': [
+    'pointer (*)', 'reference (&)',
+    'nullptr', 'malloc', 'free',
+  ],
+  'Exception Handling': [
+    'try', 'catch', 'throw',
+  ],
+  'STL / Libraries': [
+    'vector', 'array', 'map', 'set', 'stack',
+    'queue', 'cout', 'cin', 'endl',
+  ],
+  'Custom': [],
+};
+
+Widget _buildAvatar({
+  required String name,
+  String? avatarUrl,
+  double radius = 20,
+  double fontSize = 14,
+}) {
+  if (avatarUrl != null && avatarUrl.isNotEmpty) {
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+      backgroundImage: NetworkImage(avatarUrl),
+      onBackgroundImageError: (_, __) {},
+    );
+  }
+  return CircleAvatar(
+    radius: radius,
+    backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+    child: Text(
+      name.isNotEmpty ? name[0].toUpperCase() : '?',
+      style: TextStyle(
+        fontFamily: 'Poppins',
+        fontSize: fontSize,
+        fontWeight: FontWeight.w600,
+        color: AppColors.primary,
+      ),
+    ),
+  );
+}
 
 class CourseDetailScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> course;
@@ -289,6 +351,43 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       }
     } catch (e) {
       debugPrint('Remove student error: $e');
+    }
+  }
+
+  Future<void> _deleteTopic(String topicId) async {
+    try {
+      // Step 1: Update all posts belonging to this topic to have topic_id = null (General)
+      await _supabase
+          .from('posts')
+          .update({'topic_id': null})
+          .eq('topic_id', topicId);
+
+      // Step 2: Delete the actual Topic
+      await _supabase
+          .from('topics')
+          .delete()
+          .eq('id', topicId);
+
+      // Step 3: Refresh UI coursework list
+      await _loadCoursework();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Topic deleted successfully.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting topic: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
     }
   }
 
@@ -603,6 +702,28 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     String? assessmentName = existing?['assessment_name'];
     bool isUploadingMaterial = false;
     bool isUploadingAssessment = false;
+    final expectedOutputControllers = <TextEditingController>[];
+    final requiredKeywordControllers = <TextEditingController>[];
+    final forbiddenPatternControllers = <TextEditingController>[];
+
+    if (existing != null) {
+      if (existing['expected_output'] != null) {
+        final list = List<dynamic>.from(existing['expected_output']);
+        expectedOutputControllers.addAll(list.map((str) => TextEditingController(text: str.toString())));
+      }
+      if (existing['required_keywords'] != null) {
+        final list = List<dynamic>.from(existing['required_keywords']);
+        requiredKeywordControllers.addAll(list.map((str) => TextEditingController(text: str.toString())));
+      }
+      if (existing['forbidden_patterns'] != null) {
+        final list = List<dynamic>.from(existing['forbidden_patterns']);
+        forbiddenPatternControllers.addAll(list.map((str) => TextEditingController(text: str.toString())));
+      }
+    }
+
+    if (expectedOutputControllers.isEmpty) expectedOutputControllers.add(TextEditingController());
+    if (requiredKeywordControllers.isEmpty) requiredKeywordControllers.add(TextEditingController());
+    if (forbiddenPatternControllers.isEmpty) forbiddenPatternControllers.add(TextEditingController());
 
     final typeConfig = {
       '3d_meet': {
@@ -1066,6 +1187,44 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         const SizedBox(height: 24),
                       ],
 
+                      if (postType == '3d_meet') ...[
+                        const SizedBox(height: 16),
+                        const Divider(thickness: 0.5),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Grading Configuration',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildDynamicInputSection(
+                          title: 'Expected Output',
+                          hint: 'Expected print statement',
+                          controllers: expectedOutputControllers,
+                          setSheet: setSheet,
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildKeywordCategoryPicker(
+                          controllers: requiredKeywordControllers,
+                          setSheet: setSheet,
+                        ),
+                        const SizedBox(height: 16),
+
+                        _buildDynamicInputSection(
+                          title: 'Forbidden Patterns',
+                          hint: 'e.g. hardcoded values',
+                          controllers: forbiddenPatternControllers,
+                          setSheet: setSheet,
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+
                       // ─── Post Button with Strict Validation ───
                       SizedBox(
                         width: double.infinity,
@@ -1164,6 +1323,18 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                   try {
                                     final userId =
                                         _supabase.auth.currentUser?.id;
+                                    final expectedOutput = expectedOutputControllers
+                                        .map((c) => c.text.trim())
+                                        .where((text) => text.isNotEmpty)
+                                        .toList();
+                                    final requiredKeywords = requiredKeywordControllers
+                                        .map((c) => c.text.trim())
+                                        .where((text) => text.isNotEmpty)
+                                        .toList();
+                                    final forbiddenPatterns = forbiddenPatternControllers
+                                        .map((c) => c.text.trim())
+                                        .where((text) => text.isNotEmpty)
+                                        .toList();
                                     DateTime? finalScheduledTime;
                                     DateTime? finalAssignmentDueDate;
                                     String? targetPostId;
@@ -1208,9 +1379,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                             'material_name': materialName,
                                             'assessment_url': assessmentUrl,
                                             'assessment_name': assessmentName,
-                                            'scheduled_time': finalScheduledTime
-                                                ?.toUtc()
-                                                .toIso8601String(),
+                                            'scheduled_time': finalScheduledTime?.toUtc().toIso8601String(),
+                                            'expected_output': postType == '3d_meet' ? expectedOutput : null,
+                                            'required_keywords': postType == '3d_meet' ? requiredKeywords : null,
+                                            'forbidden_patterns': postType == '3d_meet' ? forbiddenPatterns : null,
                                             'duration_minutes':
                                                 postType == '3d_meet'
                                                 ? durationMinutes
@@ -1247,9 +1419,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                             'material_name': materialName,
                                             'assessment_url': assessmentUrl,
                                             'assessment_name': assessmentName,
-                                            'scheduled_time': finalScheduledTime
-                                                ?.toUtc()
-                                                .toIso8601String(),
+                                            'scheduled_time': finalScheduledTime?.toUtc().toIso8601String(),
+                                            'expected_output': postType == '3d_meet' ? expectedOutput : null,
+                                            'required_keywords': postType == '3d_meet' ? requiredKeywords : null,
+                                            'forbidden_patterns': postType == '3d_meet' ? forbiddenPatterns : null,
                                             'duration_minutes':
                                                 postType == '3d_meet'
                                                 ? durationMinutes
@@ -1778,9 +1951,180 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     );
   }
 
+   void _showTopicOptions(Map<String, dynamic> topic) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: context.surfaceColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.borderColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Topic: ${topic['title']}',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: context.textPrimary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            _buildOptionTile(
+              Icons.delete_outline,
+              'Delete Topic',
+              AppColors.error,
+              () {
+                Navigator.pop(context);
+                _showDeleteTopicConfirmation(topic);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 2. Alert Dialog warning pop-up
+  void _showDeleteTopicConfirmation(Map<String, dynamic> topic) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: context.surfaceColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: context.borderColor),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: AppColors.error,
+                size: 48,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Delete Topic?',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: context.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Are you sure you want to delete "${topic['title']}"? All posts inside this topic will be moved to General.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: context.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => Navigator.pop(context),
+                      child: Container(
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: context.cardColor,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: context.borderColor),
+                        ),
+                        child: Center(
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              color: context.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.error,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        minimumSize: const Size(double.infinity, 48),
+                        elevation: 0,
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        await _deleteTopic(topic['id']);
+                      },
+                      child: const Text(
+                        'Delete',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ════════════════════════════════════════════════════════
   // HELPERS
   // ════════════════════════════════════════════════════════
+
+  IconData _categoryIcon(String category) {
+    switch (category) {
+      case 'Control Flow':
+        return Icons.alt_route_rounded;
+      case 'Data Types':
+        return Icons.data_array_rounded;
+      case 'OOP Concepts':
+        return Icons.account_tree_rounded;
+      case 'Functions & Templates':
+        return Icons.functions_rounded;
+      case 'Memory & Pointers':
+        return Icons.memory_rounded;
+      case 'Exception Handling':
+        return Icons.warning_amber_rounded;
+      case 'STL / Libraries':
+        return Icons.library_books_rounded;
+      case 'Custom':
+        return Icons.edit_rounded;
+      default:
+        return Icons.code_rounded;
+    }
+  }
 
   String _getScheduleStatus(String? scheduledTime) {
     if (scheduledTime == null) return 'none';
@@ -1988,7 +2332,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                   (t) => DropdownMenuItem<String?>(
                     value: t['id'],
                     child: Text(
-                      '📁 ${t['title']}',
+                      '${t['title']}',
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         color: context.textPrimary,
@@ -2542,20 +2886,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 ),
                 child: Row(
                   children: [
-                    CircleAvatar(
+                    _buildAvatar(
+                      name: _currentUser?.name ?? 'I',
+                      avatarUrl: _currentUser?.avatarUrl,
                       radius: 18,
-                      backgroundColor: AppColors.accent.withValues(alpha: 0.15),
-                      child: Text(
-                        (_currentUser?.name ?? 'I')
-                            .substring(0, 1)
-                            .toUpperCase(),
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.accent,
-                        ),
-                      ),
+                      fontSize: 12,
                     ),
                     const SizedBox(width: 12),
                     Text(
@@ -2604,7 +2939,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         ? post['comments'][0]['count'] as int
         : 0;
 
-    return Padding(
+    return GestureDetector(
+      onLongPress: widget.isInstructor ? () => _showPostOptions(post) : null,
+      child: Padding(
       // ─── 1. FIX WIDTH ───
       // Removed horizontal 16px. Now it only uses the ListView's padding
       // to align perfectly with the top Course Card.
@@ -2615,6 +2952,12 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           MaterialPageRoute(
             builder: (_) => type == 'assignment'
                 ? AssignmentDetailScreen(
+                    post: post,
+                    course: widget.course,
+                    isInstructor: widget.isInstructor,
+                  )
+                : type == '3d_meet'
+                ? ThreeDMeetDetailScreen(
                     post: post,
                     course: widget.course,
                     isInstructor: widget.isInstructor,
@@ -2749,6 +3092,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -2906,6 +3250,20 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                     ),
                   ),
                   const SizedBox(width: 8),
+
+                  // ─── ADDED: Three-dots options menu for Topic deletion ───
+                  if (widget.isInstructor && topic != null) ...[
+                    GestureDetector(
+                      onTap: () => _showTopicOptions(topic), // Open options bottom sheet
+                      child: Icon(
+                        Icons.more_vert,
+                        color: textColor.withOpacity(0.4),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+
                   Icon(
                     isExpanded
                         ? Icons.keyboard_arrow_up_rounded
@@ -3196,18 +3554,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          CircleAvatar(
+          _buildAvatar(
+            name: name,
+            avatarUrl: user['avatar_url'] as String?,
             radius: 20,
-            backgroundColor: AppColors.primary.withOpacity(0.15),
-            child: Text(
-              name.substring(0, 1).toUpperCase(),
-              style: const TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
-            ),
+            fontSize: 14,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -3561,17 +3912,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                   ),
                 ),
               ),
-              CircleAvatar(
+              _buildAvatar(
+                name: user['name'] ?? 'U',
+                avatarUrl: user['avatar_url'] as String?,
                 radius: 18,
-                backgroundColor: rowColor.withValues(alpha: 0.1),
-                child: Text(
-                  (user['name'] as String? ?? 'U')[0].toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: rowColor,
-                  ),
-                ),
+                fontSize: 12,
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -3667,4 +4012,474 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       ),
     );
   }
+
+  Widget _buildDynamicInputSection({
+    required String title,
+    required String hint,
+    required List<TextEditingController> controllers,
+    required StateSetter setSheet,
+  }) {
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: textColor,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...controllers.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final controller = entry.value;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: controller,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      color: context.textPrimary,
+                      fontSize: 13,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '$hint ${idx + 1}',
+                      hintStyle: TextStyle(color: context.textHint, fontSize: 13),
+                      filled: true,
+                      fillColor: context.cardColor,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: context.borderColor),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (controllers.length > 1)
+                  GestureDetector(
+                    onTap: () {
+                      setSheet(() {
+                        controllers[idx].dispose();
+                        controllers.removeAt(idx);
+                      });
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.redAccent.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.remove_rounded, color: Colors.redAccent, size: 20),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }),
+        const SizedBox(height: 4),
+        GestureDetector(
+          onTap: () {
+            setSheet(() {
+              controllers.add(TextEditingController());
+            });
+          },
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add_rounded, color: AppColors.primary, size: 18),
+              SizedBox(width: 4),
+              Text(
+                'Add item',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildKeywordCategoryPicker({
+    required List<TextEditingController> controllers,
+    required StateSetter setSheet,
+  }) {
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Required Keywords',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: textColor,
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (controllers.any((c) => c.text.isNotEmpty)) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: controllers
+                .asMap()
+                .entries
+                .where((e) => e.value.text.isNotEmpty)
+                .map((entry) {
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.4),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      entry.value.text,
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => setSheet(() {
+                        controllers[entry.key].dispose();
+                        controllers.removeAt(entry.key);
+                        if (controllers.isEmpty) {
+                          controllers.add(TextEditingController());
+                        }
+                      }),
+                      child: const Icon(
+                        Icons.close_rounded,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
+        ],
+        GestureDetector(
+          onTap: () async {
+            final String? selectedCategory = await showModalBottomSheet<String>(
+              context: context,
+              backgroundColor: context.isDark
+                  ? const Color(0xFF0A1128)
+                  : Colors.white,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              builder: (ctx) => SafeArea(
+                child: DraggableScrollableSheet(
+                  initialChildSize: 0.6,
+                  minChildSize: 0.4,
+                  maxChildSize: 0.85,
+                  expand: false,
+                  builder: (ctx, scrollController) => Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: context.isDark
+                              ? AppColors.darkBorder
+                              : const Color(0xFFDDE3F0),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Select keyword category',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: context.isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0D1B4B),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView(
+                          controller: scrollController,
+                          children: [
+                            ..._cppKeywordCategories.keys.map((category) {
+                              return ListTile(
+                                leading: Icon(
+                                  _categoryIcon(category),
+                                  color: AppColors.primary,
+                                  size: 20,
+                                ),
+                                title: Text(
+                                  category,
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: context.isDark
+                                        ? Colors.white
+                                        : const Color(0xFF0D1B4B),
+                                  ),
+                                ),
+                                trailing: const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: AppColors.primary,
+                                  size: 20,
+                                ),
+                                onTap: () => Navigator.pop(ctx, category),
+                              );
+                            }),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+            if (selectedCategory == null) return;
+
+            if (selectedCategory == 'Custom') {
+              final customController = TextEditingController();
+              final custom = await showDialog<String>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  backgroundColor: context.isDark
+                      ? const Color(0xFF0A1128)
+                      : Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  title: Text(
+                    'Custom keyword',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: context.isDark
+                          ? Colors.white
+                          : const Color(0xFF0D1B4B),
+                    ),
+                  ),
+                  content: TextField(
+                    controller: customController,
+                    autofocus: true,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      color: context.isDark
+                          ? Colors.white
+                          : const Color(0xFF0D1B4B),
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'e.g. myFunction, NODE',
+                      hintStyle: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        color: context.textHint,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: AppColors.darkBorder,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          color: context.textHint,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () =>
+                          Navigator.pop(ctx, customController.text.trim()),
+                      child: const Text(
+                        'Add',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+              if (custom != null && custom.isNotEmpty) {
+                setSheet(() {
+                  final existing = controllers.map((c) => c.text).toList();
+                  if (!existing.contains(custom)) {
+                    controllers.add(TextEditingController(text: custom));
+                  }
+                });
+              }
+              return;
+            }
+
+            final keywords = _cppKeywordCategories[selectedCategory]!;
+            final alreadyAdded = controllers.map((c) => c.text).toList();
+            final String? selectedKeyword = await showModalBottomSheet<String>(
+              context: context,
+              backgroundColor: context.isDark
+                  ? const Color(0xFF0A1128)
+                  : Colors.white,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              builder: (ctx) => SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 12),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: context.isDark
+                            ? AppColors.darkBorder
+                            : const Color(0xFFDDE3F0),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => Navigator.pop(ctx),
+                            child: const Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              size: 18,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            selectedCategory,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: context.isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0D1B4B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ...keywords.map((kw) {
+                      final isAdded = alreadyAdded.contains(kw);
+                      return ListTile(
+                        title: Text(
+                          kw,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: isAdded
+                                ? context.textHint
+                                : context.isDark
+                                ? Colors.white
+                                : const Color(0xFF0D1B4B),
+                          ),
+                        ),
+                        trailing: isAdded
+                            ? const Icon(
+                                Icons.check_rounded,
+                                color: AppColors.success,
+                                size: 18,
+                              )
+                            : const Icon(
+                                Icons.add_rounded,
+                                color: AppColors.primary,
+                                size: 18,
+                              ),
+                        onTap: isAdded ? null : () => Navigator.pop(ctx, kw),
+                      );
+                    }),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            );
+            if (selectedKeyword != null) {
+              setSheet(() {
+                controllers.add(TextEditingController(text: selectedKeyword));
+              });
+            }
+          },
+          child: const Row(
+            children: [
+              Icon(Icons.add_circle_outline, color: AppColors.primary, size: 18),
+              SizedBox(width: 6),
+              Text(
+                'Add keyword',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 12,
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
 }

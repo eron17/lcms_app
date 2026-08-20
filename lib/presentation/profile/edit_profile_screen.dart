@@ -172,7 +172,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       final userId = _supabase.auth.currentUser?.id;
       final ext = _newPhotoFile!.path.split('.').last;
-      final fileName = 'avatar_$userId.$ext';
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'avatar_${userId}_$timestamp.$ext';
       final bytes = await _newPhotoFile!.readAsBytes();
       await _supabase.storage
           .from('avatars')
@@ -181,7 +182,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             bytes,
             fileOptions: const FileOptions(upsert: true),
           );
-      return _supabase.storage.from('avatars').getPublicUrl(fileName);
+      final rawUrl = _supabase.storage.from('avatars').getPublicUrl(fileName);
+      final cacheBust = DateTime.now().millisecondsSinceEpoch;
+      return '$rawUrl?v=$cacheBust';
     } catch (e) {
       debugPrint('Photo upload error: $e');
       return _avatarUrl;
@@ -197,13 +200,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
       final newAvatarUrl = await _uploadPhoto();
+      // Strip the cache-bust query param before saving to DB
+      // so the stored URL stays clean for other screens to use.
+      final cleanUrl = newAvatarUrl?.split('?').first;
       await _supabase
           .from('users')
           .update({
             'name': _nameController.text.trim(),
-            'avatar_url': newAvatarUrl,
+            'avatar_url': cleanUrl,
           })
           .eq('id', userId);
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

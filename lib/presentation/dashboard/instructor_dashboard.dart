@@ -11,6 +11,7 @@ import '../../core/constants/app_colors.dart';
 import 'dart:math';
 import '../profile/edit_profile_screen.dart';
 import '../notifications/notifications_screen.dart';
+import '../courses/assignment_detail_screen.dart';
 import 'package:flutter/services.dart';
 import '../../shared/widgets/pressable_scale.dart';
 
@@ -35,7 +36,20 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   final _searchController = TextEditingController();
   String _courseFilter = 'Active';
   bool _hasUnreadNotifications = false;
-  
+
+  // Reports drill-down state
+  Map<String, dynamic>? _selectedCourse;
+  Map<String, dynamic>? _selectedPost;
+  List<Map<String, dynamic>> _reportCourses = [];
+  List<Map<String, dynamic>> _reportPosts = [];
+  List<Map<String, dynamic>> _reportStudents = [];
+  bool _isLoadingReport = false;
+  String _studentFilter = 'all'; // 'all','graded','ungraded','no_sub'
+  int _reportTotalSubmissions = 0;
+  int _reportGraded = 0;
+  int _reportUngraded = 0;
+  int _reportNotSubmitted = 0;
+
   // ─── Animations ──────────────────────────────────────────
   late AnimationController _glowController;
   late Animation<double> _glowAnimation;
@@ -85,7 +99,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   // ─── Data Loading ────────────────────────────────────────
 
   Future<void> _loadData() async {
-    await Future.wait([_loadUser(), _loadCourses(), _loadPendingSubmissions()]);
+    await Future.wait([
+      _loadUser(),
+      _loadCourses(),
+      _loadPendingSubmissions(),
+      _loadReports(),
+    ]);
   }
 
   Future<void> _loadUser() async {
@@ -144,6 +163,211 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
       }
     } catch (e) {
       debugPrint('Submissions error: $e');
+    }
+  }
+
+  Future<void> _loadReports() async {
+    setState(() => _isLoadingReport = true);
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+
+      final courses = await _supabase
+          .from('courses')
+          .select('id, title, course_code, section')
+          .eq('instructor_id', userId)
+          .eq('is_archived', false)
+          .order('created_at');
+
+      int totalSub = 0, totalGraded = 0, totalUngraded = 0, totalNoSub = 0;
+
+      final enriched = <Map<String, dynamic>>[];
+      for (final course in courses) {
+        final enrollments = await _supabase
+            .from('enrollments')
+            .select('student_id')
+            .eq('course_id', course['id']);
+        final studentCount = enrollments.length;
+
+        final posts = await _supabase
+            .from('posts')
+            .select('id')
+            .eq('course_id', course['id'])
+            .inFilter('type', ['assignment', '3d_meet']);
+
+        int passCount = 0;
+        int gradedPosts = 0;
+
+        for (final post in posts) {
+          // submitted_at determines whether a row is an actual turn-in
+          // (vs. a draft with files attached but never submitted).
+          final subs = await _supabase
+              .from('submissions')
+              .select('is_graded, score, student_id, submitted_at')
+              .eq('assessment_id', post['id']);
+
+          final turnedIn =
+              subs.where((s) => s['submitted_at'] != null).toList();
+          final gradedSubs =
+              turnedIn.where((s) => s['is_graded'] == true).length;
+          final ungradedSubs =
+              turnedIn.where((s) => s['is_graded'] != true).length;
+          final passingSubs = turnedIn
+              .where((s) =>
+                  s['is_graded'] == true && (s['score'] as num? ?? 0) >= 75)
+              .length;
+          final noSubCount = studentCount - turnedIn.length;
+
+          totalSub += turnedIn.length;
+          totalGraded += gradedSubs;
+          totalUngraded += ungradedSubs;
+          totalNoSub += noSubCount < 0 ? 0 : noSubCount;
+
+          if (gradedSubs > 0) {
+            passCount += passingSubs;
+            gradedPosts++;
+          }
+        }
+
+        final passRate = studentCount > 0 && gradedPosts > 0
+            ? (passCount / (gradedPosts * studentCount) * 100).clamp(0, 100)
+            : 0.0;
+
+        enriched.add({
+          ...course,
+          'student_count': studentCount,
+          'pass_rate': passRate,
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          _reportCourses = enriched;
+          _reportTotalSubmissions = totalSub;
+          _reportGraded = totalGraded;
+          _reportUngraded = totalUngraded;
+          _reportNotSubmitted = totalNoSub;
+        });
+      }
+    } catch (e) {
+      debugPrint('Reports load error: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingReport = false);
+    }
+  }
+
+  Future<void> _loadLevel2(String courseId) async {
+    setState(() => _isLoadingReport = true);
+    try {
+      final enrollments = await _supabase
+          .from('enrollments')
+          .select('student_id')
+          .eq('course_id', courseId);
+      final studentCount = enrollments.length;
+
+      final posts = await _supabase
+          .from('posts')
+          .select('id, title, type, created_at')
+          .eq('course_id', courseId)
+          .inFilter('type', ['assignment', '3d_meet'])
+          .order('created_at', ascending: false);
+
+      final enriched = <Map<String, dynamic>>[];
+      for (final post in posts) {
+        final subs = await _supabase
+            .from('submissions')
+            .select('is_graded, student_id, submitted_at')
+            .eq('assessment_id', post['id']);
+
+        final turnedIn =
+            subs.where((s) => s['submitted_at'] != null).toList();
+        final gradedCount =
+            turnedIn.where((s) => s['is_graded'] == true).length;
+        final ungradedCount =
+            turnedIn.where((s) => s['is_graded'] != true).length;
+        final noSubCount =
+            (studentCount - turnedIn.length).clamp(0, studentCount);
+
+        enriched.add({
+          ...post,
+          'graded_count': gradedCount,
+          'ungraded_count': ungradedCount,
+          'no_sub_count': noSubCount,
+        });
+      }
+
+      if (mounted) setState(() => _reportPosts = enriched);
+    } catch (e) {
+      debugPrint('Level 2 report load error: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingReport = false);
+    }
+  }
+
+  Future<void> _loadLevel3(String postId) async {
+    setState(() => _isLoadingReport = true);
+    try {
+      final courseId = _selectedCourse!['id'] as String;
+
+      final enrollments = await _supabase
+          .from('enrollments')
+          .select('student_id, users(id, name, avatar_url)')
+          .eq('course_id', courseId);
+
+      // No 'status' column on submissions — status is derived below from
+      // submitted_at (turned in?) and is_graded, matching the same logic
+      // AssignmentDetailScreen uses (_submissionIsTurnedIn/_submissionHasFile).
+      final subs = await _supabase
+          .from('submissions')
+          .select('student_id, is_graded, score, submitted_at')
+          .eq('assessment_id', postId);
+
+      final subMap = {for (final s in subs) s['student_id']: s};
+
+      final students = <Map<String, dynamic>>[];
+      int graded = 0, ungraded = 0, noSub = 0;
+
+      for (final enrollment in enrollments) {
+        final userData = enrollment['users'] as Map<String, dynamic>?;
+        if (userData == null) continue;
+        final sid = userData['id'] as String;
+        final sub = subMap[sid];
+        final isTurnedIn = sub != null && sub['submitted_at'] != null;
+
+        String status;
+        if (!isTurnedIn) {
+          status = 'assigned';
+          noSub++;
+        } else if (sub['is_graded'] == true) {
+          status = 'graded';
+          graded++;
+        } else {
+          status = 'turned_in';
+          ungraded++;
+        }
+
+        students.add({
+          'id': sid,
+          'name': userData['name'] ?? '',
+          'avatar_url': userData['avatar_url'],
+          'status': status,
+          'score': sub?['score'],
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          _reportStudents = students;
+          _reportGraded = graded;
+          _reportUngraded = ungraded;
+          _reportNotSubmitted = noSub;
+          _studentFilter = 'all';
+        });
+      }
+    } catch (e) {
+      debugPrint('Level 3 report load error: $e');
+    } finally {
+      if (mounted) setState(() => _isLoadingReport = false);
     }
   }
 
@@ -961,7 +1185,10 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         children: List.generate(items.length, (index) {
           final isActive = _currentIndex == index;
           return GestureDetector(
-            onTap: () => setState(() => _currentIndex = index),
+            onTap: () {
+              setState(() => _currentIndex = index);
+              if (index == 2) _loadReports();
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1772,151 +1999,669 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
 
   // ─── Reports Page ────────────────────────────────────────
   Widget _buildReportsPage() {
-    final titleColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    if (_selectedPost != null) return _buildLevel3();
+    if (_selectedCourse != null) return _buildLevel2();
+    return _buildLevel1();
+  }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+  // ── LEVEL 1: All classes overview ─────────────────────────────
+  Widget _buildLevel1() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            'Reports',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: context.isDark ? Colors.white : const Color(0xFF0D1B4B),
+            ),
+          ),
+        ),
+        // Stat cards
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 10,
+            mainAxisSpacing: 10,
+            childAspectRatio: 2.2,
+            children: [
+              _reportStatCard('Total', _reportTotalSubmissions, AppColors.primary),
+              _reportStatCard('Graded', _reportGraded, AppColors.success),
+              _reportStatCard('Ungraded', _reportUngraded, const Color(0xFFF97316)),
+              _reportStatCard('No submission', _reportNotSubmitted, AppColors.error),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            'TAP A CLASS TO VIEW',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+              color: AppColors.primary,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: _isLoadingReport
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary))
+              : _reportCourses.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No classes yet',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          color: context.textHint,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                      itemCount: _reportCourses.length,
+                      itemBuilder: (_, i) =>
+                          _buildCourseReportCard(_reportCourses[i]),
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _reportStatCard(String label, int value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: context.isDark ? const Color(0xFF111E3D) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: context.isDark
+              ? AppColors.darkBorder
+              : const Color(0xFFDDE3F0),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // ─── Main Title (Replaced Emoji) ──────────────────
-          Row(
-            children: [
-              const Icon(
-                Icons.analytics_rounded,
-                color: AppColors.primary,
-                size: 24,
+          Text(
+            value.toString(),
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 10,
+              color: context.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCourseReportCard(Map<String, dynamic> course) {
+    final passRate = (course['pass_rate'] as num?)?.toInt() ?? 0;
+    final studentCount = (course['student_count'] as int?) ?? 0;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _selectedCourse = course);
+        _loadLevel2(course['id']);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: context.isDark ? const Color(0xFF111E3D) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: context.isDark
+                ? AppColors.darkBorder
+                : const Color(0xFFDDE3F0),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    course['title'] ?? '',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: context.isDark
+                          ? Colors.white
+                          : const Color(0xFF0D1B4B),
+                    ),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '$passRate% pass',
+                    style: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.success,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: passRate / 100,
+                backgroundColor: context.isDark
+                    ? const Color(0xFF1E2D5A)
+                    : const Color(0xFFEEF2FF),
+                valueColor: const AlwaysStoppedAnimation(AppColors.success),
+                minHeight: 5,
               ),
-              const SizedBox(width: 10),
-              Text(
-                'Reports',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: titleColor,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '$studentCount students',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 11,
+                color: context.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── LEVEL 2: Assignments of selected class ─────────────────────
+  Widget _buildLevel2() {
+    final course = _selectedCourse!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Back header
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 12, 16, 0),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: () => setState(() => _selectedCourse = null),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    size: 18, color: AppColors.primary),
+              ),
+              Expanded(
+                child: Text(
+                  course['title'] ?? '',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: context.isDark
+                        ? Colors.white
+                        : const Color(0xFF0D1B4B),
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 24),
-
-          // ─── Students Per Section ───────────────────────
-          _buildSectionHeader(
-            'Students Per Section',
-            icon: Icons.groups_rounded,
+        ),
+        // Breadcrumb
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: const Border(
+                left: BorderSide(color: AppColors.primary, width: 3),
+              ),
+            ),
+            child: Text(
+              '${course['course_code'] ?? ''} · ${course['section'] ?? ''}',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 12,
+                color: context.textSecondary,
+              ),
+            ),
           ),
-          const SizedBox(height: 12),
-
-          _courses.isEmpty
-              ? _buildEmptyReportState('No classes created yet.')
-              : Column(
-                  children: _courses.asMap().entries.map((entry) {
-                    final course = entry.value;
-                    final index = entry.key;
-                    final count = course['enrolled_count'] as int? ?? 0;
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: context.cardColor,
-                        borderRadius: BorderRadius.circular(
-                          20,
-                        ), // Matches system theme
-                        border: Border.all(color: context.borderColor),
-                        boxShadow: context.isDark
-                            ? []
-                            : [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.04),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  course['title'] ?? '',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: titleColor,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              Text(
-                                '$count students',
-                                style: const TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: LinearProgressIndicator(
-                              value: count > 0
-                                  ? (count / 50).clamp(0.0, 1.0)
-                                  : 0,
-                              backgroundColor: context.isDark
-                                  ? Colors.white.withValues(alpha: 0.05)
-                                  : Colors.grey.withValues(alpha: 0.1),
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                _cardGradients[index %
-                                    _cardGradients.length][1],
-                              ),
-                              minHeight: 8,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Compare with your physical masterlist to find missing students',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 11,
-                              color: titleColor.withValues(alpha: 0.4),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
-
-          const SizedBox(height: 32),
-
-          // ─── Pending Submissions ────────────────────────
-          _buildSectionHeader(
-            'Pending Submissions',
-            icon: Icons.pending_actions_rounded,
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+            'TAP AN ASSIGNMENT',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+              color: AppColors.primary,
+            ),
           ),
-          const SizedBox(height: 12),
+        ),
+        Expanded(
+          child: _isLoadingReport
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary))
+              : _reportPosts.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No assignments yet',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          color: context.textHint,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                      itemCount: _reportPosts.length,
+                      itemBuilder: (_, i) =>
+                          _buildPostReportCard(_reportPosts[i]),
+                    ),
+        ),
+      ],
+    );
+  }
 
-          _pendingSubmissions.isEmpty
-              ? _buildEmptySubmissionsState()
-              : Column(
-                  children: _pendingSubmissions
-                      .map((s) => _buildPendingSubmissionCard(s))
-                      .toList(),
+  Widget _buildPostReportCard(Map<String, dynamic> post) {
+    final graded = (post['graded_count'] as int?) ?? 0;
+    final ungraded = (post['ungraded_count'] as int?) ?? 0;
+    final noSub = (post['no_sub_count'] as int?) ?? 0;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _selectedPost = post);
+        _loadLevel3(post['id']);
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: context.isDark ? const Color(0xFF111E3D) : Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: context.isDark
+                ? AppColors.darkBorder
+                : const Color(0xFFDDE3F0),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    post['title'] ?? '',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: context.isDark
+                          ? Colors.white
+                          : const Color(0xFF0D1B4B),
+                    ),
+                  ),
                 ),
-
-          const SizedBox(height: 100),
-        ],
+                const Icon(Icons.chevron_right_rounded,
+                    color: AppColors.primary, size: 20),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${post['type'] ?? 'assignment'} · ${_formatPostDate(post['created_at'])}',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 11,
+                color: context.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              children: [
+                _miniChip('$graded graded', AppColors.success),
+                _miniChip('$ungraded ungraded', const Color(0xFFF97316)),
+                _miniChip('$noSub no sub', context.textHint),
+              ],
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _miniChip(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  // ── LEVEL 3: Students for selected assignment ──────────────────
+  Widget _buildLevel3() {
+    final post = _selectedPost!;
+    final filtered = _reportStudents.where((s) {
+      if (_studentFilter == 'all') return true;
+      if (_studentFilter == 'graded') return s['status'] == 'graded';
+      if (_studentFilter == 'ungraded') return s['status'] == 'turned_in';
+      if (_studentFilter == 'no_sub') {
+        return s['status'] == 'assigned' || s['status'] == null;
+      }
+      return true;
+    }).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 12, 16, 0),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: () => setState(() => _selectedPost = null),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                    size: 18, color: AppColors.primary),
+              ),
+              Expanded(
+                child: Text(
+                  post['title'] ?? '',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: context.isDark
+                        ? Colors.white
+                        : const Color(0xFF0D1B4B),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Assignment breadcrumb
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF97316).withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: const Border(
+                left: BorderSide(color: Color(0xFFF97316), width: 3),
+              ),
+            ),
+            child: Text(
+              '${_selectedCourse?['title'] ?? ''} · ${post['type'] ?? 'assignment'}',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 12,
+                color: context.textSecondary,
+              ),
+            ),
+          ),
+        ),
+        // Mini stat row
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: Row(
+            children: [
+              Expanded(
+                child: _reportStatCard(
+                    'Graded', _reportGraded, AppColors.success),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _reportStatCard(
+                    'Ungraded', _reportUngraded, const Color(0xFFF97316)),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _reportStatCard(
+                    'No sub', _reportNotSubmitted, AppColors.error),
+              ),
+            ],
+          ),
+        ),
+        // Filter chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+          child: Row(
+            children: [
+              _filterChip('All', 'all'),
+              const SizedBox(width: 8),
+              _filterChip('Graded', 'graded'),
+              const SizedBox(width: 8),
+              _filterChip('Ungraded', 'ungraded'),
+              const SizedBox(width: 8),
+              _filterChip('No submission', 'no_sub'),
+            ],
+          ),
+        ),
+        // Student list
+        Expanded(
+          child: _isLoadingReport
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary))
+              : filtered.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No students found',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          color: context.textHint,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) =>
+                          _buildStudentReportRow(filtered[i]),
+                    ),
+        ),
+      ],
+    );
+  }
+
+  Widget _filterChip(String label, String value) {
+    final isActive = _studentFilter == value;
+    return GestureDetector(
+      onTap: () => setState(() => _studentFilter = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: isActive
+              ? AppColors.primary
+              : context.isDark
+                  ? const Color(0xFF111E3D)
+                  : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive
+                ? AppColors.primary
+                : context.isDark
+                    ? AppColors.darkBorder
+                    : const Color(0xFFDDE3F0),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 12,
+            fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+            color: isActive ? Colors.white : context.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStudentReportRow(Map<String, dynamic> student) {
+    final status = student['status'] as String? ?? 'assigned';
+    final isGraded = status == 'graded';
+    final isTurnedIn = status == 'turned_in';
+
+    Color statusColor;
+    String statusLabel;
+    if (isGraded) {
+      statusColor = AppColors.success;
+      statusLabel = 'Graded';
+    } else if (isTurnedIn) {
+      statusColor = const Color(0xFFF97316);
+      statusLabel = 'Ungraded';
+    } else {
+      statusColor = context.textHint;
+      statusLabel = 'No submission';
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AssignmentDetailScreen(
+              post: _selectedPost!,
+              course: _selectedCourse!,
+              isInstructor: true,
+              targetStudentId: student['id'],
+            ),
+          ),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: context.isDark ? const Color(0xFF111E3D) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: context.isDark
+                ? AppColors.darkBorder
+                : const Color(0xFFDDE3F0),
+          ),
+        ),
+        child: Row(
+          children: [
+            Builder(builder: (_) {
+              final url = student['avatar_url'] as String?;
+              final name = student['name'] ?? 'S';
+              if (url != null && url.isNotEmpty) {
+                return CircleAvatar(
+                  radius: 18,
+                  backgroundImage: NetworkImage(url),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                  onBackgroundImageError: (_, __) {},
+                );
+              }
+              return CircleAvatar(
+                radius: 18,
+                backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                child: Text(
+                  name[0].toUpperCase(),
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                student['name'] ?? '',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: context.isDark
+                      ? Colors.white
+                      : const Color(0xFF0D1B4B),
+                ),
+              ),
+            ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                statusLabel,
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: statusColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatPostDate(String? dateStr) {
+    if (dateStr == null) return '';
+    try {
+      final dt = DateTime.parse(dateStr).toLocal();
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${months[dt.month - 1]} ${dt.day}';
+    } catch (_) {
+      return '';
+    }
   }
 
   // ─── Empty State Helpers ─────────────────────────────────

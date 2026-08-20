@@ -13,12 +13,14 @@ class AssignmentDetailScreen extends StatefulWidget {
   final Map<String, dynamic> post;
   final Map<String, dynamic> course;
   final bool isInstructor;
+  final String? targetStudentId;
 
   const AssignmentDetailScreen({
     super.key,
     required this.post,
     required this.course,
     required this.isInstructor,
+    this.targetStudentId,
   });
 
   @override
@@ -249,7 +251,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       // This joins the enrollments and users tables automatically
       final enrollmentsData = await _supabase
           .from('enrollments')
-          .select('student_id, users(id, name)')
+          .select('student_id, users(id, name, avatar_url)')
           .eq('course_id', widget.course['id']);
 
       final List<Map<String, dynamic>> studentsList = (enrollmentsData as List)
@@ -280,6 +282,16 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           if (_selectedStudent != null) {
             _selectedSubmission =
                 _submissions[_selectedStudent!['id'].toString()];
+          } else if (widget.targetStudentId != null) {
+            // Jump straight to the requested student's grading view
+            // (e.g. navigated here from the Reports drill-down).
+            for (final s in studentsList) {
+              if (s['id'].toString() == widget.targetStudentId) {
+                _selectedStudent = s;
+                _selectedSubmission = submissionsMap[s['id'].toString()];
+                break;
+              }
+            }
           }
 
           _isLoadingStudents = false;
@@ -741,28 +753,64 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   Future<void> _unsubmitWork() async {
     if (_mySubmission == null) return;
 
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.isDark
+            ? const Color(0xFF0A1128)
+            : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Unsubmit work?',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: const Text(
+          'Your submission will be withdrawn. You can re-upload and turn in again.',
+          style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                color: context.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Unsubmit',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     setState(() => _isUploadingWork = true); // Show loading spinner
     try {
       // 1. Update Supabase
-      final response = await _supabase
+      await _supabase
           .from('submissions')
           .update({'submitted_at': null}) // Clear the turned-in timestamp
-          .eq('id', _mySubmission!['id'])
-          .select()
-          .single();
+          .eq('id', _mySubmission!['id']);
 
-      // 2. Immediately update local state so the button changes to "Turn in"
+      // 2. Reload from the database so the file lists/status are decoded correctly
+      await _loadMySubmission();
+
       if (mounted) {
-        setState(() {
-          _mySubmission = Map<String, dynamic>.from(response);
-          // Explicitly clear these to match the "unsubmitted" state
-          _myWorkFileUrls = _mySubmission?['file_url'];
-          _myWorkFileNames = _mySubmission?['file_name'];
-        });
-
-        // 3. Double-check with a fresh database reload
-        await _loadMySubmission();
-
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Unsubmitted. You can now edit your work.'),
@@ -1547,6 +1595,40 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
             ),
             child: Column(
               children: [
+                if (!canSubmit && !_hasTurnedIn)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.error.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.lock_outline_rounded,
+                            color: AppColors.error,
+                            size: 16,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Submissions are closed. Contact your instructor.',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 12,
+                                color: AppColors.error,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (_isYourWorkExpanded &&
                     canSubmit &&
                     !_hasTurnedIn &&
@@ -2432,18 +2514,32 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         },
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: CircleAvatar(
-            radius: 22,
-            backgroundColor: AppColors.primary.withOpacity(0.15),
-            child: Text(
-              (student['name'] as String).substring(0, 1).toUpperCase(),
-              style: const TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primary,
-              ),
-            ),
+          leading: Builder(
+            builder: (_) {
+              final url = student['avatar_url'] as String?;
+              final name = student['name'] as String? ?? 'S';
+              if (url != null && url.isNotEmpty) {
+                return CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppColors.primary.withOpacity(0.15),
+                  backgroundImage: NetworkImage(url),
+                  onBackgroundImageError: (_, __) {},
+                );
+              }
+              return CircleAvatar(
+                radius: 22,
+                backgroundColor: AppColors.primary.withOpacity(0.15),
+                child: Text(
+                  name.substring(0, 1).toUpperCase(),
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              );
+            },
           ),
           title: Text(
             student['name'] ?? '',
@@ -2504,22 +2600,36 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               children: [
                 Row(
                   children: [
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: AppColors.primary.withValues(
-                        alpha: 0.15,
-                      ),
-                      child: Text(
-                        (student['name'] as String)
-                            .substring(0, 1)
-                            .toUpperCase(),
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                        ),
-                      ),
+                    Builder(
+                      builder: (_) {
+                        final url = student['avatar_url'] as String?;
+                        final name = student['name'] as String? ?? 'S';
+                        if (url != null && url.isNotEmpty) {
+                          return CircleAvatar(
+                            radius: 24,
+                            backgroundColor: AppColors.primary.withValues(
+                              alpha: 0.15,
+                            ),
+                            backgroundImage: NetworkImage(url),
+                            onBackgroundImageError: (_, __) {},
+                          );
+                        }
+                        return CircleAvatar(
+                          radius: 24,
+                          backgroundColor: AppColors.primary.withValues(
+                            alpha: 0.15,
+                          ),
+                          child: Text(
+                            name.substring(0, 1).toUpperCase(),
+                            style: const TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(width: 12),
                     Expanded(
