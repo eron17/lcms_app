@@ -387,6 +387,18 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       }
     } catch (e) {
       debugPrint('Remove student error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to remove student: $e',
+              style: const TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -941,7 +953,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                           onTap: () async {
                             final result = await FilePicker.platform.pickFiles(
                               type: FileType.custom,
-                              allowedExtensions: ['pdf'],
+                              allowedExtensions: [
+                                'pdf', 'doc', 'docx',
+                                'xls', 'xlsx',
+                                'ppt', 'pptx',
+                              ],
                             );
                             if (result == null) return;
                             setSheet(() => isUploadingAssessment = true);
@@ -1742,6 +1758,22 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                   } catch (e) {
                                     setSheet(() => isPosting = false);
                                     debugPrint('Error posting: $e');
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Failed to post: $e',
+                                            style: const TextStyle(
+                                              fontFamily: 'Poppins',
+                                            ),
+                                          ),
+                                          backgroundColor: AppColors.error,
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    }
                                   }
                                 },
                           child: isPosting
@@ -2627,6 +2659,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isArchived = widget.course['is_archived'] == true;
     final pages = [
       _buildStreamTab(),
       _buildCourseworkTab(),
@@ -2648,7 +2681,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             ),
           ),
           // ─── Expanded FAB (Coursework, instructor only) ─
-          if (widget.isInstructor && _currentTab == 1) _buildExpandedFAB(),
+          if (widget.isInstructor && _currentTab == 1 && !isArchived)
+            _buildExpandedFAB(),
         ],
       ),
       bottomNavigationBar: _buildBottomNav(),
@@ -3104,17 +3138,51 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       );
     }
 
+    final isArchived = widget.course['is_archived'] == true;
+
     return RefreshIndicator(
       color: AppColors.primary,
       onRefresh: _loadStream,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
         children: [
+          // ─── Archived banner ───
+          if (isArchived)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.error.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.archive_rounded,
+                    color: AppColors.error,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'This class is archived. Content is read-only.',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Course card in Stream only
           _buildCourseCard(),
 
           // Instructor: Create Announcement button
-          if (widget.isInstructor) ...[
+          if (widget.isInstructor && !isArchived) ...[
             GestureDetector(
               onTap: () => _showAnnouncementDialog(),
               child: Container(

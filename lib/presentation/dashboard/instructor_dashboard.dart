@@ -1388,7 +1388,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
           const SizedBox(height: 24),
 
           // ─── Sections Overview ───
-          if (_courses.isNotEmpty) ...[
+          if (_courses.any((c) => c['is_archived'] != true)) ...[
             _buildSectionHeader(
               'Sections Overview',
               icon: Icons.analytics_outlined,
@@ -1405,6 +1405,9 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   }
 
   Widget _buildSectionsOverview() {
+    final activeCourses = _courses
+        .where((c) => c['is_archived'] != true)
+        .toList();
     return Container(
       decoration: BoxDecoration(
         color: context.cardColor,
@@ -1412,7 +1415,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         border: Border.all(color: context.borderColor),
       ),
       child: Column(
-        children: _courses.asMap().entries.map((entry) {
+        children: activeCourses.asMap().entries.map((entry) {
           final course = entry.value;
           final index = entry.key;
           final count = course['enrolled_count'] as int? ?? 0;
@@ -1420,7 +1423,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
           return Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              border: index < _courses.length - 1
+              border: index < activeCourses.length - 1
                   ? Border(bottom: BorderSide(color: context.borderColor))
                   : null,
             ),

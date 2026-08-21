@@ -123,10 +123,15 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           .eq('student_id', userId);
       if (mounted) {
         setState(() {
-          _enrolledCourses = List<Map<String, dynamic>>.from(
+          _allCourses = List<Map<String, dynamic>>.from(
             data.map((e) => e['courses'] as Map<String, dynamic>),
           );
-          _allCourses = _enrolledCourses;
+          // My Classes / leaderboard filter should not surface archived
+          // classes; the Active/Archived toggle in _buildCoursesPage still
+          // reads the unfiltered _allCourses list.
+          _enrolledCourses = _allCourses
+              .where((c) => c['is_archived'] != true)
+              .toList();
           _isLoadingCourses = false;
         });
       }
@@ -155,7 +160,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
         if ((enrollments as List).isEmpty) {
           final selfData = await _supabase
               .from('users')
-              .select('id, name, xp, level')
+              .select('id, name, xp, level, avatar_url')
               .eq('id', userId)
               .single();
           if (mounted) {
@@ -180,18 +185,49 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           .toSet()
           .toList();
 
-      final data = await _supabase
-          .from('users')
-          .select('id, name, xp, level')
-          .inFilter('id', classmates)
-          .eq('role', 'student')
-          .order('xp', ascending: false)
-          .limit(20);
+      List<Map<String, dynamic>> sortedData;
+
+      if (_isWeekly) {
+        // ─── Weekly: sum xp_awarded from submissions graded in the last 7 days ───
+        final weekAgo = DateTime.now()
+            .subtract(const Duration(days: 7))
+            .toIso8601String();
+        final weeklySubmissions = await _supabase
+            .from('submissions')
+            .select('student_id, xp_awarded')
+            .inFilter('student_id', classmates)
+            .eq('is_graded', true)
+            .gte('graded_at', weekAgo);
+
+        final Map<String, int> weeklyXp = {};
+        for (final s in weeklySubmissions as List) {
+          final uid = s['student_id'] as String?;
+          if (uid == null) continue;
+          weeklyXp[uid] = (weeklyXp[uid] ?? 0) + ((s['xp_awarded'] as int?) ?? 0);
+        }
+
+        final classmateUsers = await _supabase
+            .from('users')
+            .select('id, name, level, avatar_url')
+            .inFilter('id', classmates)
+            .eq('role', 'student');
+
+        sortedData = List<Map<String, dynamic>>.from(classmateUsers)
+            .map((u) => {...u, 'xp': weeklyXp[u['id']] ?? 0})
+            .toList();
+      } else {
+        final data = await _supabase
+            .from('users')
+            .select('id, name, xp, level, avatar_url')
+            .inFilter('id', classmates)
+            .eq('role', 'student')
+            .order('xp', ascending: false)
+            .limit(20);
+
+        sortedData = List<Map<String, dynamic>>.from(data);
+      }
 
       if (mounted) {
-        final List<Map<String, dynamic>> sortedData =
-            List<Map<String, dynamic>>.from(data);
-
         // Apply the exact same sorting logic here
         sortedData.sort((a, b) {
           int xpCompare = (b['xp'] as int? ?? 0).compareTo(
@@ -1844,12 +1880,18 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                     _buildTab(
                       'Weekly',
                       _isWeekly,
-                      () => setState(() => _isWeekly = true),
+                      () {
+                        setState(() => _isWeekly = true);
+                        _loadLeaderboard(courseId: _selectedLeaderboardCourseId);
+                      },
                     ),
                     _buildTab(
                       'All-time',
                       !_isWeekly,
-                      () => setState(() => _isWeekly = false),
+                      () {
+                        setState(() => _isWeekly = false);
+                        _loadLeaderboard(courseId: _selectedLeaderboardCourseId);
+                      },
                     ),
                   ],
                 ),
@@ -1997,7 +2039,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     return PressableScale(
       onPressed: () {},
       child: Container(
-        height: height,
+        constraints: BoxConstraints(minHeight: height),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: context.cardColor,
@@ -2020,11 +2062,64 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Icon
-            Icon(
-              Icons.workspace_premium_rounded,
-              color: medalColors[rank],
-              size: rank == 1 ? 36 : 26,
+            // Profile picture with rank badge (replaces medal icon)
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Builder(
+                  builder: (_) {
+                    final url = user['avatar_url'] as String?;
+                    final name = user['name'] as String? ?? 'S';
+                    final double radius = rank == 1 ? 32 : 26;
+                    final Color ringColor = medalColors[rank]!;
+                    if (url != null && url.isNotEmpty) {
+                      return CircleAvatar(
+                        radius: radius,
+                        backgroundImage: NetworkImage(url),
+                        backgroundColor: ringColor.withValues(alpha: 0.15),
+                        onBackgroundImageError: (_, __) {},
+                      );
+                    }
+                    return CircleAvatar(
+                      radius: radius,
+                      backgroundColor: ringColor.withValues(alpha: 0.15),
+                      child: Text(
+                        name[0].toUpperCase(),
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: rank == 1 ? 22 : 18,
+                          fontWeight: FontWeight.w700,
+                          color: ringColor,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                Positioned(
+                  bottom: -2,
+                  right: -4,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: medalColors[rank],
+                      shape: BoxShape.circle,
+                      border: Border.all(color: context.cardColor, width: 1.5),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$rank',
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
 

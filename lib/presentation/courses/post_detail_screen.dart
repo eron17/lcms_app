@@ -726,7 +726,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           children: [
             Builder(
               builder: (_) {
-                final url = comment['avatar_url'] as String?;
+                final url = (comment['avatar_url'] as String?)?.trim();
                 final name = comment['user_name'] as String? ?? 'U';
                 if (url != null && url.isNotEmpty) {
                   return CircleAvatar(
@@ -860,7 +860,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           // ─── UPDATED: Consistent White/Light Blue Circle Avatar ───
           Builder(
             builder: (_) {
-              final url = _currentUserAvatarUrl;
+              final url = _currentUserAvatarUrl?.trim();
               final name = _currentUserName ?? 'U';
               if (url != null && url.isNotEmpty) {
                 return CircleAvatar(

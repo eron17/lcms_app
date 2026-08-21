@@ -49,7 +49,7 @@ class _ThreeDMeetDetailScreenState
 
   // ── Join button timing ────────────────────────────────────────
   String get _scheduleStatus {
-    final scheduledStr = widget.post['scheduled_at'] as String?;
+    final scheduledStr = widget.post['scheduled_time'] as String?;
     if (scheduledStr == null) return 'none';
     try {
       final scheduled = DateTime.parse(scheduledStr).toLocal();
@@ -602,12 +602,12 @@ class _ThreeDMeetDetailScreenState
       btnColor = Colors.grey;
       btnLabel = '3D Meet Scheduled';
       btnSub =
-          'Starts ${_formatScheduleTime(widget.post['scheduled_at'])}';
+          'Starts ${_formatScheduleTime(widget.post['scheduled_time'])}';
       btnIcon = Icons.videogame_asset_outlined;
     } else {
       btnColor = Colors.grey;
       btnLabel = 'Session Ended';
-      btnSub = _formatScheduleTime(widget.post['scheduled_at']);
+      btnSub = _formatScheduleTime(widget.post['scheduled_time']);
       btnIcon = Icons.videogame_asset_off_outlined;
     }
 
