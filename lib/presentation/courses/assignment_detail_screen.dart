@@ -35,6 +35,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   // Common
   String? _currentUserName;
   String? _currentUserId;
+  String? _currentUserAvatarUrl;
 
   // Instructor
   List<Map<String, dynamic>> _students = [];
@@ -106,10 +107,15 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       _currentUserId = userId;
       final data = await _supabase
           .from('users')
-          .select('name')
+          .select('name, avatar_url')
           .eq('id', userId)
           .single();
-      if (mounted) setState(() => _currentUserName = data['name']);
+      if (mounted) {
+        setState(() {
+          _currentUserName = data['name'];
+          _currentUserAvatarUrl = data['avatar_url'];
+        });
+      }
     } catch (e) {
       debugPrint('User: $e');
     }
@@ -120,13 +126,15 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       // Use widget.post['id'] to make sure we are looking at the right assignment
       final data = await _supabase
           .from('comments')
-          .select()
+          .select('*, users(avatar_url)')
           .eq('post_id', widget.post['id'])
           .order('created_at', ascending: true);
 
       if (mounted) {
         setState(() {
-          _classComments = List<Map<String, dynamic>>.from(data);
+          _classComments = List<Map<String, dynamic>>.from(data).map((c) {
+            return {...c, 'avatar_url': c['users']?['avatar_url']};
+          }).toList();
           _isLoadingComments = false;
         });
         debugPrint('DEBUG: Loaded ${_classComments.length} comments');
@@ -1743,17 +1751,31 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     ),
                     child: Row(
                       children: [
-                        CircleAvatar(
-                          radius: 16,
-                          backgroundColor: const Color(0xFFD6EBFF),
-                          child: Text(
-                            (_currentUserName ?? 'U')[0].toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF007BFF),
-                            ),
-                          ),
+                        Builder(
+                          builder: (_) {
+                            final url = _currentUserAvatarUrl?.trim();
+                            final name = _currentUserName ?? 'U';
+                            if (url != null && url.isNotEmpty) {
+                              return CircleAvatar(
+                                radius: 16,
+                                backgroundColor: const Color(0xFFD6EBFF),
+                                backgroundImage: NetworkImage(url),
+                                onBackgroundImageError: (_, __) {},
+                              );
+                            }
+                            return CircleAvatar(
+                              radius: 16,
+                              backgroundColor: const Color(0xFFD6EBFF),
+                              child: Text(
+                                name[0].toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF007BFF),
+                                ),
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -2433,17 +2455,31 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: const Color(0xFFD6EBFF),
-              child: Text(
-                (c['user_name'] as String? ?? 'U')[0].toUpperCase(),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF007BFF),
-                ),
-              ),
+            Builder(
+              builder: (_) {
+                final url = (c['avatar_url'] as String?)?.trim();
+                final name = c['user_name'] as String? ?? 'U';
+                if (url != null && url.isNotEmpty) {
+                  return CircleAvatar(
+                    radius: 16,
+                    backgroundColor: const Color(0xFFD6EBFF),
+                    backgroundImage: NetworkImage(url),
+                    onBackgroundImageError: (_, __) {},
+                  );
+                }
+                return CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFFD6EBFF),
+                  child: Text(
+                    name[0].toUpperCase(),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF007BFF),
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -3176,17 +3212,31 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 16,
-            backgroundColor: const Color(0xFFD6EBFF),
-            child: Text(
-              (_currentUserName ?? 'U')[0].toUpperCase(),
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF007BFF),
-              ),
-            ),
+          Builder(
+            builder: (_) {
+              final url = _currentUserAvatarUrl?.trim();
+              final name = _currentUserName ?? 'U';
+              if (url != null && url.isNotEmpty) {
+                return CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFFD6EBFF),
+                  backgroundImage: NetworkImage(url),
+                  onBackgroundImageError: (_, __) {},
+                );
+              }
+              return CircleAvatar(
+                radius: 16,
+                backgroundColor: const Color(0xFFD6EBFF),
+                child: Text(
+                  name[0].toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF007BFF),
+                  ),
+                ),
+              );
+            },
           ),
           const SizedBox(width: 12),
           Expanded(
