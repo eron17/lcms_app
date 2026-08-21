@@ -18,32 +18,68 @@ import '../../shared/widgets/pressable_scale.dart';
 
 const Map<String, List<String>> _cppKeywordCategories = {
   'Control Flow': [
-    'for', 'while', 'do-while', 'if', 'else',
-    'switch', 'case', 'break', 'continue', 'return',
+    'for',
+    'while',
+    'do-while',
+    'if',
+    'else',
+    'switch',
+    'case',
+    'break',
+    'continue',
+    'return',
   ],
   'Data Types': [
-    'int', 'float', 'double', 'char', 'bool',
-    'string', 'long', 'short', 'void', 'auto',
+    'int',
+    'float',
+    'double',
+    'char',
+    'bool',
+    'string',
+    'long',
+    'short',
+    'void',
+    'auto',
   ],
   'OOP Concepts': [
-    'class', 'public', 'private', 'protected',
-    'virtual', 'override', 'static', 'this',
-    'new', 'delete', 'abstract',
+    'class',
+    'public',
+    'private',
+    'protected',
+    'virtual',
+    'override',
+    'static',
+    'this',
+    'new',
+    'delete',
+    'abstract',
   ],
   'Functions & Templates': [
-    'template', 'inline', 'operator',
-    'friend', 'explicit', 'typename',
+    'template',
+    'inline',
+    'operator',
+    'friend',
+    'explicit',
+    'typename',
   ],
   'Memory & Pointers': [
-    'pointer (*)', 'reference (&)',
-    'nullptr', 'malloc', 'free',
+    'pointer (*)',
+    'reference (&)',
+    'nullptr',
+    'malloc',
+    'free',
   ],
-  'Exception Handling': [
-    'try', 'catch', 'throw',
-  ],
+  'Exception Handling': ['try', 'catch', 'throw'],
   'STL / Libraries': [
-    'vector', 'array', 'map', 'set', 'stack',
-    'queue', 'cout', 'cin', 'endl',
+    'vector',
+    'array',
+    'map',
+    'set',
+    'stack',
+    'queue',
+    'cout',
+    'cin',
+    'endl',
   ],
   'Custom': [],
 };
@@ -82,7 +118,6 @@ class CourseDetailScreen extends ConsumerStatefulWidget {
   final bool isInstructor;
   final int initialTab;
 
-
   static int initialTabIndex = 0;
 
   const CourseDetailScreen({
@@ -102,7 +137,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   late int _currentTab;
   final _supabase = Supabase.instance.client;
   UserModel? _currentUser;
-  
+
   Map<String, dynamic>? _localCourse;
   Map<String, dynamic> get courseData => _localCourse ?? widget.course;
   // Stream data
@@ -244,7 +279,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   Future<void> _loadPeople() async {
     try {
-      final instructorId = courseData['instructor_id']; // Changed from widget.course
+      final instructorId =
+          courseData['instructor_id']; // Changed from widget.course
       if (instructorId == null) return;
 
       // 1. Load Instructor Data
@@ -363,10 +399,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           .eq('topic_id', topicId);
 
       // Step 2: Delete the actual Topic
-      await _supabase
-          .from('topics')
-          .delete()
-          .eq('id', topicId);
+      await _supabase.from('topics').delete().eq('id', topicId);
 
       // Step 3: Refresh UI coursework list
       await _loadCoursework();
@@ -392,54 +425,60 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   }
 
   Future<void> sendPostCreatedNotifications({
-  required Map<String, dynamic> newPost,     // The created post map (must have 'id', 'course_id', 'title', 'type')
-  required Map<String, dynamic> courseData,  // The course map (must have 'id')
-}) async {
-  final supabase = Supabase.instance.client;
+    required Map<String, dynamic>
+    newPost, // The created post map (must have 'id', 'course_id', 'title', 'type')
+    required Map<String, dynamic> courseData, // The course map (must have 'id')
+  }) async {
+    final supabase = Supabase.instance.client;
 
-  try {
-    // 1. Fetch all students enrolled in this course
-    final studentsData = await supabase
-        .from('enrollments')
-        .select('student_id')
-        .eq('course_id', courseData['id']);
+    try {
+      // 1. Fetch all students enrolled in this course
+      final studentsData = await supabase
+          .from('enrollments')
+          .select('student_id')
+          .eq('course_id', courseData['id']);
 
-    final List students = studentsData as List;
-    if (students.isEmpty) return; // No students to notify
+      final List students = studentsData as List;
+      if (students.isEmpty) return; // No students to notify
 
-    // Determine notification title and body based on type
-    String title = 'New Material Posted';
-    String body = 'Instructor posted: ${newPost['title']}';
+      // Determine notification title and body based on type
+      String title = 'New Material Posted';
+      String body = 'Instructor posted: ${newPost['title']}';
 
-    if (newPost['type'] == 'assignment') {
-      title = 'New assignment Posted';
-    } else if (newPost['type'] == '3d_meet') {
-      title = 'New 3d meet Posted';
-      body = 'Synchronous Coding: ${newPost['title']}';
-    } else if (newPost['type'] == 'announcement') {
-      title = 'New Announcement';
+      if (newPost['type'] == 'assignment') {
+        title = 'New assignment Posted';
+      } else if (newPost['type'] == '3d_meet') {
+        title = 'New 3d meet Posted';
+        body = 'Synchronous Coding: ${newPost['title']}';
+      } else if (newPost['type'] == 'announcement') {
+        title = 'New Announcement';
+      }
+
+      // 2. Build the batch insert list
+      final List<Map<String, dynamic>> notificationsBatch = students.map((
+        student,
+      ) {
+        return {
+          'user_id': student['student_id'],
+          'course_id': courseData['id'],
+          'post_id':
+              newPost['id'], // Extremely important: this bridges the deep link!
+          'type': newPost['type'] ?? 'material',
+          'title': title,
+          'body': body,
+          'created_at': DateTime.now().toUtc().toIso8601String(),
+        };
+      }).toList();
+
+      // 3. Batch insert into Supabase notifications table
+      await supabase.from('notifications').insert(notificationsBatch);
+      debugPrint(
+        'Notifications sent to ${notificationsBatch.length} students.',
+      );
+    } catch (e) {
+      debugPrint('Error sending post creation notifications: $e');
     }
-
-    // 2. Build the batch insert list
-    final List<Map<String, dynamic>> notificationsBatch = students.map((student) {
-      return {
-        'user_id': student['student_id'],
-        'course_id': courseData['id'],
-        'post_id': newPost['id'], // Extremely important: this bridges the deep link!
-        'type': newPost['type'] ?? 'material',
-        'title': title,
-        'body': body,
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-      };
-    }).toList();
-
-    // 3. Batch insert into Supabase notifications table
-    await supabase.from('notifications').insert(notificationsBatch);
-    debugPrint('Notifications sent to ${notificationsBatch.length} students.');
-  } catch (e) {
-    debugPrint('Error sending post creation notifications: $e');
   }
-}
 
   // ════════════════════════════════════════════════════════
   // INSTRUCTOR DIALOGS
@@ -556,13 +595,16 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                     final userId =
                                         _supabase.auth.currentUser?.id;
                                     String? targetPostId;
-                                    
+
                                     if (existing != null) {
                                       await _supabase
                                           .from('posts')
                                           .update({
-                                            'title': titleController.text.trim(),
-                                            'instructions': instructionsController.text.trim(),
+                                            'title': titleController.text
+                                                .trim(),
+                                            'instructions':
+                                                instructionsController.text
+                                                    .trim(),
                                           })
                                           .eq('id', existing['id']);
                                       targetPostId = existing['id'];
@@ -574,9 +616,13 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                             'course_id': widget.course['id'],
                                             'instructor_id': userId,
                                             'type': 'announcement',
-                                            'title': titleController.text.trim(),
-                                            'instructions': instructionsController.text.trim(),
-                                            'created_at': DateTime.now().toIso8601String(),
+                                            'title': titleController.text
+                                                .trim(),
+                                            'instructions':
+                                                instructionsController.text
+                                                    .trim(),
+                                            'created_at': DateTime.now()
+                                                .toIso8601String(),
                                           })
                                           .select()
                                           .single();
@@ -589,18 +635,23 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                         .eq('course_id', widget.course['id']);
                                     final List students = studentsData as List;
 
-                                    if (students.isNotEmpty && targetPostId != null) {
+                                    if (students.isNotEmpty &&
+                                        targetPostId != null) {
                                       final List<Map<String, dynamic>>
                                       notifs = students
                                           .map(
                                             (s) => {
                                               'user_id': s['student_id'],
                                               'course_id': widget.course['id'],
-                                              'post_id': targetPostId, // ADDED: Links deep routing logic to this post
-                                              'type': 'assignment_posted', 
+                                              'post_id':
+                                                  targetPostId, // ADDED: Links deep routing logic to this post
+                                              'type': 'assignment_posted',
                                               'title': 'New Announcement',
-                                              'body': titleController.text.trim(),
-                                              'created_at': DateTime.now().toUtc().toIso8601String(),
+                                              'body': titleController.text
+                                                  .trim(),
+                                              'created_at': DateTime.now()
+                                                  .toUtc()
+                                                  .toIso8601String(),
                                             },
                                           )
                                           .toList();
@@ -702,28 +753,34 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     String? assessmentName = existing?['assessment_name'];
     bool isUploadingMaterial = false;
     bool isUploadingAssessment = false;
-    final expectedOutputControllers = <TextEditingController>[];
+    final stdinController = TextEditingController(
+      text: existing?['stdin_input']?.toString() ?? '',
+    );
+    final expectedOutputController = TextEditingController(
+      text: existing?['expected_output']?.toString() ?? '',
+    );
     final requiredKeywordControllers = <TextEditingController>[];
     final forbiddenPatternControllers = <TextEditingController>[];
 
     if (existing != null) {
-      if (existing['expected_output'] != null) {
-        final list = List<dynamic>.from(existing['expected_output']);
-        expectedOutputControllers.addAll(list.map((str) => TextEditingController(text: str.toString())));
-      }
       if (existing['required_keywords'] != null) {
         final list = List<dynamic>.from(existing['required_keywords']);
-        requiredKeywordControllers.addAll(list.map((str) => TextEditingController(text: str.toString())));
+        requiredKeywordControllers.addAll(
+          list.map((str) => TextEditingController(text: str.toString())),
+        );
       }
       if (existing['forbidden_patterns'] != null) {
         final list = List<dynamic>.from(existing['forbidden_patterns']);
-        forbiddenPatternControllers.addAll(list.map((str) => TextEditingController(text: str.toString())));
+        forbiddenPatternControllers.addAll(
+          list.map((str) => TextEditingController(text: str.toString())),
+        );
       }
     }
 
-    if (expectedOutputControllers.isEmpty) expectedOutputControllers.add(TextEditingController());
-    if (requiredKeywordControllers.isEmpty) requiredKeywordControllers.add(TextEditingController());
-    if (forbiddenPatternControllers.isEmpty) forbiddenPatternControllers.add(TextEditingController());
+    if (requiredKeywordControllers.isEmpty)
+      requiredKeywordControllers.add(TextEditingController());
+    if (forbiddenPatternControllers.isEmpty)
+      forbiddenPatternControllers.add(TextEditingController());
 
     final typeConfig = {
       '3d_meet': {
@@ -1202,11 +1259,151 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         ),
                         const SizedBox(height: 16),
 
-                        _buildDynamicInputSection(
-                          title: 'Expected Output',
-                          hint: 'Expected print statement',
-                          controllers: expectedOutputControllers,
-                          setSheet: setSheet,
+                        Text(
+                          'Standard Input (stdin) — Optional',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: context.isDark
+                                ? Colors.white
+                                : const Color(0xFF0D1B4B),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Leave empty if the program has no cin >>. '
+                          'For multiple inputs, put each on a new line.',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 11,
+                            color: context.textHint,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: stdinController,
+                          maxLines: 4,
+                          minLines: 2,
+                          keyboardType: TextInputType.multiline,
+                          textInputAction: TextInputAction.newline,
+                          style: TextStyle(
+                            fontFamily: 'Courier',
+                            fontSize: 13,
+                            color: context.isDark
+                                ? Colors.white
+                                : const Color(0xFF0D1B4B),
+                          ),
+                          decoration: InputDecoration(
+                            hintText:
+                                'e.g. Juan\n'
+                                'or for multiple inputs:\n'
+                                '5\n'
+                                '3',
+                            hintStyle: TextStyle(
+                              fontFamily: 'Courier',
+                              fontSize: 12,
+                              color: context.textHint,
+                            ),
+                            filled: true,
+                            fillColor: context.isDark
+                                ? const Color(0xFF080D1F)
+                                : const Color(0xFFF0F2F5),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: AppColors.primary.withValues(alpha: 0.4),
+                                width: 1,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: AppColors.primary.withValues(alpha: 0.4),
+                                width: 1,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(
+                                color: AppColors.primary,
+                                width: 1.5,
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.all(12),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        Text(
+                          'Expected Output',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: context.isDark
+                                ? Colors.white
+                                : const Color(0xFF0D1B4B),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Each line = one expected output line. '
+                          'Press Enter to go to the next line.',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 11,
+                            color: context.textHint,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: expectedOutputController,
+                          maxLines: 8,
+                          minLines: 3,
+                          keyboardType: TextInputType.multiline,
+                          textInputAction: TextInputAction.newline,
+                          style: TextStyle(
+                            fontFamily: 'Courier',
+                            fontSize: 13,
+                            color: context.isDark
+                                ? Colors.white
+                                : const Color(0xFF0D1B4B),
+                          ),
+                          decoration: InputDecoration(
+                            hintText: 'e.g.\n1\n2\n3\n4\n5',
+                            hintStyle: TextStyle(
+                              fontFamily: 'Courier',
+                              fontSize: 12,
+                              color: context.textHint,
+                            ),
+                            filled: true,
+                            fillColor: context.isDark
+                                ? const Color(0xFF080D1F)
+                                : const Color(0xFFF0F2F5),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: AppColors.primary.withValues(alpha: 0.4),
+                                width: 1,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(
+                                color: AppColors.primary.withValues(alpha: 0.4),
+                                width: 1,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(
+                                color: AppColors.primary,
+                                width: 1.5,
+                              ),
+                            ),
+                            contentPadding: const EdgeInsets.all(12),
+                          ),
                         ),
                         const SizedBox(height: 16),
 
@@ -1218,7 +1415,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
                         _buildDynamicInputSection(
                           title: 'Forbidden Patterns',
-                          hint: 'e.g. hardcoded values',
+                          subtitle:
+                              'Add patterns that students must NOT use. '
+                              'Common examples: cout<<1, cout<<2 '
+                              '(hardcoded outputs), goto',
+                          hint: 'e.g. cout<<1 (hardcoded output)',
                           controllers: forbiddenPatternControllers,
                           setSheet: setSheet,
                         ),
@@ -1323,18 +1524,22 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                   try {
                                     final userId =
                                         _supabase.auth.currentUser?.id;
-                                    final expectedOutput = expectedOutputControllers
-                                        .map((c) => c.text.trim())
-                                        .where((text) => text.isNotEmpty)
-                                        .toList();
-                                    final requiredKeywords = requiredKeywordControllers
-                                        .map((c) => c.text.trim())
-                                        .where((text) => text.isNotEmpty)
-                                        .toList();
-                                    final forbiddenPatterns = forbiddenPatternControllers
-                                        .map((c) => c.text.trim())
-                                        .where((text) => text.isNotEmpty)
-                                        .toList();
+                                    final expectedOutput =
+                                        expectedOutputController.text
+                                            .trim()
+                                            .isEmpty
+                                        ? null
+                                        : expectedOutputController.text.trim();
+                                    final requiredKeywords =
+                                        requiredKeywordControllers
+                                            .map((c) => c.text.trim())
+                                            .where((text) => text.isNotEmpty)
+                                            .toList();
+                                    final forbiddenPatterns =
+                                        forbiddenPatternControllers
+                                            .map((c) => c.text.trim())
+                                            .where((text) => text.isNotEmpty)
+                                            .toList();
                                     DateTime? finalScheduledTime;
                                     DateTime? finalAssignmentDueDate;
                                     String? targetPostId;
@@ -1374,15 +1579,32 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                           .update({
                                             'title': title,
                                             'instructions': desc,
-                                            'topic_id': selectedTopicId, 
+                                            'topic_id': selectedTopicId,
                                             'material_url': materialUrl,
                                             'material_name': materialName,
                                             'assessment_url': assessmentUrl,
                                             'assessment_name': assessmentName,
-                                            'scheduled_time': finalScheduledTime?.toUtc().toIso8601String(),
-                                            'expected_output': postType == '3d_meet' ? expectedOutput : null,
-                                            'required_keywords': postType == '3d_meet' ? requiredKeywords : null,
-                                            'forbidden_patterns': postType == '3d_meet' ? forbiddenPatterns : null,
+                                            'scheduled_time': finalScheduledTime
+                                                ?.toUtc()
+                                                .toIso8601String(),
+                                            'expected_output':
+                                                postType == '3d_meet'
+                                                ? expectedOutput
+                                                : null,
+                                            'stdin_input':
+                                                stdinController.text
+                                                    .trim()
+                                                    .isEmpty
+                                                ? null
+                                                : stdinController.text.trim(),
+                                            'required_keywords':
+                                                postType == '3d_meet'
+                                                ? requiredKeywords
+                                                : null,
+                                            'forbidden_patterns':
+                                                postType == '3d_meet'
+                                                ? forbiddenPatterns
+                                                : null,
                                             'duration_minutes':
                                                 postType == '3d_meet'
                                                 ? durationMinutes
@@ -1419,10 +1641,27 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                             'material_name': materialName,
                                             'assessment_url': assessmentUrl,
                                             'assessment_name': assessmentName,
-                                            'scheduled_time': finalScheduledTime?.toUtc().toIso8601String(),
-                                            'expected_output': postType == '3d_meet' ? expectedOutput : null,
-                                            'required_keywords': postType == '3d_meet' ? requiredKeywords : null,
-                                            'forbidden_patterns': postType == '3d_meet' ? forbiddenPatterns : null,
+                                            'scheduled_time': finalScheduledTime
+                                                ?.toUtc()
+                                                .toIso8601String(),
+                                            'expected_output':
+                                                postType == '3d_meet'
+                                                ? expectedOutput
+                                                : null,
+                                            'stdin_input':
+                                                stdinController.text
+                                                    .trim()
+                                                    .isEmpty
+                                                ? null
+                                                : stdinController.text.trim(),
+                                            'required_keywords':
+                                                postType == '3d_meet'
+                                                ? requiredKeywords
+                                                : null,
+                                            'forbidden_patterns':
+                                                postType == '3d_meet'
+                                                ? forbiddenPatterns
+                                                : null,
                                             'duration_minutes':
                                                 postType == '3d_meet'
                                                 ? durationMinutes
@@ -1459,18 +1698,23 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
                                       final students = response as List;
 
-                                      if (students.isNotEmpty && targetPostId != null) {
+                                      if (students.isNotEmpty &&
+                                          targetPostId != null) {
                                         // 2. Create the notification list
                                         final List<Map<String, dynamic>>
                                         notifications = students
                                             .map(
                                               (s) => {
                                                 'user_id': s['student_id'],
-                                                'course_id': widget.course['id'],
-                                                'post_id': targetPostId, // ADDED: Links deep routing logic to this post
+                                                'course_id':
+                                                    widget.course['id'],
+                                                'post_id':
+                                                    targetPostId, // ADDED: Links deep routing logic to this post
                                                 'type': 'assignment_posted',
-                                                'title': 'New ${postType.replaceAll('_', ' ')} Posted',
-                                                'body': 'Instructor posted: ${titleController.text.trim()}',
+                                                'title':
+                                                    'New ${postType.replaceAll('_', ' ')} Posted',
+                                                'body':
+                                                    'Instructor posted: ${titleController.text.trim()}',
                                                 'created_at': DateTime.now()
                                                     .toUtc()
                                                     .toIso8601String(),
@@ -1951,7 +2195,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     );
   }
 
-   void _showTopicOptions(Map<String, dynamic> topic) {
+  void _showTopicOptions(Map<String, dynamic> topic) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -2442,7 +2686,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 final bool? wasUpdated = await Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => ClassSettingsScreen(course: courseData), // CHANGED: widget.course -> courseData
+                    builder: (_) => ClassSettingsScreen(
+                      course: courseData,
+                    ), // CHANGED: widget.course -> courseData
                   ),
                 );
 
@@ -2450,22 +2696,22 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 if (wasUpdated == true && mounted) {
                   debugPrint('Refresh triggered: Class name updated.');
                   _loadCurrentUser(); // Refresh student count/instructor data
-                  _loadStream();      // Refresh class name in stream
-                  _loadCoursework();  // Refresh topics
-                  
+                  _loadStream(); // Refresh class name in stream
+                  _loadCoursework(); // Refresh topics
+
                   // OPTIONAL: If you want to update the Hero Banner Title immediately,
                   // you can add a setState here to update the local 'widget.course' map
                   // or just call your main data fetcher.
                 }
               },
-              scaleFactor: 1.0, 
+              scaleFactor: 1.0,
               opacityFactor: 0.5,
               child: Container(
                 padding: const EdgeInsets.all(10),
                 child: Icon(
-                  Icons.settings_outlined, 
-                  color: textColor, 
-                  size: 25, 
+                  Icons.settings_outlined,
+                  color: textColor,
+                  size: 25,
                 ),
               ),
             ),
@@ -2476,20 +2722,19 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   Widget _buildCourseCard() {
     final gradientIndex =
-        (courseData['title'] as String? ?? '').length %
-        _cardGradients.length;
+        (courseData['title'] as String? ?? '').length % _cardGradients.length;
     final gradient = _cardGradients[gradientIndex];
 
     return Container(
-      width: double.infinity, 
-      margin: const EdgeInsets.only(bottom: 12), 
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: gradient,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20), 
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
             color: gradient[0].withValues(alpha: 0.35),
@@ -2527,7 +2772,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    courseData['course_code'] ?? '', // CHANGED: widget.course -> courseData
+                    courseData['course_code'] ??
+                        '', // CHANGED: widget.course -> courseData
                     style: const TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 12,
@@ -2539,7 +2785,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  courseData['title'] ?? '', // CHANGED: widget.course -> courseData
+                  courseData['title'] ??
+                      '', // CHANGED: widget.course -> courseData
                   style: const TextStyle(
                     fontFamily: 'Poppins',
                     fontSize: 20,
@@ -2560,7 +2807,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      courseData['instructor_name'] ?? 'Instructor', // CHANGED: widget.course -> courseData
+                      courseData['instructor_name'] ??
+                          'Instructor', // CHANGED: widget.course -> courseData
                       style: const TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 13,
@@ -2942,157 +3190,157 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     return GestureDetector(
       onLongPress: widget.isInstructor ? () => _showPostOptions(post) : null,
       child: Padding(
-      // ─── 1. FIX WIDTH ───
-      // Removed horizontal 16px. Now it only uses the ListView's padding
-      // to align perfectly with the top Course Card.
-      padding: const EdgeInsets.only(bottom: 12),
-      child: PressableScale(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => type == 'assignment'
-                ? AssignmentDetailScreen(
-                    post: post,
-                    course: widget.course,
-                    isInstructor: widget.isInstructor,
-                  )
-                : type == '3d_meet'
-                ? ThreeDMeetDetailScreen(
-                    post: post,
-                    course: widget.course,
-                    isInstructor: widget.isInstructor,
-                  )
-                : PostDetailScreen(
-                    post: post,
-                    course: widget.course,
-                    isInstructor: widget.isInstructor,
-                  ),
-          ),
-        ).then((_) => _loadStream()),
-        scaleFactor: 0.98,
-        child: Container(
-          decoration: BoxDecoration(
-            color: context.cardColor,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: context.isDark
-                ? []
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.03),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+        // ─── 1. FIX WIDTH ───
+        // Removed horizontal 16px. Now it only uses the ListView's padding
+        // to align perfectly with the top Course Card.
+        padding: const EdgeInsets.only(bottom: 12),
+        child: PressableScale(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => type == 'assignment'
+                  ? AssignmentDetailScreen(
+                      post: post,
+                      course: widget.course,
+                      isInstructor: widget.isInstructor,
+                    )
+                  : type == '3d_meet'
+                  ? ThreeDMeetDetailScreen(
+                      post: post,
+                      course: widget.course,
+                      isInstructor: widget.isInstructor,
+                    )
+                  : PostDetailScreen(
+                      post: post,
+                      course: widget.course,
+                      isInstructor: widget.isInstructor,
                     ),
-                  ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(width: 4, color: postColor),
-                  Expanded(
-                    child: Padding(
-                      // ─── 2. REDUCE HEIGHT ───
-                      // Reduced vertical padding to 10px to make the card slimmer
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // Tighter Header
-                          Row(
-                            children: [
-                              _buildTonalBadge(
-                                _getPostTypeLabel(type).toUpperCase(),
-                                postColor,
-                              ),
-                              const Spacer(),
-                              Text(
-                                _formatDate(post['created_at']),
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 10,
-                                  color: textColor.withValues(alpha: 0.4),
+            ),
+          ).then((_) => _loadStream()),
+          scaleFactor: 0.98,
+          child: Container(
+            decoration: BoxDecoration(
+              color: context.cardColor,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: context.isDark
+                  ? []
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.03),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(width: 4, color: postColor),
+                    Expanded(
+                      child: Padding(
+                        // ─── 2. REDUCE HEIGHT ───
+                        // Reduced vertical padding to 10px to make the card slimmer
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // Tighter Header
+                            Row(
+                              children: [
+                                _buildTonalBadge(
+                                  _getPostTypeLabel(type).toUpperCase(),
+                                  postColor,
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6), // Smaller gap
-                          // Title (Ellipsis prevents height growth)
-                          Text(
-                            post['title'] ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: textColor,
+                                const Spacer(),
+                                Text(
+                                  _formatDate(post['created_at']),
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 10,
+                                    color: textColor.withValues(alpha: 0.4),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-
-                          // Compact Subtitle
-                          if (post['instructions'] != null)
+                            const SizedBox(height: 6), // Smaller gap
+                            // Title (Ellipsis prevents height growth)
                             Text(
-                              post['instructions'],
+                              post['title'] ?? '',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontFamily: 'Poppins',
-                                fontSize: 12,
-                                color: textColor.withValues(alpha: 0.5),
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: textColor,
                               ),
                             ),
 
-                          const SizedBox(height: 10), // Reduced from 16
-                          // Footer Row
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.chat_bubble_outline_rounded,
-                                size: 12,
-                                color: textColor.withValues(alpha: 0.3),
-                              ),
-                              const SizedBox(width: 4),
-                              // ─── THE FIX: Use the commentCount variable here ───
+                            // Compact Subtitle
+                            if (post['instructions'] != null)
                               Text(
-                                '$commentCount',
+                                post['instructions'],
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
-                                  fontSize: 11,
-                                  color: textColor.withValues(alpha: 0.3),
+                                  fontSize: 12,
+                                  color: textColor.withValues(alpha: 0.5),
                                 ),
                               ),
-                              const Spacer(),
-                              if (type == 'assignment')
+
+                            const SizedBox(height: 10), // Reduced from 16
+                            // Footer Row
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.chat_bubble_outline_rounded,
+                                  size: 12,
+                                  color: textColor.withValues(alpha: 0.3),
+                                ),
+                                const SizedBox(width: 4),
+                                // ─── THE FIX: Use the commentCount variable here ───
                                 Text(
-                                  '${post['points'] ?? 100} pts',
-                                  style: const TextStyle(
+                                  '$commentCount',
+                                  style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFFFF6B35),
+                                    color: textColor.withValues(alpha: 0.3),
                                   ),
                                 ),
-                              if (type == '3d_meet')
-                                const Icon(
-                                  Icons.videogame_asset_outlined,
-                                  size: 14,
-                                  color: Color(0xFF22C55E),
-                                ),
-                            ],
-                          ),
-                        ],
+                                const Spacer(),
+                                if (type == 'assignment')
+                                  Text(
+                                    '${post['points'] ?? 100} pts',
+                                    style: const TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFFF6B35),
+                                    ),
+                                  ),
+                                if (type == '3d_meet')
+                                  const Icon(
+                                    Icons.videogame_asset_outlined,
+                                    size: 14,
+                                    color: Color(0xFF22C55E),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -3254,7 +3502,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                   // ─── ADDED: Three-dots options menu for Topic deletion ───
                   if (widget.isInstructor && topic != null) ...[
                     GestureDetector(
-                      onTap: () => _showTopicOptions(topic), // Open options bottom sheet
+                      onTap: () =>
+                          _showTopicOptions(topic), // Open options bottom sheet
                       child: Icon(
                         Icons.more_vert,
                         color: textColor.withOpacity(0.4),
@@ -4018,6 +4267,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     required String hint,
     required List<TextEditingController> controllers,
     required StateSetter setSheet,
+    String? subtitle,
   }) {
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
     return Column(
@@ -4032,6 +4282,17 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             color: textColor,
           ),
         ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 11,
+              color: context.textHint,
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         ...controllers.asMap().entries.map((entry) {
           final idx = entry.key;
@@ -4050,7 +4311,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                     ),
                     decoration: InputDecoration(
                       hintText: '$hint ${idx + 1}',
-                      hintStyle: TextStyle(color: context.textHint, fontSize: 13),
+                      hintStyle: TextStyle(
+                        color: context.textHint,
+                        fontSize: 13,
+                      ),
                       filled: true,
                       fillColor: context.cardColor,
                       contentPadding: const EdgeInsets.symmetric(
@@ -4079,7 +4343,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         color: Colors.redAccent.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.remove_rounded, color: Colors.redAccent, size: 20),
+                      child: const Icon(
+                        Icons.remove_rounded,
+                        color: Colors.redAccent,
+                        size: 20,
+                      ),
                     ),
                   ),
               ],
@@ -4141,49 +4409,50 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 .entries
                 .where((e) => e.value.text.isNotEmpty)
                 .map((entry) {
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.primary.withValues(alpha: 0.4),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      entry.value.text,
-                      style: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primary,
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.4),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    GestureDetector(
-                      onTap: () => setSheet(() {
-                        controllers[entry.key].dispose();
-                        controllers.removeAt(entry.key);
-                        if (controllers.isEmpty) {
-                          controllers.add(TextEditingController());
-                        }
-                      }),
-                      child: const Icon(
-                        Icons.close_rounded,
-                        size: 14,
-                        color: AppColors.primary,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          entry.value.text,
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () => setSheet(() {
+                            controllers[entry.key].dispose();
+                            controllers.removeAt(entry.key);
+                            if (controllers.isEmpty) {
+                              controllers.add(TextEditingController());
+                            }
+                          }),
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 14,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              );
-            }).toList(),
+                  );
+                })
+                .toList(),
           ),
           const SizedBox(height: 8),
         ],
@@ -4378,81 +4647,95 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
               ),
               builder: (ctx) => SafeArea(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 12),
-                    Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: context.isDark
-                            ? AppColors.darkBorder
-                            : const Color(0xFFDDE3F0),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () => Navigator.pop(ctx),
-                            child: const Icon(
-                              Icons.arrow_back_ios_new_rounded,
-                              size: 18,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            selectedCategory,
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: context.isDark
-                                  ? Colors.white
-                                  : const Color(0xFF0D1B4B),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ...keywords.map((kw) {
-                      final isAdded = alreadyAdded.contains(kw);
-                      return ListTile(
-                        title: Text(
-                          kw,
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: isAdded
-                                ? context.textHint
-                                : context.isDark
-                                ? Colors.white
-                                : const Color(0xFF0D1B4B),
-                          ),
+                child: DraggableScrollableSheet(
+                  initialChildSize: 0.6,
+                  minChildSize: 0.4,
+                  maxChildSize: 0.88,
+                  expand: false,
+                  builder: (_, scrollController) => Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: context.isDark
+                              ? AppColors.darkBorder
+                              : const Color(0xFFDDE3F0),
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        trailing: isAdded
-                            ? const Icon(
-                                Icons.check_rounded,
-                                color: AppColors.success,
+                      ),
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () => Navigator.pop(ctx),
+                              child: const Icon(
+                                Icons.arrow_back_ios_new_rounded,
                                 size: 18,
-                              )
-                            : const Icon(
-                                Icons.add_rounded,
                                 color: AppColors.primary,
-                                size: 18,
                               ),
-                        onTap: isAdded ? null : () => Navigator.pop(ctx, kw),
-                      );
-                    }),
-                    const SizedBox(height: 16),
-                  ],
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              selectedCategory,
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: context.isDark
+                                    ? Colors.white
+                                    : const Color(0xFF0D1B4B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ListView(
+                          controller: scrollController,
+                          children: [
+                            ...keywords.map((kw) {
+                              final isAdded = alreadyAdded.contains(kw);
+                              return ListTile(
+                                title: Text(
+                                  kw,
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: isAdded
+                                        ? context.textHint
+                                        : context.isDark
+                                        ? Colors.white
+                                        : const Color(0xFF0D1B4B),
+                                  ),
+                                ),
+                                trailing: isAdded
+                                    ? const Icon(
+                                        Icons.check_rounded,
+                                        color: AppColors.success,
+                                        size: 18,
+                                      )
+                                    : const Icon(
+                                        Icons.add_rounded,
+                                        color: AppColors.primary,
+                                        size: 18,
+                                      ),
+                                onTap: isAdded
+                                    ? null
+                                    : () => Navigator.pop(ctx, kw),
+                              );
+                            }),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -4464,7 +4747,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           },
           child: const Row(
             children: [
-              Icon(Icons.add_circle_outline, color: AppColors.primary, size: 18),
+              Icon(
+                Icons.add_circle_outline,
+                color: AppColors.primary,
+                size: 18,
+              ),
               SizedBox(width: 6),
               Text(
                 'Add keyword',
@@ -4481,5 +4768,4 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       ],
     );
   }
-
 }
