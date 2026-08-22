@@ -5,22 +5,27 @@ import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:dio/dio.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../shared/widgets/pressable_scale.dart';
 
 class FileViewerScreen extends StatefulWidget {
   final String url;
   final String fileName;
   final bool isLocal;
+  final bool isStudent;
 
   const FileViewerScreen({
     super.key,
     required this.url,
     required this.fileName,
     this.isLocal = false,
+    this.isStudent = true,
   });
 
   @override
@@ -42,6 +47,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   // ─── Office Doc State (Word / PPT / Excel via Google Docs Viewer) ──
   WebViewController? _officeController;
   bool _officeLoading = true;
+  bool _officeError = false;
 
   // ─── Download State ───────────────────────────────────────
   bool _isDownloading = false;
@@ -56,8 +62,36 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     _fileType = _getFileType(widget.fileName);
     if (_fileType == 'video') {
       _initVideoPlayer();
-    } else if (_fileType == 'office' && !widget.isLocal) {
-      _initOfficeViewer();
+    } else if (_fileType == 'office') {
+      if (widget.isLocal) {
+        // Google Docs Viewer needs a public URL — it can't reach a path
+        // on-device, so local Office docs are handed to the device's
+        // installed Office app instead.
+        WidgetsBinding.instance.addPostFrameCallback((_) => _openLocalFile());
+      } else {
+        _initOfficeViewer();
+      }
+    }
+  }
+
+  Future<void> _openLocalFile() async {
+    try {
+      final result = await OpenFilex.open(widget.url);
+      if (result.type != ResultType.done && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Could not open file. Make sure you have an Office app '
+              'installed (WPS Office or Microsoft Office).',
+              style: const TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Open local file error: $e');
     }
   }
 
@@ -73,17 +107,35 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   }
 
   void _initOfficeViewer() {
+    // Strip any existing query parameters from the Supabase URL before
+    // passing to Google Docs Viewer to avoid double-encoding issues.
+    final cleanUrl = widget.url.split('?').first;
     final viewerUrl =
-        'https://docs.google.com/viewer?url=${Uri.encodeComponent(widget.url)}&embedded=true';
+        'https://docs.google.com/viewer?url=${Uri.encodeComponent(cleanUrl)}&embedded=true';
     _officeController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
+          onNavigationRequest: (request) {
+            // Keep navigation inside Google Docs Viewer. Without this, a
+            // doc it can't render (common for some .xlsx files) can
+            // navigate to the raw Supabase file URL, which Android then
+            // hands off to a system app instead of showing it in-app.
+            if (request.url.contains('docs.google.com')) {
+              return NavigationDecision.navigate;
+            }
+            return NavigationDecision.prevent;
+          },
           onPageFinished: (_) {
             if (mounted) setState(() => _officeLoading = false);
           },
           onWebResourceError: (_) {
-            if (mounted) setState(() => _officeLoading = false);
+            if (mounted) {
+              setState(() {
+                _officeLoading = false;
+                _officeError = true;
+              });
+            }
           },
         ),
       )
@@ -96,12 +148,12 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       _downloadProgress = 0;
     });
     try {
-      final dir =
-          await getExternalStorageDirectory() ??
-          await getApplicationDocumentsDirectory();
-      final downloadsPath = '${dir.path}/Downloads';
-      await Directory(downloadsPath).create(recursive: true);
-      final savePath = '$downloadsPath/${widget.fileName}';
+      // Same directory _saveFilesOffline() (post_detail_screen.dart) uses,
+      // so both save paths land in one place for the Offline Files screen.
+      final dir = await getApplicationDocumentsDirectory();
+      final fileName =
+          '${DateTime.now().millisecondsSinceEpoch}_${widget.fileName}';
+      final savePath = '${dir.path}/$fileName';
 
       final dio = Dio();
       await dio.download(
@@ -114,11 +166,36 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
         },
       );
 
+      // Register with the Offline Files screen — same SharedPreferences
+      // key and field names (source_url, saved_at) that
+      // _saveFilesOffline() already writes, so entries from either path
+      // are picked up consistently and dedup checks keep working.
+      final prefs = await SharedPreferences.getInstance();
+      final filesJson = prefs.getStringList('offline_files') ?? [];
+      final alreadySaved = filesJson.any((f) {
+        try {
+          return (jsonDecode(f) as Map)['source_url'] == widget.url;
+        } catch (_) {
+          return false;
+        }
+      });
+      if (!alreadySaved) {
+        filesJson.add(
+          jsonEncode({
+            'name': widget.fileName,
+            'path': savePath,
+            'source_url': widget.url,
+            'saved_at': DateTime.now().toIso8601String(),
+          }),
+        );
+        await prefs.setStringList('offline_files', filesJson);
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${widget.fileName} saved to Downloads',
+              '${widget.fileName} saved for offline access',
               style: const TextStyle(fontFamily: 'Poppins'),
             ),
             backgroundColor: AppColors.success,
@@ -267,7 +344,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
             ),
           ],
           // Download
-          if (!widget.isLocal)
+          if (!widget.isLocal && widget.isStudent)
             _isDownloading
                 ? Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -308,10 +385,68 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       case 'image':
         return _buildImageViewer();
       case 'office':
-        return widget.isLocal ? _buildUnsupportedFile() : _buildOfficeViewer();
+        return widget.isLocal ? _buildLocalOfficeFile() : _buildOfficeViewer();
       default:
         return _buildUnsupportedFile();
     }
+  }
+
+  // ─── Local Office Doc (opened via device Office app) ───────
+  Widget _buildLocalOfficeFile() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.open_in_new_rounded,
+              size: 64,
+              color: context.textSecondary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Opening in your Office app...',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: context.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'If nothing happened, tap below to try again.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                color: context.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _openLocalFile,
+              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              label: const Text(
+                'Open File',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   // ─── Office Doc Viewer (Word / PPT / Excel) ────────────────
@@ -338,6 +473,94 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+        if (_officeError && !_officeLoading)
+          Container(
+            color: context.bgColor,
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.file_present_rounded,
+                      size: 64,
+                      color: context.textHint,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Preview not available',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: context.isDark
+                            ? Colors.white
+                            : const Color(0xFF0D1B4B),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Google Docs Viewer could not load this file. '
+                      "Download it to view offline using your device's "
+                      'Office app.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                        color: context.textSecondary,
+                        height: 1.6,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _officeLoading = true;
+                          _officeError = false;
+                        });
+                        _officeController?.reload();
+                      },
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text(
+                        'Retry',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+                    if (widget.isStudent) ...[
+                      const SizedBox(height: 12),
+                      TextButton.icon(
+                        onPressed: _downloadFile,
+                        icon: const Icon(
+                          Icons.download_rounded,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                        label: const Text(
+                          'Download instead',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),

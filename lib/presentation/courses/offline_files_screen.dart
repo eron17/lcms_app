@@ -34,6 +34,13 @@ class _OfflineFilesScreenState extends State<OfflineFilesScreen> {
           .where((f) => File(f['path']).existsSync())
           .toList();
 
+      files.sort((a, b) {
+        final aDate = DateTime.tryParse(a['saved_at'] as String? ?? '');
+        final bDate = DateTime.tryParse(b['saved_at'] as String? ?? '');
+        if (aDate == null || bDate == null) return 0;
+        return bDate.compareTo(aDate);
+      });
+
       final validJson = files.map((f) => jsonEncode(f)).toList();
       await prefs.setStringList('offline_files', validJson);
 

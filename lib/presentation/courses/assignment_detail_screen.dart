@@ -3286,7 +3286,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => FileViewerScreen(url: url, fileName: name),
+          builder: (_) => FileViewerScreen(
+            url: url,
+            fileName: name,
+            isStudent: !widget.isInstructor,
+          ),
         ),
       ),
       child: Container(
@@ -3415,7 +3419,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => FileViewerScreen(url: fileUrl, fileName: fileName),
+                      builder: (_) => FileViewerScreen(
+                        url: fileUrl,
+                        fileName: fileName,
+                        isStudent: !widget.isInstructor,
+                      ),
                     ),
                   ),
                   child: Icon(

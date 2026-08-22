@@ -584,7 +584,11 @@ class _ThreeDMeetDetailScreenState
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => FileViewerScreen(url: url, fileName: label),
+            builder: (_) => FileViewerScreen(
+              url: url,
+              fileName: label,
+              isStudent: !widget.isInstructor,
+            ),
           ),
         ),
         dense: true,

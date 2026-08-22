@@ -1210,7 +1210,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => FileViewerScreen(url: url, fileName: name),
+          builder: (_) => FileViewerScreen(
+            url: url,
+            fileName: name,
+            isStudent: !widget.isInstructor,
+          ),
         ),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),

@@ -1331,7 +1331,13 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
           const SizedBox(height: 20),
 
           // ─── Quick Stats (REPLACED EMOJIS WITH ICONS) ───
-          Row(
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.4,
             children: [
               _buildStatCard(
                 Icons.auto_stories_rounded, // Proper Icon
@@ -1339,18 +1345,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 'Total Classes',
                 AppColors.primary,
               ),
-              const SizedBox(width: 12),
               _buildStatCard(
                 Icons.people_alt_rounded, // Proper Icon
                 '$_totalStudents',
                 'Total Students',
                 AppColors.accent,
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
               _buildStatCard(
                 Icons.pending_actions_rounded, // Proper Icon
                 '${_pendingSubmissions.length}',
@@ -1577,39 +1577,41 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     Color color,
   ) {
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                color: textColor,
-              ),
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 12),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: textColor,
             ),
-            Text(
-              label.toUpperCase(),
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: textColor.withValues(alpha: 0.4),
-                letterSpacing: 1.2,
-              ),
+          ),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              color: textColor.withValues(alpha: 0.4),
+              letterSpacing: 1.2,
             ),
-          ],
-        ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       ),
     );
   }
