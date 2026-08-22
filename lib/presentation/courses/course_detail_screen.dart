@@ -899,7 +899,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                       // ─── Lesson Material (Hidden for assignments) ──
                       if (postType != 'assignment') ...[
                         _buildUploadButton(
-                          label: materialName ?? 'Attach Lesson Material',
+                          label:
+                              materialName ??
+                              'Attach Lesson Material (PDF, Word, PPT, Excel)',
                           icon: materialName != null
                               ? Icons.check_circle
                               : Icons.picture_as_pdf_outlined,
@@ -908,7 +910,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                           onTap: () async {
                             final result = await FilePicker.platform.pickFiles(
                               type: FileType.custom,
-                              allowedExtensions: ['pdf', 'mp4', 'png', 'jpg'],
+                              allowedExtensions: [
+                                'pdf', 'doc', 'docx',
+                                'ppt', 'pptx',
+                                'xls', 'xlsx',
+                              ],
                             );
                             if (result == null) return;
                             setSheet(() => isUploadingMaterial = true);
@@ -944,7 +950,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         _buildUploadButton(
                           label:
                               assessmentName ??
-                              'Attach Assessment Instruction (PDF)',
+                              (postType == 'assignment'
+                                  ? 'Attach Assignment File (PDF, Word, PPT, Excel)'
+                                  : 'Attach Assessment Instruction (PDF, Word, PPT, Excel)'),
                           icon: assessmentName != null
                               ? Icons.check_circle
                               : Icons.assignment_outlined,
@@ -955,8 +963,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                               type: FileType.custom,
                               allowedExtensions: [
                                 'pdf', 'doc', 'docx',
-                                'xls', 'xlsx',
                                 'ppt', 'pptx',
+                                'xls', 'xlsx',
                               ],
                             );
                             if (result == null) return;
@@ -2664,7 +2672,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       _buildStreamTab(),
       _buildCourseworkTab(),
       _buildPeopleTab(),
-      _buildRankingTab(),
     ];
 
     return Scaffold(
@@ -2905,11 +2912,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         'icon': Icons.people_outline,
         'activeIcon': Icons.people,
         'label': 'People',
-      },
-      {
-        'icon': Icons.leaderboard_outlined,
-        'activeIcon': Icons.leaderboard,
-        'label': 'Ranking',
       },
     ];
 
@@ -4040,247 +4042,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         ),
       ],
     );
-  }
-
-  Widget _buildRankingTab() {
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    final currentUserId = _supabase.auth.currentUser?.id;
-
-    if (_isLoadingPeople) {
-      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
-    }
-
-    // Sort students by XP
-    final ranked = [..._students]
-      ..sort((a, b) {
-        // 1. Primary sort: XP (Descending)
-        int xpCompare = (b['xp'] as int? ?? 0).compareTo(a['xp'] as int? ?? 0);
-        if (xpCompare != 0) return xpCompare;
-
-        // 2. Tie-breaker: Name (Ascending)
-        // This ensures "Aaron" stays #1 over "Joshua" if both have 0 XP
-        return (a['name'] as String? ?? '').toLowerCase().compareTo(
-          (b['name'] as String? ?? '').toLowerCase(),
-        );
-      });
-
-    if (ranked.isEmpty) {
-      return _buildEmptyState(
-        Icons.leaderboard_outlined,
-        'No rankings yet',
-        'Rankings will appear once students earn XP.',
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-      physics: const BouncingScrollPhysics(),
-      children: [
-        // ─── 1. PODIUM (TOP 3) ───
-        if (ranked.length >= 3) ...[
-          const SizedBox(height: 16),
-          _buildPodium(ranked.take(3).toList()),
-          const SizedBox(height: 24),
-        ],
-
-        // ─── 2. LIST (RANK 4+) ───
-        ...ranked.asMap().entries.map((entry) {
-          final index = entry.key;
-          final student = entry.value;
-
-          // If we have a podium, skip the first 3 in the list
-          if (ranked.length >= 3 && index < 3) return const SizedBox.shrink();
-
-          return _buildRankRow(student, index + 1, currentUserId, textColor);
-        }),
-      ],
-    );
-  }
-
-  Widget _buildPodium(List<Map<String, dynamic>> top3) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(child: _buildPodiumItem(top3[1], 2, 120)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildPodiumItem(top3[0], 1, 160)),
-        const SizedBox(width: 12),
-        Expanded(child: _buildPodiumItem(top3[2], 3, 100)),
-      ],
-    );
-  }
-
-  Widget _buildPodiumItem(Map<String, dynamic> user, int rank, double height) {
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    final medalColors = {
-      1: const Color(0xFFFFD700), // Gold
-      2: const Color(0xFFC0C0C0), // Silver
-      3: const Color(0xFFCD7F32), // Bronze
-    };
-
-    return PressableScale(
-      onPressed: () {},
-      child: Container(
-        height: height,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: context.cardColor,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(
-            color: medalColors[rank]!.withValues(alpha: 0.2),
-            width: 2,
-          ),
-          boxShadow: [
-            // Only 1st Place gets the "Aura" glow
-            if (rank == 1)
-              BoxShadow(
-                color: medalColors[rank]!.withValues(alpha: 0.2),
-                blurRadius: 25,
-                spreadRadius: 2,
-                offset: const Offset(0, -5),
-              ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Icon
-            Icon(
-              Icons.workspace_premium_rounded,
-              color: medalColors[rank],
-              size: rank == 1 ? 36 : 26,
-            ),
-            const SizedBox(height: 8),
-
-            // ─── SPECIAL NAME EFFECTS ───
-            Text(
-              (user['name'] as String? ?? 'User').split(' ').first,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontWeight: FontWeight.w900, // Extra Bold
-                fontSize: rank == 1 ? 14 : 12,
-                color: textColor,
-                // Text Glow Effect
-                shadows: [
-                  Shadow(
-                    color: medalColors[rank]!.withValues(alpha: 0.5),
-                    blurRadius: 8.0,
-                    offset: const Offset(0, 0),
-                  ),
-                ],
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-
-            Text(
-              '${user['xp'] ?? 0} XP',
-              style: TextStyle(
-                fontSize: 10,
-                color: medalColors[rank],
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1.0, // Wider for premium feel
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRankRow(
-    Map<String, dynamic> user,
-    int rank,
-    String? currentUserId,
-    Color themeColor,
-  ) {
-    final isMe = user['id'] == currentUserId;
-    final rowColor = isMe ? AppColors.primary : themeColor;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: PressableScale(
-        onPressed: () {},
-        scaleFactor: 0.98,
-        opacityFactor: 0.8,
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: isMe
-                ? AppColors.primary.withValues(alpha: 0.08)
-                : context.cardColor,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isMe
-                  ? AppColors.primary.withValues(alpha: 0.2)
-                  : Colors.transparent,
-            ),
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 32,
-                child: Text(
-                  '#$rank',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: rowColor.withValues(alpha: 0.4),
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-              _buildAvatar(
-                name: user['name'] ?? 'U',
-                avatarUrl: user['avatar_url'] as String?,
-                radius: 18,
-                fontSize: 12,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      user['name'] ?? '',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontWeight: FontWeight.w700,
-                        color: themeColor,
-                        fontSize: 14,
-                      ),
-                    ),
-                    Text(
-                      _getLevelTitle(user['xp'] ?? 0),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: themeColor.withValues(alpha: 0.4),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                '${user['xp']} XP',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.gold,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  String _getLevelTitle(int xp) {
-    if (xp >= 2000) return 'Master';
-    if (xp >= 1000) return 'Expert';
-    if (xp >= 600) return 'Advanced';
-    if (xp >= 300) return 'Intermediate';
-    if (xp >= 100) return 'Novice';
-    return 'Beginner';
   }
 
   Widget _buildUploadButton({

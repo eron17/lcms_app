@@ -87,6 +87,19 @@ Student side: Instructions tab + My Result tab
 (pending state, graded score display with XP,
 scanner breakdown, unsubmit).
 
+### lib/presentation/courses/file_viewer_screen.dart
+Shared in-app file viewer, reused by post_detail_screen,
+assignment_detail_screen, three_d_meet_detail_screen, and
+offline_files_screen (constructor takes url/fileName, plus
+isLocal for files already saved on-device).
+Renders PDF (Syncfusion), video (Chewie), and images
+natively. Word/PPT/Excel (doc/docx/ppt/pptx/xls/xlsx)
+render via a Google Docs Viewer WebView (webview_flutter) —
+requires a public url, so isLocal office files fall back to
+the "cannot preview" state. AppBar has a Download action
+(dio) for any non-local file, saving to the device's
+Downloads folder.
+
 ## Database Tables (8 active tables)
 
 ### users

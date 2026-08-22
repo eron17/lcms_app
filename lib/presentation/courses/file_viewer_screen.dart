@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:dio/dio.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import 'dart:io';
@@ -36,6 +39,14 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   bool _pdfLoaded = false;
   String? _pdfError;
 
+  // ─── Office Doc State (Word / PPT / Excel via Google Docs Viewer) ──
+  WebViewController? _officeController;
+  bool _officeLoading = true;
+
+  // ─── Download State ───────────────────────────────────────
+  bool _isDownloading = false;
+  double _downloadProgress = 0;
+
   // ─── File Type ────────────────────────────────────────────
   late String _fileType;
 
@@ -45,6 +56,8 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     _fileType = _getFileType(widget.fileName);
     if (_fileType == 'video') {
       _initVideoPlayer();
+    } else if (_fileType == 'office' && !widget.isLocal) {
+      _initOfficeViewer();
     }
   }
 
@@ -53,7 +66,90 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     if (['pdf'].contains(ext)) return 'pdf';
     if (['mp4', 'mov', 'avi', 'mkv', 'webm'].contains(ext)) return 'video';
     if (['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext)) return 'image';
+    if (['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx'].contains(ext)) {
+      return 'office';
+    }
     return 'unknown';
+  }
+
+  void _initOfficeViewer() {
+    final viewerUrl =
+        'https://docs.google.com/viewer?url=${Uri.encodeComponent(widget.url)}&embedded=true';
+    _officeController = WebViewController()
+      ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      ..setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) {
+            if (mounted) setState(() => _officeLoading = false);
+          },
+          onWebResourceError: (_) {
+            if (mounted) setState(() => _officeLoading = false);
+          },
+        ),
+      )
+      ..loadRequest(Uri.parse(viewerUrl));
+  }
+
+  Future<void> _downloadFile() async {
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0;
+    });
+    try {
+      final dir =
+          await getExternalStorageDirectory() ??
+          await getApplicationDocumentsDirectory();
+      final downloadsPath = '${dir.path}/Downloads';
+      await Directory(downloadsPath).create(recursive: true);
+      final savePath = '$downloadsPath/${widget.fileName}';
+
+      final dio = Dio();
+      await dio.download(
+        widget.url,
+        savePath,
+        onReceiveProgress: (received, total) {
+          if (total != -1 && mounted) {
+            setState(() => _downloadProgress = received / total);
+          }
+        },
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${widget.fileName} saved to Downloads',
+              style: const TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Download failed: $e',
+              style: const TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDownloading = false;
+          _downloadProgress = 0;
+        });
+      }
+    }
   }
 
   Future<void> _initVideoPlayer() async {
@@ -155,21 +251,49 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
             ),
           ],
         ),
-        // PDF toolbar actions
-        actions: _fileType == 'pdf' && _pdfLoaded
-            ? [
-                IconButton(
-                  icon: Icon(Icons.zoom_in, color: context.textPrimary),
-                  onPressed: () => _pdfController.zoomLevel =
-                      _pdfController.zoomLevel + 0.25,
-                ),
-                IconButton(
-                  icon: Icon(Icons.zoom_out, color: context.textPrimary),
-                  onPressed: () => _pdfController.zoomLevel =
-                      (_pdfController.zoomLevel - 0.25).clamp(0.5, 5.0),
-                ),
-              ]
-            : null,
+        // Toolbar actions
+        actions: [
+          // PDF zoom controls
+          if (_fileType == 'pdf' && _pdfLoaded) ...[
+            IconButton(
+              icon: Icon(Icons.zoom_in, color: context.textPrimary),
+              onPressed: () => _pdfController.zoomLevel =
+                  _pdfController.zoomLevel + 0.25,
+            ),
+            IconButton(
+              icon: Icon(Icons.zoom_out, color: context.textPrimary),
+              onPressed: () => _pdfController.zoomLevel =
+                  (_pdfController.zoomLevel - 0.25).clamp(0.5, 5.0),
+            ),
+          ],
+          // Download
+          if (!widget.isLocal)
+            _isDownloading
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        value: _downloadProgress > 0
+                            ? _downloadProgress
+                            : null,
+                        strokeWidth: 2,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  )
+                : IconButton(
+                    icon: Icon(
+                      Icons.download_rounded,
+                      color: _fileType == 'video'
+                          ? Colors.white
+                          : AppColors.primary,
+                    ),
+                    tooltip: 'Download',
+                    onPressed: _downloadFile,
+                  ),
+        ],
       ),
       body: _buildBody(),
     );
@@ -183,9 +307,42 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
         return _buildVideoPlayer();
       case 'image':
         return _buildImageViewer();
+      case 'office':
+        return widget.isLocal ? _buildUnsupportedFile() : _buildOfficeViewer();
       default:
         return _buildUnsupportedFile();
     }
+  }
+
+  // ─── Office Doc Viewer (Word / PPT / Excel) ────────────────
+  Widget _buildOfficeViewer() {
+    if (_officeController == null) return _buildUnsupportedFile();
+    return Stack(
+      children: [
+        WebViewWidget(controller: _officeController!),
+        if (_officeLoading)
+          Container(
+            color: context.bgColor,
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const CircularProgressIndicator(color: AppColors.primary),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Loading document...',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: context.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   // ─── PDF Viewer ───────────────────────────────────────────

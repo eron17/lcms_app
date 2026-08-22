@@ -8,6 +8,7 @@ import '../../core/router/app_router.dart';
 import 'package:pinput/pinput.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../shared/widgets/pressable_scale.dart';
+import '../../core/utils/string_utils.dart';
 class LoginScreen extends StatefulWidget {
   final bool showRegister;
   const LoginScreen({super.key, this.showRegister = false});
@@ -182,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen>
         if (response.user != null) {
           await _supabase.from('users').insert({
             'id': response.user!.id,
-            'name': _nameController.text.trim(),
+            'name': toTitleCase(_nameController.text.trim()),
             'email': _emailController.text.trim(),
             'role': _isStudent ? 'student' : 'instructor',
             'sex': _isStudent ? _selectedSex : null,

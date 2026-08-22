@@ -9,6 +9,7 @@ import '../../data/models/user_model.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import '../../shared/widgets/pressable_scale.dart';
+import '../../core/utils/string_utils.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final UserModel user;
@@ -206,7 +207,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       await _supabase
           .from('users')
           .update({
-            'name': _nameController.text.trim(),
+            'name': toTitleCase(_nameController.text.trim()),
             'avatar_url': cleanUrl,
           })
           .eq('id', userId);

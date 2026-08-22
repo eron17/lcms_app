@@ -882,8 +882,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
         'label': 'Courses',
       },
       {
-        'icon': Icons.leaderboard_outlined,
-        'activeIcon': Icons.leaderboard,
+        'icon': Icons.emoji_events_outlined,
+        'activeIcon': Icons.emoji_events_rounded,
         'label': 'Ranking',
       },
       {
@@ -1745,7 +1745,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    'Leaderboard',
+                    'Ranking',
                     style: TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 22,

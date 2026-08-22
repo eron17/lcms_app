@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import 'code_viewer_screen.dart';
+import 'file_viewer_screen.dart';
 
 class ThreeDMeetDetailScreen extends StatefulWidget {
   final Map<String, dynamic> post;
@@ -506,8 +507,8 @@ class _ThreeDMeetDetailScreenState
           ],
 
           // Attachments
-          if (widget.post['lesson_material_url'] != null ||
-              widget.post['assessment_instruction_url'] != null) ...[
+          if (widget.post['material_url'] != null ||
+              widget.post['assessment_url'] != null) ...[
             Text(
               'ATTACHMENTS',
               style: TextStyle(
@@ -519,17 +520,19 @@ class _ThreeDMeetDetailScreenState
               ),
             ),
             const SizedBox(height: 8),
-            if (widget.post['lesson_material_url'] != null)
+            if (widget.post['material_url'] != null)
               _attachmentTile(
-                label: 'Lesson Material',
-                url: widget.post['lesson_material_url'],
+                label: widget.post['material_name'] ?? 'Lesson Material',
+                url: widget.post['material_url'],
                 icon: Icons.menu_book_rounded,
                 color: AppColors.primary,
               ),
-            if (widget.post['assessment_instruction_url'] != null)
+            if (widget.post['assessment_url'] != null)
               _attachmentTile(
-                label: 'Assessment Instruction',
-                url: widget.post['assessment_instruction_url'],
+                label:
+                    widget.post['assessment_name'] ??
+                    'Assessment Instruction',
+                url: widget.post['assessment_url'],
                 icon: Icons.assignment_rounded,
                 color: const Color(0xFFF97316),
               ),
@@ -578,10 +581,12 @@ class _ThreeDMeetDetailScreenState
         ),
         trailing:
             Icon(Icons.chevron_right_rounded, color: color, size: 20),
-        onTap: () {
-          // Open PDF viewer — use your existing PDF viewer navigation
-          // openLink(url) or Navigator.push to your PDF viewer screen
-        },
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => FileViewerScreen(url: url, fileName: label),
+          ),
+        ),
         dense: true,
       ),
     );

@@ -37,6 +37,13 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   String _courseFilter = 'Active';
   bool _hasUnreadNotifications = false;
 
+  // Instructor leaderboard state
+  String? _lbSelectedCourseId;
+  bool _lbIsWeekly = false;
+  bool _lbIsLoading = false;
+  List<Map<String, dynamic>> _lbData = [];
+  List<Map<String, dynamic>> _instructorCourses = [];
+
   // Reports drill-down state
   Map<String, dynamic>? _selectedCourse;
   Map<String, dynamic>? _selectedPost;
@@ -86,6 +93,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     ).animate(CurvedAnimation(parent: _fabController, curve: Curves.easeOut));
     _fabController.forward();
     _loadData();
+    _loadInstructorCourses();
   }
 
   @override
@@ -1029,6 +1037,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                       _buildHomePage(),
                       _buildClassesPage(),
                       _buildReportsPage(),
+                      _buildInstructorLeaderboardPage(),
                       _buildProfilePage(),
                     ],
                   ),
@@ -1163,6 +1172,11 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         'icon': Icons.bar_chart_outlined,
         'activeIcon': Icons.bar_chart,
         'label': 'Reports',
+      },
+      {
+        'icon': Icons.emoji_events_outlined,
+        'activeIcon': Icons.emoji_events_rounded,
+        'label': 'Ranking',
       },
       {
         'icon': Icons.person_outline,
@@ -2748,6 +2762,661 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   }
 
   // ─── Profile Page ────────────────────────────────────────
+  // ─── Instructor Leaderboard ────────────────────────────────
+  Future<void> _loadInstructorCourses() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+      final data = await _supabase
+          .from('courses')
+          .select('id, title')
+          .eq('instructor_id', userId)
+          .eq('is_archived', false)
+          .order('title');
+      if (mounted) {
+        setState(
+          () => _instructorCourses = List<Map<String, dynamic>>.from(data),
+        );
+      }
+    } catch (e) {
+      debugPrint('Load instructor courses: $e');
+    }
+  }
+
+  Future<void> _loadInstructorLeaderboard(String courseId) async {
+    setState(() => _lbIsLoading = true);
+    try {
+      // Real enrolled-student IDs for this course.
+      final enrollmentsData = await _supabase
+          .from('enrollments')
+          .select('student_id, users(id, name, avatar_url, xp)')
+          .eq('course_id', courseId);
+
+      final studentIds = (enrollmentsData as List)
+          .map((e) => e['student_id'] as String)
+          .toList();
+
+      List<Map<String, dynamic>> students;
+
+      if (_lbIsWeekly) {
+        // ─── Weekly: sum xp_awarded from submissions graded in the last 7 days ───
+        // Note: submissions has no course_id column, so we scope by this
+        // course's enrolled student_ids instead (verified against
+        // grading_service.dart, which is the real writer of these columns).
+        final weekAgo = DateTime.now()
+            .subtract(const Duration(days: 7))
+            .toIso8601String();
+        final weeklySubmissions = studentIds.isEmpty
+            ? []
+            : await _supabase
+                  .from('submissions')
+                  .select('student_id, xp_awarded')
+                  .inFilter('student_id', studentIds)
+                  .eq('is_graded', true)
+                  .gte('graded_at', weekAgo);
+
+        final Map<String, int> weeklyXp = {};
+        for (final s in weeklySubmissions) {
+          final uid = s['student_id'] as String?;
+          if (uid == null) continue;
+          weeklyXp[uid] = (weeklyXp[uid] ?? 0) + ((s['xp_awarded'] as int?) ?? 0);
+        }
+
+        students = enrollmentsData
+            .map((e) {
+              final u = e['users'] as Map<String, dynamic>?;
+              final uid = e['student_id'] as String;
+              return {
+                'id': uid,
+                'name': u?['name'] ?? 'Student',
+                'avatar_url': u?['avatar_url'],
+                'xp': weeklyXp[uid] ?? 0,
+              };
+            })
+            .toList();
+      } else {
+        students = enrollmentsData
+            .map((e) {
+              final u = e['users'] as Map<String, dynamic>?;
+              return {
+                'id': u?['id'] ?? e['student_id'],
+                'name': u?['name'] ?? 'Student',
+                'avatar_url': u?['avatar_url'],
+                'xp': u?['xp'] ?? 0,
+              };
+            })
+            .toList();
+      }
+
+      students.sort((a, b) => (b['xp'] as int).compareTo(a['xp'] as int));
+
+      if (mounted) {
+        setState(() => _lbData = students);
+      }
+    } catch (e) {
+      debugPrint('Load instructor leaderboard: $e');
+    } finally {
+      if (mounted) setState(() => _lbIsLoading = false);
+    }
+  }
+
+  Widget _buildInstructorLeaderboardPage() {
+    final currentUserId = _supabase.auth.currentUser?.id;
+    final themeColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          child: Column(
+            children: [
+              // ─── Header with Proper Icon ───
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.emoji_events_rounded, // Proper Trophy Icon
+                    color: AppColors.gold,
+                    size: 28,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Ranking',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: themeColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // ─── Class Selector Dropdown ────────────────
+              if (_instructorCourses.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  decoration: BoxDecoration(
+                    color: context.cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _lbSelectedCourseId != null
+                          ? AppColors.primary
+                          : context.borderColor,
+                      width: _lbSelectedCourseId != null ? 1.5 : 1,
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String?>(
+                      value: _lbSelectedCourseId,
+                      isExpanded: true,
+                      dropdownColor: context.surfaceColor,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                        color: themeColor,
+                      ),
+                      icon: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: _lbSelectedCourseId != null
+                            ? AppColors.primary
+                            : themeColor.withValues(alpha: 0.5),
+                      ),
+                      hint: Row(
+                        children: [
+                          const Icon(
+                            Icons.class_rounded,
+                            size: 18,
+                            color: AppColors.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Select a class',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 13,
+                              color: themeColor.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ],
+                      ),
+                      items: _instructorCourses.map((course) {
+                        return DropdownMenuItem<String?>(
+                          value: course['id'] as String,
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.primary,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  course['title'] ?? 'Untitled',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 13,
+                                    color: themeColor,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _lbSelectedCourseId = val;
+                          _lbIsWeekly = false;
+                        });
+                        if (val != null) {
+                          _loadInstructorLeaderboard(val);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+
+              const SizedBox(height: 14),
+
+              // Weekly/All-time toggle
+              Container(
+                height: 44,
+                decoration: BoxDecoration(
+                  color: context.cardColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.borderColor),
+                ),
+                child: Row(
+                  children: [
+                    _buildTab(
+                      'Weekly',
+                      _lbIsWeekly,
+                      () {
+                        setState(() => _lbIsWeekly = true);
+                        _loadInstructorLeaderboard(_lbSelectedCourseId!);
+                      },
+                    ),
+                    _buildTab(
+                      'All-time',
+                      !_lbIsWeekly,
+                      () {
+                        setState(() => _lbIsWeekly = false);
+                        _loadInstructorLeaderboard(_lbSelectedCourseId!);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        if (_lbSelectedCourseId == null)
+          Expanded(
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.emoji_events_outlined,
+                    size: 72,
+                    color: context.isDark ? Colors.white12 : Colors.black12,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Select a class to view rankings',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: context.isDark ? Colors.white38 : Colors.black38,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tap the dropdown above to choose a class.',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 12,
+                      color: context.isDark ? Colors.white24 : Colors.black26,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else if (_lbIsLoading)
+          const Expanded(
+            child: Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            ),
+          )
+        else ...[
+          // Top 3 podium
+          if (_lbData.length >= 3) _buildPodium(_lbData.take(3).toList()),
+
+          const SizedBox(height: 16),
+
+          // ─── Ranking List ───
+          Expanded(
+            child: _lbData.isEmpty
+                ? _buildEmptyLeaderboard(themeColor)
+                : ListView.builder(
+                    // 100 padding at bottom ensures the list isn't hidden by the bottom nav
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                    physics: const BouncingScrollPhysics(),
+                    // We subtract 3 because the top 3 are already in the Podium
+                    itemCount: _lbData.length > 3 ? _lbData.length - 3 : 0,
+                    itemBuilder: (context, index) {
+                      // index + 3 gets the students starting from Rank #4
+                      final user = _lbData[index + 3];
+                      return _buildRankRow(
+                        user,
+                        index + 4,
+                        currentUserId,
+                        themeColor,
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // Helper for empty state
+  Widget _buildEmptyLeaderboard(Color themeColor) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.military_tech_outlined,
+            size: 64,
+            color: themeColor.withValues(alpha: 0.2),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No rankings yet',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: themeColor,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Students will appear here once they earn XP.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 13,
+              color: context.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPodium(List<Map<String, dynamic>> top3) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // 2nd Place
+          if (top3.length > 1)
+            Expanded(child: _buildPodiumItem(top3[1], 2, 120)),
+          const SizedBox(width: 12),
+          // 1st Place
+          if (top3.isNotEmpty)
+            Expanded(child: _buildPodiumItem(top3[0], 1, 160)),
+          const SizedBox(width: 12),
+          // 3rd Place
+          if (top3.length > 2)
+            Expanded(child: _buildPodiumItem(top3[2], 3, 100)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPodiumItem(Map<String, dynamic> user, int rank, double height) {
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    final medalColors = {
+      1: const Color(0xFFFFD700), // Gold
+      2: const Color(0xFFC0C0C0), // Silver
+      3: const Color(0xFFCD7F32), // Bronze
+    };
+
+    return PressableScale(
+      onPressed: () {},
+      child: Container(
+        constraints: BoxConstraints(minHeight: height),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: context.cardColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border.all(
+            color: medalColors[rank]!.withValues(alpha: 0.2),
+            width: 2,
+          ),
+          boxShadow: [
+            // Only 1st Place gets the "Aura" glow
+            if (rank == 1)
+              BoxShadow(
+                color: medalColors[rank]!.withValues(alpha: 0.2),
+                blurRadius: 25,
+                spreadRadius: 2,
+                offset: const Offset(0, -5),
+              ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Profile picture with rank badge (replaces medal icon)
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Builder(
+                  builder: (_) {
+                    final url = user['avatar_url'] as String?;
+                    final name = user['name'] as String? ?? 'S';
+                    final double radius = rank == 1 ? 32 : 26;
+                    final Color ringColor = medalColors[rank]!;
+                    if (url != null && url.isNotEmpty) {
+                      return CircleAvatar(
+                        radius: radius,
+                        backgroundImage: NetworkImage(url),
+                        backgroundColor: ringColor.withValues(alpha: 0.15),
+                        onBackgroundImageError: (_, __) {},
+                      );
+                    }
+                    return CircleAvatar(
+                      radius: radius,
+                      backgroundColor: ringColor.withValues(alpha: 0.15),
+                      child: Text(
+                        name[0].toUpperCase(),
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: rank == 1 ? 22 : 18,
+                          fontWeight: FontWeight.w700,
+                          color: ringColor,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                Positioned(
+                  bottom: -2,
+                  right: -4,
+                  child: Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: medalColors[rank],
+                      shape: BoxShape.circle,
+                      border: Border.all(color: context.cardColor, width: 1.5),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '$rank',
+                        style: const TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+
+            // ─── SPECIAL NAME EFFECTS ───
+            Text(
+              (user['name'] as String? ?? 'User').split(' ').first,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontWeight: FontWeight.w900, // Extra Bold
+                fontSize: rank == 1 ? 14 : 12,
+                color: textColor,
+                // Text Glow Effect
+                shadows: [
+                  Shadow(
+                    color: medalColors[rank]!.withValues(alpha: 0.5),
+                    blurRadius: 8.0,
+                    offset: const Offset(0, 0),
+                  ),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+
+            Text(
+              '${user['xp'] ?? 0} XP',
+              style: TextStyle(
+                fontSize: 10,
+                color: medalColors[rank],
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.0, // Wider for premium feel
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRankRow(
+    Map<String, dynamic> user,
+    int rank,
+    String? currentUserId,
+    Color themeColor,
+  ) {
+    final isMe = user['id'] == currentUserId;
+    final rowColor = isMe ? AppColors.primary : themeColor;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: PressableScale(
+        onPressed: () {},
+        scaleFactor: 0.98,
+        opacityFactor: 0.8,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isMe
+                ? AppColors.primary.withValues(alpha: 0.08)
+                : context.cardColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isMe
+                  ? AppColors.primary.withValues(alpha: 0.2)
+                  : Colors.transparent,
+            ),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 32,
+                child: Text(
+                  '#$rank',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: rowColor.withValues(alpha: 0.4),
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: rowColor.withValues(alpha: 0.1),
+                child: Text(
+                  (user['name'] as String)[0].toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: rowColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user['name'] ?? '',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontWeight: FontWeight.w700,
+                        color: themeColor,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      _getLevelTitle(user['xp'] ?? 0),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: themeColor.withValues(alpha: 0.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '${user['xp']} XP',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.gold,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTab(String label, bool isActive, VoidCallback onTap) {
+    final inactiveTextColor = context.isDark
+        ? Colors.white70
+        : const Color(0xFF0D1B4B).withValues(alpha: 0.5);
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          margin: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            gradient: isActive
+                ? const LinearGradient(
+                    colors: [Color(0xFF1565C0), Color(0xFF1E90FF)],
+                  )
+                : null,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
+                color: isActive ? Colors.white : inactiveTextColor,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _getLevelTitle(int xp) {
+    if (xp >= 2000) return 'Master';
+    if (xp >= 1000) return 'Expert';
+    if (xp >= 600) return 'Advanced';
+    if (xp >= 300) return 'Intermediate';
+    if (xp >= 100) return 'Novice';
+    return 'Beginner';
+  }
+
   Widget _buildProfilePage() {
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
     return SingleChildScrollView(
