@@ -163,8 +163,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       maxHeight: 512,
       imageQuality: 80,
     );
-    if (picked == null) return;
-    setState(() => _newPhotoFile = File(picked.path));
+    if (picked != null && mounted) {
+      setState(() => _newPhotoFile = File(picked.path));
+    }
   }
 
   Future<String?> _uploadPhoto() async {

@@ -66,6 +66,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   bool _isLoadingComments = true;
   final _classCommentController = TextEditingController();
   RealtimeChannel? _commentChannel;
+  RealtimeChannel? _postChannel;
 
   @override
   void initState() {
@@ -77,6 +78,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     );
     _subscribeToComments();
     _acceptSubmissions = widget.post['accept_submissions'] ?? true;
+    _subscribeToPostChanges();
     _loadCurrentUser();
     if (widget.isInstructor) {
       _loadStudentsAndSubmissions();
@@ -88,6 +90,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   @override
   void dispose() {
     _commentChannel?.unsubscribe();
+    _postChannel?.unsubscribe();
     _classCommentController.dispose();
     _tabController.dispose();
     _gradeController.dispose();
@@ -376,6 +379,36 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       debugPrint('Load single submission error: $e');
       return _submissions[studentId];
     }
+  }
+
+  void _subscribeToPostChanges() {
+    final postId = widget.post['id'] as String?;
+    if (postId == null) return;
+    _postChannel = _supabase
+        .channel('post_$postId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'posts',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: postId,
+          ),
+          callback: (payload) {
+            if (mounted) {
+              setState(() {
+                final updated = payload.newRecord;
+                widget.post['accept_submissions'] =
+                    updated['accept_submissions'];
+                widget.post['due_date'] = updated['due_date'];
+                _acceptSubmissions =
+                    updated['accept_submissions'] ?? _acceptSubmissions;
+              });
+            }
+          },
+        )
+        .subscribe();
   }
 
   void _subscribeToComments() {
@@ -1403,8 +1436,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     child: _buildAttachmentTile(
                       post['assessment_name'] ?? 'File',
                       post['assessment_url'],
-                      Icons.picture_as_pdf_rounded,
-                      const Color(0xFFFF6B35),
+                      _getFileTypeIcon(post['assessment_name'] ?? 'file.pdf'),
+                      _getFileTypeColor(post['assessment_name'] ?? 'file.pdf'),
                     ),
                   ),
                 ],
@@ -1607,30 +1640,53 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Container(
-                      padding: const EdgeInsets.all(10),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: AppColors.error.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: AppColors.error.withValues(alpha: 0.3),
                         ),
                       ),
-                      child: const Row(
+                      child: Row(
                         children: [
-                          Icon(
-                            Icons.lock_outline_rounded,
+                          const Icon(
+                            Icons.lock_clock_rounded,
                             color: AppColors.error,
-                            size: 16,
+                            size: 18,
                           ),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 10),
                           Expanded(
-                            child: Text(
-                              'Submissions are closed. Contact your instructor.',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 12,
-                                color: AppColors.error,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isPastDue
+                                      ? 'Deadline has passed'
+                                      : 'Submissions are closed',
+                                  style: const TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.error,
+                                  ),
+                                ),
+                                Text(
+                                  isPastDue
+                                      ? 'The due date for this assignment has passed. '
+                                            'Contact your instructor to request an '
+                                            'extension.'
+                                      : 'Your instructor has closed submissions. You '
+                                            'can still upload files but cannot turn in '
+                                            'until submissions reopen.',
+                                  style: TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 11,
+                                    color: AppColors.error.withValues(alpha: 0.8),
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -2198,8 +2254,12 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     child: _buildAttachmentTile(
                       post['assessment_name'] ?? 'Assignment Instructions',
                       post['assessment_url'],
-                      Icons.picture_as_pdf_rounded,
-                      const Color(0xFFFF6B35),
+                      _getFileTypeIcon(
+                        post['assessment_name'] ?? 'file.pdf',
+                      ),
+                      _getFileTypeColor(
+                        post['assessment_name'] ?? 'file.pdf',
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -3158,8 +3218,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         return _buildAttachmentTile(
           names[i],
           urls[i],
-          Icons.insert_drive_file_outlined,
-          AppColors.primary,
+          _getFileTypeIcon(names[i]),
+          _getFileTypeColor(names[i]),
         );
       }),
     );
@@ -3276,6 +3336,63 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
   // ─── Shared Widgets ───────────────────────────────────────
 
+  String _getFileTypeLabel(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return 'PDF';
+      case 'doc':
+      case 'docx':
+        return 'DOC';
+      case 'ppt':
+      case 'pptx':
+        return 'PPT';
+      case 'xls':
+      case 'xlsx':
+        return 'XLS';
+      default:
+        return ext.toUpperCase();
+    }
+  }
+
+  Color _getFileTypeColor(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return const Color(0xFFFF4D4D);
+      case 'doc':
+      case 'docx':
+        return const Color(0xFF2B579A);
+      case 'ppt':
+      case 'pptx':
+        return const Color(0xFFD24726);
+      case 'xls':
+      case 'xlsx':
+        return const Color(0xFF217346);
+      default:
+        return AppColors.primary;
+    }
+  }
+
+  IconData _getFileTypeIcon(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return Icons.picture_as_pdf_rounded;
+      case 'doc':
+      case 'docx':
+        return Icons.description_rounded;
+      case 'ppt':
+      case 'pptx':
+        return Icons.slideshow_rounded;
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart_rounded;
+      default:
+        return Icons.insert_drive_file_rounded;
+    }
+  }
+
   Widget _buildAttachmentTile(
     String name,
     String url,
@@ -3303,7 +3420,32 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         ),
         child: Row(
           children: [
-            Icon(icon, color: color, size: 20),
+            Container(
+              width: 54,
+              height: 54,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, color: color, size: 20),
+                    const SizedBox(height: 1),
+                    Text(
+                      _getFileTypeLabel(name),
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -3459,7 +3601,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   // ─── 4. REUSABLE ACTION BUTTON ───
   Widget _buildActionButton({
     required String label,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
     Color? color,
     Color? textColor,
   }) {
@@ -3492,15 +3634,24 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
   // ─── 5. FINAL SUBMIT/UNSUBMIT BUTTON ───
   Widget _buildFinalSubmitButton(bool canSubmit) {
+    final isLocked = !_hasTurnedIn && !_isGraded && !canSubmit;
     return _buildActionButton(
       label: _isGraded ? 'Graded' : (_hasTurnedIn ? 'Unsubmit' : 'Turn in'),
-      onTap: (_isGraded || !canSubmit)
-          ? () {} // Disabled/Do nothing if graded or deadline passed
-          : (_hasTurnedIn ? _unsubmitWork : _markAsDone), // Always allow Turn in attempts
+      onTap: (_isGraded || isLocked)
+          ? null
+          : (_hasTurnedIn ? _unsubmitWork : _markAsDone),
       color: _hasTurnedIn
           ? context.cardColor
-          : (_isGraded ? context.cardColor : AppColors.primary),
-      textColor: (_hasTurnedIn || _isGraded) ? AppColors.primary : Colors.white,
+          : (_isGraded
+              ? context.cardColor
+              : isLocked
+              ? Colors.grey.withValues(alpha: 0.4)
+              : AppColors.primary),
+      textColor: (_hasTurnedIn || _isGraded)
+          ? AppColors.primary
+          : isLocked
+          ? Colors.white.withValues(alpha: 0.6)
+          : Colors.white,
     );
   }
 

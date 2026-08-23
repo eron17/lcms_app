@@ -180,22 +180,4 @@ class AutoGrader {
   static String _normalize(String value) {
     return value.trim().replaceAll(RegExp(r'\s+'), ' ');
   }
-
-  /// Counts how many submissions for [postId] already graded as correct
-  /// (score >= 75) precede this one, used to rank simultaneous correct
-  /// submissions before calling [grade].
-  static Future<int> getCorrectSubmissionRank(
-    dynamic supabaseClient,
-    String postId,
-  ) async {
-    final response = await supabaseClient
-        .from('submissions')
-        .select('id')
-        .eq('assessment_id', postId)
-        .eq('is_graded', true)
-        .gte('score', 75)
-        .count();
-    final count = response.count ?? 0;
-    return count + 1;
-  }
 }

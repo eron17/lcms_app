@@ -25,7 +25,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   List<Map<String, dynamic>> _notifications = [];
   bool _isLoading = true;
   RealtimeChannel? _channel;
-  bool _hasUnreadNotifications = false;
   String _activeFilter = 'all';
   // Filter options: 'all', 'enrollment', 'comment', 'submission'
 
@@ -34,7 +33,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     super.initState();
     _loadNotifications();
     _subscribeRealtime();
-    _checkUnreadStatus();
   }
 
   @override
@@ -65,25 +63,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
-  Future<void> _checkUnreadStatus() async {
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
-
-      final count = await _supabase
-          .from('notifications')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('is_read', false); // Only select unread ones
-
-      if (mounted) {
-        setState(() => _hasUnreadNotifications = (count as List).isNotEmpty);
-      }
-    } catch (e) {
-      debugPrint('Badge check error: $e');
-    }
-  }
-
   void _subscribeRealtime() {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return;
@@ -96,7 +75,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           callback: (payload) {
             if (payload.newRecord['user_id'] == userId && mounted) {
               _loadNotifications();
-              _checkUnreadStatus();
             }
           },
         )

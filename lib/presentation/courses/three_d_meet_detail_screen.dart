@@ -524,8 +524,12 @@ class _ThreeDMeetDetailScreenState
               _attachmentTile(
                 label: widget.post['material_name'] ?? 'Lesson Material',
                 url: widget.post['material_url'],
-                icon: Icons.menu_book_rounded,
-                color: AppColors.primary,
+                icon: _getFileTypeIcon(
+                  widget.post['material_name'] ?? 'file.pdf',
+                ),
+                color: _getFileTypeColor(
+                  widget.post['material_name'] ?? 'file.pdf',
+                ),
               ),
             if (widget.post['assessment_url'] != null)
               _attachmentTile(
@@ -533,8 +537,12 @@ class _ThreeDMeetDetailScreenState
                     widget.post['assessment_name'] ??
                     'Assessment Instruction',
                 url: widget.post['assessment_url'],
-                icon: Icons.assignment_rounded,
-                color: const Color(0xFFF97316),
+                icon: _getFileTypeIcon(
+                  widget.post['assessment_name'] ?? 'file.pdf',
+                ),
+                color: _getFileTypeColor(
+                  widget.post['assessment_name'] ?? 'file.pdf',
+                ),
               ),
             const SizedBox(height: 16),
           ],
@@ -555,6 +563,63 @@ class _ThreeDMeetDetailScreenState
     );
   }
 
+  String _getFileTypeLabel(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return 'PDF';
+      case 'doc':
+      case 'docx':
+        return 'DOC';
+      case 'ppt':
+      case 'pptx':
+        return 'PPT';
+      case 'xls':
+      case 'xlsx':
+        return 'XLS';
+      default:
+        return ext.toUpperCase();
+    }
+  }
+
+  Color _getFileTypeColor(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return const Color(0xFFFF4D4D);
+      case 'doc':
+      case 'docx':
+        return const Color(0xFF2B579A);
+      case 'ppt':
+      case 'pptx':
+        return const Color(0xFFD24726);
+      case 'xls':
+      case 'xlsx':
+        return const Color(0xFF217346);
+      default:
+        return AppColors.primary;
+    }
+  }
+
+  IconData _getFileTypeIcon(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return Icons.picture_as_pdf_rounded;
+      case 'doc':
+      case 'docx':
+        return Icons.description_rounded;
+      case 'ppt':
+      case 'pptx':
+        return Icons.slideshow_rounded;
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart_rounded;
+      default:
+        return Icons.insert_drive_file_rounded;
+    }
+  }
+
   Widget _attachmentTile({
     required String label,
     required String url,
@@ -569,7 +634,32 @@ class _ThreeDMeetDetailScreenState
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: ListTile(
-        leading: Icon(icon, color: color, size: 20),
+        leading: Container(
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(height: 1),
+                Text(
+                  _getFileTypeLabel(label),
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         title: Text(
           label,
           style: TextStyle(

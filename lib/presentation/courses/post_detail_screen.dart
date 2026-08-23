@@ -601,7 +601,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
     final post = widget.post;
     final type = post['type'] as String? ?? 'material';
@@ -1050,16 +1049,22 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 if (post['material_url'] != null)
                   _buildSimpleFileRow(
                     name: post['material_name'] ?? 'Lesson Material',
-                    icon: Icons.picture_as_pdf_rounded,
-                    color: AppColors.primary,
+                    icon: _getFileTypeIcon(post['material_name'] ?? 'file.pdf'),
+                    color: _getFileTypeColor(
+                      post['material_name'] ?? 'file.pdf',
+                    ),
                     url: post['material_url'],
                     isSaved: _materialSaved,
                   ),
                 if (post['assessment_url'] != null)
                   _buildSimpleFileRow(
                     name: post['assessment_name'] ?? 'Assignment Instructions',
-                    icon: Icons.assignment_rounded,
-                    color: const Color(0xFFFF6B35),
+                    icon: _getFileTypeIcon(
+                      post['assessment_name'] ?? 'file.pdf',
+                    ),
+                    color: _getFileTypeColor(
+                      post['assessment_name'] ?? 'file.pdf',
+                    ),
                     url: post['assessment_url'],
                     isSaved: _assessmentSaved,
                   ),
@@ -1199,6 +1204,63 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   // Simplified File Row
+  String _getFileTypeLabel(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return 'PDF';
+      case 'doc':
+      case 'docx':
+        return 'DOC';
+      case 'ppt':
+      case 'pptx':
+        return 'PPT';
+      case 'xls':
+      case 'xlsx':
+        return 'XLS';
+      default:
+        return ext.toUpperCase();
+    }
+  }
+
+  Color _getFileTypeColor(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return const Color(0xFFFF4D4D);
+      case 'doc':
+      case 'docx':
+        return const Color(0xFF2B579A);
+      case 'ppt':
+      case 'pptx':
+        return const Color(0xFFD24726);
+      case 'xls':
+      case 'xlsx':
+        return const Color(0xFF217346);
+      default:
+        return AppColors.primary;
+    }
+  }
+
+  IconData _getFileTypeIcon(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return Icons.picture_as_pdf_rounded;
+      case 'doc':
+      case 'docx':
+        return Icons.description_rounded;
+      case 'ppt':
+      case 'pptx':
+        return Icons.slideshow_rounded;
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart_rounded;
+      default:
+        return Icons.insert_drive_file_rounded;
+    }
+  }
+
   Widget _buildSimpleFileRow({
     required String name,
     required IconData icon,
@@ -1218,7 +1280,32 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         ),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      leading: Icon(icon, color: color, size: 24),
+      leading: Container(
+        width: 54,
+        height: 54,
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 20),
+              const SizedBox(height: 1),
+              Text(
+                _getFileTypeLabel(name),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       title: Text(
         name,
         style: TextStyle(
@@ -1277,160 +1364,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildCommentsSection() {
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    final currentUserId = _supabase.auth.currentUser?.id;
-
-    return Column(
-      children: [
-        if (_comments.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(32),
-            child: Text(
-              'No comments yet. Be the first to comment!',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 13,
-                color: textColor.withValues(alpha: 0.4),
-              ),
-            ),
-          ),
-
-        ..._comments.map((comment) {
-          final isOwn = comment['user_id'] == currentUserId;
-          final canManage = isOwn || widget.isInstructor;
-
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-            child: GestureDetector(
-              // 1. Tapping the comment triggers the options sheet
-              onTap: canManage ? () => _showCommentOptions(comment) : null,
-              behavior: HitTestBehavior.opaque,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: AppColors.primary.withOpacity(0.1),
-                    child: Text(
-                      (comment['user_name'] as String)[0].toUpperCase(),
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              comment['user_name'] ?? '',
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              _formatDate(comment['created_at']),
-                              style: TextStyle(
-                                fontFamily: 'Poppins',
-                                fontSize: 11,
-                                color: context.textHint,
-                              ),
-                            ),
-                            // 2. THE 3-DOT ICON IS REMOVED HERE
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          comment['text'] ?? '',
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 13,
-                            color: textColor.withOpacity(0.9),
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }),
-
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: AppColors.primary.withValues(alpha: 0.1),
-                child: Text(
-                  (_currentUserName ?? 'U')[0].toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _commentController,
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 13,
-                    color: textColor,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Add class comment...',
-                    hintStyle: TextStyle(fontSize: 13, color: context.textHint),
-                    filled: true,
-                    fillColor: context.cardColor,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(24),
-                      borderSide: BorderSide(color: context.borderColor),
-                    ),
-                    suffixIcon: IconButton(
-                      onPressed: _submitComment,
-                      icon: _isSubmittingComment
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(
-                              Icons.send_rounded,
-                              color: AppColors.primary,
-                              size: 20,
-                            ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 

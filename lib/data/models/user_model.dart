@@ -25,9 +25,6 @@ class UserModel {
     this.lastActiveAt,
   });
 
-  bool get isInstructor => role == 'instructor';
-  bool get isStudent => role == 'student';
-
   // ─── From Supabase JSON ──────────────────────────────────
   factory UserModel.fromMap(Map<String, dynamic> data) {
     return UserModel(
@@ -47,44 +44,4 @@ class UserModel {
     );
   }
 
-  // ─── To Supabase JSON ────────────────────────────────────
-  Map<String, dynamic> toMap() {
-    return {
-      'name': name,
-      'email': email,
-      'role': role,
-      'avatar_url': avatarUrl,
-      'xp': xp,
-      'level': level,
-      'badges': badges,
-      'streak': streak,
-      'created_at': createdAt.toIso8601String(),
-      'last_active_at': lastActiveAt?.toIso8601String(),
-    };
-  }
-
-  // ─── Copy With ───────────────────────────────────────────
-  UserModel copyWith({
-    String? name,
-    String? avatarUrl,
-    int? xp,
-    int? level,
-    List<String>? badges,
-    int? streak,
-    DateTime? lastActiveAt,
-  }) {
-    return UserModel(
-      id: id,
-      name: name ?? this.name,
-      email: email,
-      role: role,
-      avatarUrl: avatarUrl ?? this.avatarUrl,
-      xp: xp ?? this.xp,
-      level: level ?? this.level,
-      badges: badges ?? this.badges,
-      streak: streak ?? this.streak,
-      createdAt: createdAt,
-      lastActiveAt: lastActiveAt ?? this.lastActiveAt,
-    );
-  }
 }

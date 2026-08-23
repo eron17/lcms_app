@@ -151,11 +151,6 @@ class CodeScanner {
     return sourceCode.contains(trimmed);
   }
 
-  bool allKeywordsPresent(List<String> keywords) {
-    if (keywords.isEmpty) return true;
-    return keywords.every(hasKeyword);
-  }
-
   bool anyForbiddenFound(List<String> patterns) {
     if (patterns.isEmpty) return false;
     return patterns.any(hasForbiddenPattern);

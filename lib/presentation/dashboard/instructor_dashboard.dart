@@ -1251,7 +1251,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     final activeCoursesCount = _courses
         .where((c) => c['is_published'] == true)
         .length;
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1521,51 +1520,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             ),
           );
         }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildPendingSubmissionCard(Map<String, dynamic> submission) {
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.assignment_outlined,
-            color: AppColors.warning,
-            size: 24,
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  submission['users']?['name'] ?? 'Student',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: textColor,
-                  ),
-                ),
-                Text(
-                  submission['assessments']?['title'] ?? 'Assessment',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: textColor.withValues(alpha: 0.5),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right, color: AppColors.warning),
-        ],
       ),
     );
   }
@@ -2683,87 +2637,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     }
   }
 
-  // ─── Empty State Helpers ─────────────────────────────────
-
-  Widget _buildEmptyReportState(String message) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.borderColor),
-      ),
-      child: Center(
-        child: Text(
-          message,
-          style: TextStyle(fontFamily: 'Poppins', color: context.textSecondary),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmptySubmissionsState() {
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(40),
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: context.borderColor),
-        boxShadow: context.isDark
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: Column(
-        children: [
-          // ─── Proper Icon instead of Emoji ───
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.task_alt_rounded,
-              size: 40,
-              color: AppColors.success,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'All caught up!',
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: textColor,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'No pending student submissions to grade.',
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              color: textColor.withValues(alpha: 0.5),
-              fontSize: 13,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─── Profile Page ────────────────────────────────────────
   // ─── Instructor Leaderboard ────────────────────────────────
   Future<void> _loadInstructorCourses() async {
     try {
@@ -3324,17 +3197,31 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                   ),
                 ),
               ),
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: rowColor.withValues(alpha: 0.1),
-                child: Text(
-                  (user['name'] as String)[0].toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: rowColor,
-                  ),
-                ),
+              Builder(
+                builder: (_) {
+                  final url = user['avatar_url'] as String?;
+                  final name = (user['name'] as String?) ?? 'S';
+                  if (url != null && url.trim().isNotEmpty) {
+                    return CircleAvatar(
+                      radius: 18,
+                      backgroundImage: NetworkImage(url),
+                      backgroundColor: rowColor.withValues(alpha: 0.1),
+                      onBackgroundImageError: (_, __) {},
+                    );
+                  }
+                  return CircleAvatar(
+                    radius: 18,
+                    backgroundColor: rowColor.withValues(alpha: 0.1),
+                    child: Text(
+                      name[0].toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: rowColor,
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(width: 14),
               Expanded(

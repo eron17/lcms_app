@@ -436,62 +436,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     }
   }
 
-  Future<void> sendPostCreatedNotifications({
-    required Map<String, dynamic>
-    newPost, // The created post map (must have 'id', 'course_id', 'title', 'type')
-    required Map<String, dynamic> courseData, // The course map (must have 'id')
-  }) async {
-    final supabase = Supabase.instance.client;
-
-    try {
-      // 1. Fetch all students enrolled in this course
-      final studentsData = await supabase
-          .from('enrollments')
-          .select('student_id')
-          .eq('course_id', courseData['id']);
-
-      final List students = studentsData as List;
-      if (students.isEmpty) return; // No students to notify
-
-      // Determine notification title and body based on type
-      String title = 'New Material Posted';
-      String body = 'Instructor posted: ${newPost['title']}';
-
-      if (newPost['type'] == 'assignment') {
-        title = 'New assignment Posted';
-      } else if (newPost['type'] == '3d_meet') {
-        title = 'New 3d meet Posted';
-        body = 'Synchronous Coding: ${newPost['title']}';
-      } else if (newPost['type'] == 'announcement') {
-        title = 'New Announcement';
-      }
-
-      // 2. Build the batch insert list
-      final List<Map<String, dynamic>> notificationsBatch = students.map((
-        student,
-      ) {
-        return {
-          'user_id': student['student_id'],
-          'course_id': courseData['id'],
-          'post_id':
-              newPost['id'], // Extremely important: this bridges the deep link!
-          'type': newPost['type'] ?? 'material',
-          'title': title,
-          'body': body,
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-        };
-      }).toList();
-
-      // 3. Batch insert into Supabase notifications table
-      await supabase.from('notifications').insert(notificationsBatch);
-      debugPrint(
-        'Notifications sent to ${notificationsBatch.length} students.',
-      );
-    } catch (e) {
-      debugPrint('Error sending post creation notifications: $e');
-    }
-  }
-
   // ════════════════════════════════════════════════════════
   // INSTRUCTOR DIALOGS
   // ════════════════════════════════════════════════════════
@@ -2269,6 +2213,15 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             ),
             const SizedBox(height: 16),
             _buildOptionTile(
+              Icons.edit_outlined,
+              'Rename Topic',
+              AppColors.primary,
+              () {
+                Navigator.pop(context);
+                _renameTopic(topic);
+              },
+            ),
+            _buildOptionTile(
               Icons.delete_outline,
               'Delete Topic',
               AppColors.error,
@@ -2281,6 +2234,128 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _renameTopic(Map<String, dynamic> topic) async {
+    final controller = TextEditingController(
+      text: topic['title'] as String? ?? '',
+    );
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.isDark
+            ? const Color(0xFF0A1128)
+            : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Rename topic',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 14,
+            color: context.isDark ? Colors.white : const Color(0xFF0D1B4B),
+          ),
+          decoration: InputDecoration(
+            hintText: 'Enter new topic name',
+            hintStyle: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 13,
+              color: context.textHint,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(
+                color: context.isDark
+                    ? AppColors.darkBorder
+                    : const Color(0xFFDDE3F0),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                color: AppColors.primary,
+                width: 1.5,
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                color: context.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text(
+              'Save',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (newName == null || newName.isEmpty) return;
+    if (newName == topic['title']) return;
+
+    try {
+      await _supabase
+          .from('topics')
+          .update({'title': newName})
+          .eq('id', topic['id']);
+      if (mounted) {
+        setState(() {
+          topic['title'] = newName;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Topic renamed to "$newName"',
+              style: const TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: AppColors.success,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+        _loadCoursework();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to rename: $e',
+              style: const TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   // 2. Alert Dialog warning pop-up

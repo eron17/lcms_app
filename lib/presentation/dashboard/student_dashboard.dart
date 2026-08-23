@@ -29,7 +29,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   List<Map<String, dynamic>> _enrolledCourses = [];
   List<Map<String, dynamic>> _allCourses = [];
   List<Map<String, dynamic>> _leaderboard = [];
-  List<Map<String, dynamic>> _todos = [];
   bool _isLoadingCourses = true;
   bool _isWeekly = true;
   String? _selectedLeaderboardCourseId; // null = All Classes
@@ -90,7 +89,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       _loadUser(),
       _loadEnrolledCourses(),
       _loadLeaderboard(),
-      _loadTodos(),
     ]);
   }
 
@@ -243,26 +241,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       }
     } catch (e) {
       debugPrint('Leaderboard error: $e');
-    }
-  }
-
-  Future<void> _loadTodos() async {
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
-      final data = await _supabase
-          .from('assessments')
-          .select('id, title, deadline, course_id, courses(title)')
-          .not('deadline', 'is', null)
-          .order('deadline', ascending: true)
-          .limit(5);
-      if (mounted) {
-        setState(() {
-          _todos = List<Map<String, dynamic>>.from(data);
-        });
-      }
-    } catch (e) {
-      debugPrint('Todos error: $e');
     }
   }
 
@@ -1228,112 +1206,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     );
   }
 
-  Widget _buildTodoList() {
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-
-    return Column(
-      children: _todos.map((todo) {
-        final deadline = DateTime.parse(todo['deadline']);
-        final daysLeft = deadline.difference(DateTime.now()).inDays;
-        final isUrgent = daysLeft <= 1;
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: context.cardColor,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isUrgent
-                  ? Colors.redAccent.withValues(alpha: 0.5)
-                  : context.borderColor,
-              width: 1,
-            ),
-            boxShadow: context.isDark
-                ? []
-                : [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.04),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: isUrgent
-                      ? Colors.red.withValues(alpha: 0.1)
-                      : AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.assignment_outlined,
-                  color: isUrgent ? Colors.redAccent : AppColors.primary,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      todo['title'] ?? '',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: textColor,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      todo['courses']?['title'] ?? 'Course',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 12,
-                        color: textColor.withValues(alpha: 0.5),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: isUrgent
-                      ? Colors.red.withValues(alpha: 0.1)
-                      : AppColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  daysLeft <= 0
-                      ? 'Today!'
-                      : daysLeft == 1
-                      ? 'Tomorrow'
-                      : '$daysLeft days',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: isUrgent ? Colors.redAccent : AppColors.primary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
-    );
-  }
 
   Widget _buildCourseCard(
     Map<String, dynamic> course,
@@ -1522,45 +1394,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildLoadingCards() {
-    return Column(
-      children: List.generate(
-        2,
-        (index) => Container(
-          margin: const EdgeInsets.only(bottom: 20),
-          height: 180, // Increased height to match actual course card size
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: context.cardColor,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: context.borderColor),
-          ),
-          child: Column(
-            children: [
-              // Skeleton header
-              Expanded(
-                flex: 3,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: context.isDark
-                        ? Colors.white.withValues(alpha: 0.05)
-                        : Colors.grey.withValues(alpha: 0.1),
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(24),
-                      topRight: Radius.circular(24),
-                    ),
-                  ),
-                ),
-              ),
-              // Skeleton body
-              Expanded(flex: 2, child: Container()),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -2200,17 +2033,31 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                   ),
                 ),
               ),
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: rowColor.withValues(alpha: 0.1),
-                child: Text(
-                  (user['name'] as String)[0].toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: rowColor,
-                  ),
-                ),
+              Builder(
+                builder: (_) {
+                  final url = user['avatar_url'] as String?;
+                  final name = (user['name'] as String?) ?? 'S';
+                  if (url != null && url.trim().isNotEmpty) {
+                    return CircleAvatar(
+                      radius: 18,
+                      backgroundImage: NetworkImage(url),
+                      backgroundColor: rowColor.withValues(alpha: 0.1),
+                      onBackgroundImageError: (_, __) {},
+                    );
+                  }
+                  return CircleAvatar(
+                    radius: 18,
+                    backgroundColor: rowColor.withValues(alpha: 0.1),
+                    child: Text(
+                      name[0].toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: rowColor,
+                      ),
+                    ),
+                  );
+                },
               ),
               const SizedBox(width: 14),
               Expanded(

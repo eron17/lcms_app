@@ -227,14 +227,6 @@ class _ClassSettingsScreenState extends State<ClassSettingsScreen> {
     );
   }
 
-  Widget _buildSectionLabel(String title, IconData icon, Color textColor) {
-    return Row(children: [
-      Icon(icon, color: AppColors.primary, size: 18),
-      const SizedBox(width: 8),
-      Text(title, style: const TextStyle(fontFamily: 'Poppins', fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.primary)),
-    ]);
-  }
-
   Widget _buildField({
     required String label, 
     required TextEditingController controller, 

@@ -106,6 +106,44 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     return 'unknown';
   }
 
+  Color _fileTypeColor() {
+    final ext = widget.fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return const Color(0xFFFF4D4D);
+      case 'doc':
+      case 'docx':
+        return const Color(0xFF2B579A);
+      case 'ppt':
+      case 'pptx':
+        return const Color(0xFFD24726);
+      case 'xls':
+      case 'xlsx':
+        return const Color(0xFF217346);
+      default:
+        return AppColors.primary;
+    }
+  }
+
+  String _fileTypeLabel() {
+    final ext = widget.fileName.split('.').last.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return 'PDF';
+      case 'doc':
+      case 'docx':
+        return 'DOC';
+      case 'ppt':
+      case 'pptx':
+        return 'PPT';
+      case 'xls':
+      case 'xlsx':
+        return 'XLS';
+      default:
+        return ext.toUpperCase();
+    }
+  }
+
   void _initOfficeViewer() {
     // Strip any existing query parameters from the Supabase URL before
     // passing to Google Docs Viewer to avoid double-encoding issues.
@@ -317,12 +355,15 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
               overflow: TextOverflow.ellipsis,
             ),
             Text(
-              _fileType.toUpperCase(),
+              _fileType == 'office' ? _fileTypeLabel() : _fileType.toUpperCase(),
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 10,
+                fontWeight: _fileType == 'office' ? FontWeight.w700 : null,
                 color: _fileType == 'video'
                     ? Colors.white54
+                    : _fileType == 'office'
+                    ? _fileTypeColor()
                     : context.textSecondary,
               ),
             ),
