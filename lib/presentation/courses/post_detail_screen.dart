@@ -650,11 +650,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           allSaved,
                         ),
 
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 12),
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 20),
                           child: Divider(thickness: 0.5),
                         ),
+                        const SizedBox(height: 12),
 
                         // ─── Comment List Only ───
                         _buildCommentsHeader(textColor),
@@ -805,15 +806,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       child: Column(
         children: [
-          // 1. Save Offline Button (Now moved to TOP)
-          if (hasFiles && !widget.isInstructor)
-            _buildSimpleOfflineButton(allSaved),
-
-          // Add a smaller gap if both buttons exist
-          if (type == '3d_meet' && hasFiles && !widget.isInstructor)
-            const SizedBox(height: 12),
-
-          // 2. Join 3D Meet Button (Now moved to BOTTOM)
+          // Join 3D Meet Button
           if (type == '3d_meet' && post['scheduled_time'] != null)
             _build3DButton(post['scheduled_time']),
         ],

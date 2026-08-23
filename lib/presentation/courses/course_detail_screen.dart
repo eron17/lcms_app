@@ -733,10 +733,12 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       }
     }
 
-    if (requiredKeywordControllers.isEmpty)
+    if (requiredKeywordControllers.isEmpty) {
       requiredKeywordControllers.add(TextEditingController());
-    if (forbiddenPatternControllers.isEmpty)
+    }
+    if (forbiddenPatternControllers.isEmpty) {
       forbiddenPatternControllers.add(TextEditingController());
+    }
 
     final typeConfig = {
       '3d_meet': {
@@ -3233,15 +3235,15 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 color: AppColors.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.archive_rounded,
                     color: AppColors.error,
                     size: 16,
                   ),
-                  const SizedBox(width: 8),
-                  const Expanded(
+                  SizedBox(width: 8),
+                  Expanded(
                     child: Text(
                       'This class is archived. Content is read-only.',
                       style: TextStyle(
@@ -3612,16 +3614,19 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                     size: 20,
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: textColor,
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: textColor,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
                   ),
-                  const Spacer(),
                   // Count indicator
                   Container(
                     padding: const EdgeInsets.symmetric(

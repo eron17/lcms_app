@@ -53,6 +53,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
   // Student
   Map<String, dynamic>? _mySubmission;
+  bool _isLoadingSubmission = true;
   List<Map<String, dynamic>> _myPrivateComments = [];
   final _myPrivateCommentController = TextEditingController();
   bool _isSubmittingMyComment = false;
@@ -202,6 +203,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
+      if (mounted) setState(() => _isLoadingSubmission = true);
 
       final assessmentId = await _getOrCreateAssessmentId();
 
@@ -245,11 +247,17 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
           _myPrivateComments = List<Map<String, dynamic>>.from(commentData);
           _isLoadingStudents = false;
+          _isLoadingSubmission = false;
         });
       }
     } catch (e) {
       debugPrint('Load my submission error: $e');
-      if (mounted) setState(() => _isLoadingStudents = false);
+      if (mounted) {
+        setState(() {
+          _isLoadingStudents = false;
+          _isLoadingSubmission = false;
+        });
+      }
     }
   }
 
@@ -1106,13 +1114,46 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
             'returned_at': DateTime.now().toIso8601String(),
           })
           .eq('id', submission!['id']);
+
+      // ─── Assignment XP: score × 0.20, +streak bonus on a perfect score ───
+      // Assignment grading does NOT change the streak — only 3D Meet does.
+      // Note: this formula assumes a 0-100 scale; an assignment whose
+      // _maxPoints isn't 100 will get disproportionate XP and can never
+      // trigger the streak bonus (which requires score == 100 exactly).
+      final baseXp = (score * 0.20).round();
+      int xpAwarded = baseXp;
+
+      final studentData = await _supabase
+          .from('users')
+          .select('xp, streak')
+          .eq('id', studentId)
+          .single();
+      final currentStreak = (studentData['streak'] as int?) ?? 0;
+      final currentXp = (studentData['xp'] as int?) ?? 0;
+
+      if (score == 100 && currentStreak > 0) {
+        xpAwarded = baseXp + (currentStreak * 10);
+      }
+
+      await _supabase
+          .from('submissions')
+          .update({'xp_awarded': xpAwarded})
+          .eq('id', submission['id']);
+
+      await _supabase
+          .from('users')
+          .update({'xp': currentXp + xpAwarded})
+          .eq('id', studentId);
+
       await _supabase.from('notifications').insert({
         'user_id': studentId, // Student receives this
         'course_id': widget.course['id'],
         'post_id': widget.post['id'],
         'type': 'assignment_graded',
         'title': 'Assignment Graded!',
-        'body': 'You got $score/$_maxPoints on ${widget.post['title']}',
+        'body':
+            'You got $score/$_maxPoints on ${widget.post['title']}. '
+            '+$xpAwarded XP earned!',
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
       await _loadStudentsAndSubmissions();
@@ -1501,6 +1542,17 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   }
 
   Widget _buildYourWorkPanel(bool isPastDue) {
+    if (_isLoadingSubmission) {
+      return Container(
+        padding: const EdgeInsets.all(24),
+        child: const Center(
+          child: CircularProgressIndicator(
+            color: AppColors.primary,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
     final canSubmit = _acceptSubmissions && !isPastDue;
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
@@ -1574,6 +1626,12 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Graded result (score + XP earned)
+                  if (_isGraded) ...[
+                    _buildGradedResultCard(),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Attachments List
                   if (_myWorkFileNames.isNotEmpty) // Changed this line
                     _buildUserFileTile(textColor, canSubmit)
@@ -3474,6 +3532,73 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   }
 
   // ─── 1. STATUS BADGE (Assigned / Turned In / Graded) ───
+  // ─── Graded result card (score + XP earned) shown to the student ───
+  Widget _buildGradedResultCard() {
+    final score = (_mySubmission?['score'] as int?) ?? 0;
+    final xpAwarded = (_mySubmission?['xp_awarded'] as int?) ?? 0;
+    final isPassing = _maxPoints > 0 && (score / _maxPoints) >= 0.6;
+    final baseXpForFullScore = (_maxPoints * 0.20).round();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 18),
+      decoration: BoxDecoration(
+        color: context.bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.borderColor),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '$score / $_maxPoints',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 32,
+              fontWeight: FontWeight.w800,
+              color: isPassing ? AppColors.success : AppColors.error,
+            ),
+          ),
+          if (xpAwarded > 0) ...[
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                ),
+              ),
+              child: Text(
+                '+$xpAwarded XP earned',
+                style: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFF59E0B),
+                ),
+              ),
+            ),
+            if (score == _maxPoints && xpAwarded > baseXpForFullScore) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Streak bonus included!',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 11,
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.8),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatusBadge() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

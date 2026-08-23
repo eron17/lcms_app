@@ -100,6 +100,18 @@ the "cannot preview" state. AppBar has a Download action
 (dio) for any non-local file, saving to the device's
 Downloads folder.
 
+### lib/core/utils/app_security_manager.dart
+Manages app lifecycle security. Auto-locks after 2 min
+in the background (checked on resume and via a GoRouter
+redirect on startup); signs out and clears session state
+when the app is fully removed from recents (AppLifecycleState
+.detached). Singleton, driven by WidgetsBindingObserver.
+
+### lib/presentation/auth/lock_screen.dart
+Lock screen shown when app resumes after 2+ minutes in
+background. Tries biometric auth (local_auth) first, falls
+back to email login if unavailable or declined.
+
 ## Database Tables (8 active tables)
 
 ### users

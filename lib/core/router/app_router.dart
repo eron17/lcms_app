@@ -9,6 +9,7 @@ import '../../presentation/auth/reset_password_screen.dart';
 import '../../presentation/dashboard/student_dashboard.dart';
 import '../../presentation/dashboard/instructor_dashboard.dart';
 import '../../presentation/courses/course_detail_screen.dart';
+import '../utils/app_security_manager.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -30,9 +31,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     return AppRoutes.opening;
   }
 
+  const authRoutes = {
+    AppRoutes.opening,
+    AppRoutes.login,
+    AppRoutes.register,
+    AppRoutes.resetPassword,
+  };
+
   return GoRouter(
     initialLocation: getInitialRoute(),
     debugLogDiagnostics: true,
+    redirect: (context, state) async {
+      // Already headed to an auth screen — nothing to gate.
+      if (authRoutes.contains(state.matchedLocation)) return null;
+      final expired = await AppSecurityManager().isBackgroundLockExpired();
+      if (expired) {
+        await supabase.auth.signOut();
+        return AppRoutes.login;
+      }
+      return null;
+    },
     routes: [
       GoRoute(
         path: AppRoutes.opening,

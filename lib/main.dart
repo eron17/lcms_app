@@ -6,6 +6,8 @@ import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
 import 'providers/theme_provider.dart';
 import 'core/utils/grading_service.dart';
+import 'core/utils/app_security_manager.dart';
+import 'presentation/auth/lock_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,10 +34,24 @@ class LCMSApp extends ConsumerStatefulWidget {
 }
 
 class _LCMSAppState extends ConsumerState<LCMSApp> {
+  bool _isLocked = false;
+
   @override
   void initState() {
     super.initState();
     _handleAuthDeepLink();
+    AppSecurityManager().initialize(
+      onLock: () {
+        if (mounted) setState(() => _isLocked = true);
+      },
+      onLogout: _forceLogout,
+    );
+  }
+
+  @override
+  void dispose() {
+    AppSecurityManager().dispose();
+    super.dispose();
   }
 
   void _handleAuthDeepLink() {
@@ -48,6 +64,15 @@ class _LCMSAppState extends ConsumerState<LCMSApp> {
         ref.read(appRouterProvider).go(AppRoutes.resetPassword);
       }
     });
+  }
+
+  Future<void> _forceLogout() async {
+    try {
+      await Supabase.instance.client.auth.signOut();
+    } catch (_) {}
+    if (!mounted) return;
+    setState(() => _isLocked = false);
+    ref.read(appRouterProvider).go(AppRoutes.login);
   }
 
   @override
@@ -67,7 +92,14 @@ class _LCMSAppState extends ConsumerState<LCMSApp> {
           data: MediaQuery.of(
             context,
           ).copyWith(textScaler: TextScaler.noScaling),
-          child: child!,
+          child: _isLocked
+              ? LockScreen(
+                  onUnlocked: () {
+                    if (mounted) setState(() => _isLocked = false);
+                  },
+                  onLogout: _forceLogout,
+                )
+              : child!,
         );
       },
     );
