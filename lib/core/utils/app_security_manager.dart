@@ -68,31 +68,49 @@ class AppSecurityManager with WidgetsBindingObserver {
   Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
     switch (state) {
       case AppLifecycleState.paused:
-        // App going to background (home button,
-        // switch app)
-        _markBackgrounded();
+        await _markBackgrounded();
+        // Mark as potentially killed so if the
+        // process dies while paused (removed from
+        // recents), next start sees the flag
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('app_was_killed', true);
+        } catch (_) {}
         _inactivityTimer?.cancel();
         break;
 
       case AppLifecycleState.resumed:
-        // Refresh Supabase session first so all
-        // queries have a valid token on resume.
-        // Fixes "classes not loading after idle" bug.
-        try {
-          await Supabase.instance.client.auth.refreshSession();
-        } catch (_) {
-          // Refresh failed — GoRouter redirect will
-          // catch it on next navigation and force login
+        // 1. Check lock FIRST before anything else
+        //    Must be awaited so backgroundedAt is
+        //    read before _markSessionActive clears it
+        await _checkIfShouldLockOrLogout();
+
+        // 2. Only mark active if NOT locked
+        //    If locked, let the lock screen handle it
+        if (!_isLocked) {
+          // Refresh session only if not locked
+          try {
+            await Supabase.instance.client.auth.refreshSession();
+          } catch (_) {}
+          await _markSessionActive();
+          // Clear the killed flag since app
+          // resumed normally
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.remove('app_was_killed');
+          } catch (_) {}
         }
-        _checkIfShouldLockOrLogout();
-        _markSessionActive();
         _inactivityTimer?.cancel();
         break;
 
       case AppLifecycleState.detached:
-        // App removed from recents or killed
-        // → full logout
-        _performLogout();
+        // Mark that app was killed/removed
+        // so next cold start knows to logout
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setBool('app_was_killed', true);
+          await prefs.remove(_backgroundedAtKey);
+        } catch (_) {}
         break;
 
       case AppLifecycleState.hidden:
@@ -142,6 +160,19 @@ class AppSecurityManager with WidgetsBindingObserver {
   // cold start.
   Future<bool> isBackgroundLockExpired() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // Check if app was killed/removed from recents
+    // This flag is set in paused/detached and cleared
+    // only on successful resume
+    final wasKilled = prefs.getBool('app_was_killed') ?? false;
+    if (wasKilled) {
+      // Clear the flag and force logout
+      await prefs.remove('app_was_killed');
+      await prefs.remove(_backgroundedAtKey);
+      return true; // → router will force logout
+    }
+
+    // Check background timeout (2 min lock)
     final backgroundedAt = prefs.getInt(_backgroundedAtKey);
     if (backgroundedAt == null) return false;
     final elapsed = DateTime.now().millisecondsSinceEpoch - backgroundedAt;

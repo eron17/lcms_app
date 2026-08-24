@@ -65,6 +65,25 @@ class _LoginScreenState extends State<LoginScreen>
       CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
     );
     _checkBiometrics();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _tryAutoBiometricSignIn(),
+    );
+  }
+
+  // Auto-triggers the existing biometric sign-in instead of requiring a
+  // button tap, but only when this device actually has saved credentials
+  // to unlock with — otherwise _authenticateWithBiometrics() would show
+  // its "sign in with email first" error the instant the screen opens,
+  // before a first-time user has done anything.
+  Future<void> _tryAutoBiometricSignIn() async {
+    if (!_isSignIn) return;
+    final savedEmail = await _storage.read(key: 'user_email');
+    final savedPassword = await _storage.read(key: 'user_password');
+    if (savedEmail == null || savedPassword == null) return;
+    if (!mounted) return;
+    await _checkBiometrics();
+    if (!mounted || !_biometricsAvailable) return;
+    await _authenticateWithBiometrics();
   }
 
   @override
@@ -914,59 +933,6 @@ class _LoginScreenState extends State<LoginScreen>
 
                       // ─── Submit Button ─────────────────────
                       _buildActionButton(),
-
-                      // ─── Biometrics Button (Sign In only) ─
-                      if (_isSignIn && _biometricsAvailable) ...[
-                        const SizedBox(height: 16),
-                        PressableScale(
-                          // 1. Wrap with the tactile effect
-                          scaleFactor: 0.98,
-                          onPressed: _authenticateWithBiometrics,
-                          child: Container(
-                            width: double.infinity,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? const Color(0xFF0A1128)
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(32),
-                              border: Border.all(
-                                color: isDark
-                                    ? const Color(0xFF1E3A6E)
-                                    : const Color(0xFFDDE3F0),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.fingerprint,
-                                  color: isDark
-                                      ? Colors.white.withOpacity(0.7)
-                                      : const Color(
-                                          0xFF0D1B4B,
-                                        ).withOpacity(0.7),
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  'Sign in with Biometrics',
-                                  style: TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: isDark
-                                        ? Colors.white.withOpacity(0.7)
-                                        : const Color(
-                                            0xFF0D1B4B,
-                                          ).withOpacity(0.7),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
 
                       const SizedBox(height: 40),
                     ],
