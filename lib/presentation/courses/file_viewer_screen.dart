@@ -79,11 +79,11 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       final result = await OpenFilex.open(widget.url);
       if (result.type != ResultType.done && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
               'Could not open file. Make sure you have an Office app '
               'installed (WPS Office or Microsoft Office).',
-              style: const TextStyle(fontFamily: 'Poppins'),
+              style: TextStyle(fontFamily: 'Poppins'),
             ),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,

@@ -650,12 +650,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           allSaved,
                         ),
 
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
                         const Padding(
                           padding: EdgeInsets.symmetric(horizontal: 20),
-                          child: Divider(thickness: 0.5),
+                          child: Divider(height: 1, thickness: 0.5),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
 
                         // ─── Comment List Only ───
                         _buildCommentsHeader(textColor),

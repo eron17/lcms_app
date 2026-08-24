@@ -25,12 +25,6 @@ class AppRoutes {
 final appRouterProvider = Provider<GoRouter>((ref) {
   final supabase = Supabase.instance.client;
 
-  String getInitialRoute() {
-    final session = supabase.auth.currentSession;
-    if (session != null) return AppRoutes.studentDashboard;
-    return AppRoutes.opening;
-  }
-
   const authRoutes = {
     AppRoutes.opening,
     AppRoutes.login,
@@ -39,16 +33,65 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   };
 
   return GoRouter(
-    initialLocation: getInitialRoute(),
+    initialLocation: AppRoutes.opening,
     debugLogDiagnostics: true,
     redirect: (context, state) async {
-      // Already headed to an auth screen — nothing to gate.
-      if (authRoutes.contains(state.matchedLocation)) return null;
+      final session = supabase.auth.currentSession;
+      final isAuthRoute = authRoutes.contains(state.matchedLocation);
+
+      // ── Not logged in ──────────────────────────────
+      if (session == null) {
+        return isAuthRoute ? null : AppRoutes.opening;
+      }
+
+      // ── Check background lock expiry ───────────────
       final expired = await AppSecurityManager().isBackgroundLockExpired();
       if (expired) {
         await supabase.auth.signOut();
         return AppRoutes.login;
       }
+
+      // ── Refresh session to fix idle token expiry ───
+      // Ensures all dashboard queries have a valid
+      // token after long idle — fixes "classes not
+      // loading" bug
+      try {
+        await supabase.auth.refreshSession();
+      } catch (_) {
+        await supabase.auth.signOut();
+        return AppRoutes.login;
+      }
+
+      // ── Helper: fetch role and return correct route ─
+      Future<String> routeForRole() async {
+        try {
+          final userId = session.user.id;
+          final userData = await supabase
+              .from('users')
+              .select('role')
+              .eq('id', userId)
+              .single();
+          final role = userData['role'] as String? ?? 'student';
+          return role == 'instructor'
+              ? AppRoutes.instructorDashboard
+              : AppRoutes.studentDashboard;
+        } catch (_) {
+          await supabase.auth.signOut();
+          return AppRoutes.login;
+        }
+      }
+
+      // ── On opening screen → route to correct dash ──
+      if (state.matchedLocation == AppRoutes.opening) {
+        return routeForRole();
+      }
+
+      // ── Already on auth screen while logged in ──────
+      if (isAuthRoute) {
+        return routeForRole();
+      }
+
+      // ── Logged in, on correct screen → do nothing ──
       return null;
     },
     routes: [

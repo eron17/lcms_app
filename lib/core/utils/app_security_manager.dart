@@ -65,7 +65,7 @@ class AppSecurityManager with WidgetsBindingObserver {
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
+  Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
     switch (state) {
       case AppLifecycleState.paused:
         // App going to background (home button,
@@ -75,7 +75,15 @@ class AppSecurityManager with WidgetsBindingObserver {
         break;
 
       case AppLifecycleState.resumed:
-        // App coming back to foreground
+        // Refresh Supabase session first so all
+        // queries have a valid token on resume.
+        // Fixes "classes not loading after idle" bug.
+        try {
+          await Supabase.instance.client.auth.refreshSession();
+        } catch (_) {
+          // Refresh failed — GoRouter redirect will
+          // catch it on next navigation and force login
+        }
         _checkIfShouldLockOrLogout();
         _markSessionActive();
         _inactivityTimer?.cancel();

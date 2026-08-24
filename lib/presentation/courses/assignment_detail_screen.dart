@@ -1125,11 +1125,10 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
       final studentData = await _supabase
           .from('users')
-          .select('xp, streak')
+          .select('streak')
           .eq('id', studentId)
           .single();
       final currentStreak = (studentData['streak'] as int?) ?? 0;
-      final currentXp = (studentData['xp'] as int?) ?? 0;
 
       if (score == 100 && currentStreak > 0) {
         xpAwarded = baseXp + (currentStreak * 10);
@@ -1140,10 +1139,12 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           .update({'xp_awarded': xpAwarded})
           .eq('id', submission['id']);
 
-      await _supabase
-          .from('users')
-          .update({'xp': currentXp + xpAwarded})
-          .eq('id', studentId);
+      // RLS blocks instructors from updating a student's xp column
+      // directly, so this goes through a SECURITY DEFINER RPC instead.
+      await _supabase.rpc(
+        'increment_student_xp',
+        params: {'p_student_id': studentId, 'p_xp': xpAwarded},
+      );
 
       await _supabase.from('notifications').insert({
         'user_id': studentId, // Student receives this
@@ -1246,7 +1247,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     return due != null && DateTime.now().isAfter(due);
   }
 
-  bool get _hasTurnedIn => _mySubmission?['submitted_at'] != null;
+  bool get _hasTurnedIn => _submissionIsTurnedIn(_mySubmission);
   bool get _hasAttachedFile => _myWorkFileUrls.isNotEmpty;
   bool get _isGraded => _mySubmission?['is_graded'] == true;
   int get _maxPoints =>

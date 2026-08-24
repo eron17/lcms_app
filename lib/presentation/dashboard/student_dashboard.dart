@@ -33,6 +33,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   bool _isWeekly = true;
   String? _selectedLeaderboardCourseId; // null = All Classes
   final _searchController = TextEditingController();
+  RealtimeChannel? _xpChannel;
   String _courseFilter = 'Active';
   bool _hasUnreadNotifications = false;
 
@@ -74,10 +75,36 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     );
 
     _loadData();
+    _subscribeToXpChanges();
+  }
+
+  void _subscribeToXpChanges() {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    _xpChannel = _supabase
+        .channel('user_xp_$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'users',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: userId,
+          ),
+          callback: (payload) {
+            // Re-fetch rather than hand-patch _currentUser (a UserModel,
+            // not a raw map) — keeps every field in sync, not just
+            // xp/streak, with one already-working code path.
+            if (mounted) _loadUser();
+          },
+        )
+        .subscribe();
   }
 
   @override
   void dispose() {
+    _xpChannel?.unsubscribe();
     _fabController.dispose();
     _glowController.dispose();
     _searchController.dispose();
