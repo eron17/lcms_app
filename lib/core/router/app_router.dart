@@ -47,7 +47,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // ── Check background lock expiry ───────────────
       final expired = await AppSecurityManager().isBackgroundLockExpired();
       if (expired) {
-        await supabase.auth.signOut();
+        try {
+          await supabase.auth.signOut();
+        } catch (_) {}
         return AppRoutes.login;
       }
 

@@ -47,7 +47,6 @@ lib/
 │       └── user_model.dart
 ├── presentation/
 │   ├── auth/
-│   │   ├── lock_screen.dart
 │   │   ├── login_screen.dart
 │   │   ├── opening_screen.dart
 │   │   └── reset_password_screen.dart
@@ -121,16 +120,11 @@ when saving a name at signup and in edit-profile, so names are
 stored in Title Case regardless of how the student typed them.
 
 ### lib/core/utils/app_security_manager.dart
-Manages app lifecycle security. Auto-locks after 2 min
+Manages app lifecycle security. Auto-logouts after 2 min
 in the background (checked on resume and via a GoRouter
 redirect on startup); signs out and clears session state
 when the app is fully removed from recents (AppLifecycleState
 .detached). Singleton, driven by WidgetsBindingObserver.
-
-### lib/presentation/auth/lock_screen.dart
-Lock screen shown when app resumes after 2+ minutes in
-background. Tries biometric auth (local_auth) first, falls
-back to email login if unavailable or declined.
 
 ## Database Tables (9 active tables)
 
