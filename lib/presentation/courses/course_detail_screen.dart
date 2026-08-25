@@ -117,6 +117,7 @@ class CourseDetailScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> course;
   final bool isInstructor;
   final int initialTab;
+  final bool isArchived;
 
   static int initialTabIndex = 0;
 
@@ -125,6 +126,7 @@ class CourseDetailScreen extends ConsumerStatefulWidget {
     required this.course,
     required this.isInstructor,
     this.initialTab = 0,
+    this.isArchived = false,
   });
 
   @override
@@ -2744,7 +2746,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isArchived = widget.course['is_archived'] == true;
+    final isArchived = widget.course['is_archived'] == true || widget.isArchived;
     final pages = [
       _buildStreamTab(),
       _buildCourseworkTab(),
@@ -3217,7 +3219,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       );
     }
 
-    final isArchived = widget.course['is_archived'] == true;
+    final isArchived = widget.course['is_archived'] == true || widget.isArchived;
 
     return RefreshIndicator(
       color: AppColors.primary,

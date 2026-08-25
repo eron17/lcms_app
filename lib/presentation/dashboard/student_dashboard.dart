@@ -9,9 +9,12 @@ import '../../providers/theme_provider.dart';
 import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_colors.dart';
 import '../courses/offline_files_screen.dart';
+import '../courses/archived_classes_screen.dart';
 import '../profile/edit_profile_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../../shared/widgets/pressable_scale.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:local_auth/local_auth.dart';
 
 class StudentDashboard extends ConsumerStatefulWidget {
   const StudentDashboard({super.key});
@@ -32,9 +35,12 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   bool _isLoadingCourses = true;
   bool _isWeekly = true;
   String? _selectedLeaderboardCourseId; // null = All Classes
-  final _searchController = TextEditingController();
   RealtimeChannel? _xpChannel;
-  String _courseFilter = 'Active';
+  final _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+  final _localAuth = LocalAuthentication();
+  bool _biometricsEnabled = false;
   bool _hasUnreadNotifications = false;
 
   // ─── Animation ───────────────────────────────────────────
@@ -76,13 +82,107 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
 
     _loadData();
     _subscribeToXpChanges();
+    _checkBiometricStatus();
+  }
+
+  Future<void> _checkBiometricStatus() async {
+    try {
+      final savedEmail = await _storage.read(key: 'user_email');
+      if (mounted) {
+        setState(() => _biometricsEnabled = savedEmail != null);
+      }
+    } catch (e) {
+      debugPrint('Biometric check error: $e');
+    }
+  }
+
+  Future<void> _toggleBiometrics(bool enabled) async {
+    if (enabled) {
+      _showEnableBiometricsDialog();
+    } else {
+      await _storage.delete(key: 'user_email');
+      await _storage.delete(key: 'user_password');
+      setState(() => _biometricsEnabled = false);
+    }
+  }
+
+  void _showEnableBiometricsDialog() {
+    final passController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.isDark
+            ? const Color(0xFF0A1128)
+            : Colors.white,
+        title: const Text(
+          'Enable Biometrics',
+          style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Enter your current password to enable fingerprint login.',
+              style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Current Password',
+                prefixIcon: Icon(Icons.lock_outline),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (passController.text.isEmpty) return;
+              final authenticated = await _localAuth.authenticate(
+                localizedReason: 'Confirm fingerprint to enable fast login',
+                options: const AuthenticationOptions(biometricOnly: true),
+              );
+              if (authenticated) {
+                await _storage.write(
+                  key: 'user_email',
+                  value: _currentUser?.email,
+                );
+                await _storage.write(
+                  key: 'user_password',
+                  value: passController.text.trim(),
+                );
+                if (mounted) {
+                  setState(() => _biometricsEnabled = true);
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Biometric login enabled!')),
+                  );
+                }
+              }
+            },
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _subscribeToXpChanges() {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return;
+
+    // Unsubscribe existing channel first so a re-subscribe (e.g. after
+    // resume) doesn't collide with a still-open channel of the same name
+    _xpChannel?.unsubscribe();
+
     _xpChannel = _supabase
-        .channel('user_xp_$userId')
+        .channel('user_xp_${userId}_${DateTime.now().millisecondsSinceEpoch}')
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
@@ -107,7 +207,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     _xpChannel?.unsubscribe();
     _fabController.dispose();
     _glowController.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -708,6 +807,47 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   }
 
   Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.isDark
+            ? const Color(0xFF0A1128)
+            : Colors.white,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Log out?',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: const Text(
+          'You will need to sign in again to '
+          'access your account.',
+          style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel',
+                style: TextStyle(
+                    fontFamily: 'Poppins',
+                    color: context.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Log out',
+                style: TextStyle(
+                    fontFamily: 'Poppins',
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     await _supabase.auth.signOut();
     if (mounted) context.go(AppRoutes.opening);
   }
@@ -749,7 +889,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                     index: _currentIndex,
                     children: [
                       _buildHomePage(),
-                      _buildCoursesPage(),
                       _buildLeaderboardPage(),
                       _buildProfilePage(),
                     ],
@@ -882,11 +1021,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     final items = [
       {'icon': Icons.home_outlined, 'activeIcon': Icons.home, 'label': 'Home'},
       {
-        'icon': Icons.book_outlined,
-        'activeIcon': Icons.book,
-        'label': 'Courses',
-      },
-      {
         'icon': Icons.emoji_events_outlined,
         'activeIcon': Icons.emoji_events_rounded,
         'label': 'Ranking',
@@ -974,9 +1108,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           _buildSectionHeader(
             'My Classes',
             icon: Icons.auto_stories, // Added proper icon
-            onSeeAll: _enrolledCourses.length > 3
-                ? () => setState(() => _currentIndex = 1)
-                : null,
+            onSeeAll: null,
           ),
           const SizedBox(height: 14),
           if (_isLoadingCourses)
@@ -1422,164 +1554,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildCoursesPage() {
-    final titleColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-
-    final filtered = _allCourses.where((c) {
-      final matchesSearch =
-          _searchController.text.isEmpty ||
-          c['title'].toString().toLowerCase().contains(
-            _searchController.text.toLowerCase(),
-          ) ||
-          c['course_code'].toString().toLowerCase().contains(
-            _searchController.text.toLowerCase(),
-          );
-
-      // Filter logic: match "Active" or "Archived"
-      final isArchived = c['is_archived'] == true;
-      final matchesFilter = _courseFilter == 'Active'
-          ? !isArchived
-          : isArchived;
-
-      return matchesSearch && matchesFilter;
-    }).toList();
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'My Courses',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: titleColor,
-                ),
-              ),
-              const SizedBox(height: 16),
-              // ─── Search Bar ─────────────────
-              TextField(
-                controller: _searchController,
-                onChanged: (_) => setState(() {}),
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  color: titleColor,
-                  fontSize: 14,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Search courses...',
-                  hintStyle: TextStyle(color: context.textHint, fontSize: 14),
-                  prefixIcon: Icon(
-                    Icons.search,
-                    color: context.textHint,
-                    size: 20,
-                  ),
-                  filled: true,
-                  fillColor: context.cardColor,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: context.borderColor),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: context.borderColor),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: AppColors.primary,
-                      width: 1.5,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              // ─── Filter Chips ───────────────
-              Row(
-                children: ['Active', 'Archived'].map((filter) {
-                  final isActive = _courseFilter == filter;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _courseFilter = filter),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: isActive
-                              ? const LinearGradient(
-                                  colors: [
-                                    AppColors.primaryDark,
-                                    AppColors.primary,
-                                  ],
-                                )
-                              : null,
-                          color: isActive ? null : context.cardColor,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isActive
-                                ? Colors.transparent
-                                : context.borderColor,
-                          ),
-                          boxShadow: [
-                            if (!isActive && !context.isDark)
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.05),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                          ],
-                        ),
-                        child: Text(
-                          filter,
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 13,
-                            fontWeight: isActive
-                                ? FontWeight.bold
-                                : FontWeight.w500,
-                            color: isActive
-                                ? Colors.white
-                                : titleColor.withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: filtered.isEmpty
-              ? _buildEmptySearchState()
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 100),
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) => _buildCourseCard(
-                    filtered[index],
-                    index,
-                    tagSuffix: '_list',
-                  ),
-                ),
-        ),
-      ],
     );
   }
 
@@ -2197,7 +2171,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
 
           // ─── 4. SETTINGS SECTION (Unified List) ───
           _buildPremiumSectionHeader(
-            'PREFERENCES & ACCOUNT',
+            'ACCOUNT SECURITY & PREFERENCES',
             Icons.settings_suggest_rounded,
             textColor,
           ),
@@ -2470,6 +2444,17 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       ),
       child: Column(
         children: [
+          // Biometric Login
+          _buildPremiumSettingsItem(
+            Icons.fingerprint,
+            'Biometric Login',
+            trailing: _buildAnimatedToggle(
+              value: _biometricsEnabled,
+              onTap: () => _toggleBiometrics(!_biometricsEnabled),
+            ),
+            showChevron: false,
+          ),
+          _buildPremiumDivider(),
           // Dark Mode Toggle (Toggle itself handles its own animation)
           _buildPremiumSettingsItem(
             Icons.dark_mode_outlined,
@@ -2479,6 +2464,20 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
               onTap: () => ref.read(themeProvider.notifier).toggleTheme(),
             ),
             showChevron: false,
+          ),
+          _buildPremiumDivider(),
+          // Archived Classes
+          _buildPremiumSettingsItem(
+            Icons.archive_rounded,
+            'Archived Classes',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const ArchivedClassesScreen(
+                  isInstructor: false,
+                ),
+              ),
+            ),
           ),
           _buildPremiumDivider(),
           // Offline Content (Now with Dimming)
@@ -2638,19 +2637,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   }
 
   // Helper for when search has no results
-  Widget _buildEmptySearchState() {
-    return Center(
-      child: Text(
-        'No courses found matching your criteria',
-        style: TextStyle(
-          fontFamily: 'Poppins',
-          color: context.textHint,
-          fontSize: 14,
-        ),
-      ),
-    );
-  }
-
   Widget _buildAnimatedToggle({
     required bool value,
     required VoidCallback onTap,

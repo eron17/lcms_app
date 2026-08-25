@@ -1120,6 +1120,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       // Note: this formula assumes a 0-100 scale; an assignment whose
       // _maxPoints isn't 100 will get disproportionate XP and can never
       // trigger the streak bonus (which requires score == 100 exactly).
+      final oldXpAwarded = (submission['xp_awarded'] as int?) ?? 0;
+
       final baseXp = (score * 0.20).round();
       int xpAwarded = baseXp;
 
@@ -1141,10 +1143,15 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
       // RLS blocks instructors from updating a student's xp column
       // directly, so this goes through a SECURITY DEFINER RPC instead.
-      await _supabase.rpc(
-        'increment_student_xp',
-        params: {'p_student_id': studentId, 'p_xp': xpAwarded},
-      );
+      // Award only the delta so re-grading a submission doesn't
+      // double-count XP already granted for it.
+      final xpDifference = xpAwarded - oldXpAwarded;
+      if (xpDifference != 0) {
+        await _supabase.rpc(
+          'increment_student_xp',
+          params: {'p_student_id': studentId, 'p_xp': xpDifference},
+        );
+      }
 
       await _supabase.from('notifications').insert({
         'user_id': studentId, // Student receives this
@@ -3601,6 +3608,10 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   }
 
   Widget _buildStatusBadge() {
+    final isMissing =
+        !_hasTurnedIn &&
+        !_isGraded &&
+        (!_acceptSubmissions || _isPastDue);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -3619,6 +3630,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
             ? 'Graded'
             : _hasTurnedIn
             ? 'Turned in'
+            : isMissing
+            ? 'Missing'
             : _hasAttachedFile
             ? 'Attached'
             : 'Assigned',
@@ -3630,6 +3643,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               ? AppColors.primary
               : _hasTurnedIn
               ? Colors.green
+              : isMissing
+              ? AppColors.error
               : _hasAttachedFile
               ? AppColors.primary
               : context.textSecondary,

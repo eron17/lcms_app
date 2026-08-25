@@ -10,10 +10,13 @@ import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_colors.dart';
 import 'dart:math';
 import '../profile/edit_profile_screen.dart';
+import '../courses/archived_classes_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../courses/assignment_detail_screen.dart';
 import 'package:flutter/services.dart';
 import '../../shared/widgets/pressable_scale.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:local_auth/local_auth.dart';
 
 
 class InstructorDashboard extends ConsumerStatefulWidget {
@@ -33,8 +36,13 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   List<Map<String, dynamic>> _courses = [];
   List<Map<String, dynamic>> _pendingSubmissions = [];
   bool _isLoadingCourses = true;
-  final _searchController = TextEditingController();
-  String _courseFilter = 'Active';
+  final _homeSearchController = TextEditingController();
+  final _storage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
+  final _localAuth = LocalAuthentication();
+  bool _biometricsEnabled = false;
+  String _homeSearchQuery = '';
   bool _hasUnreadNotifications = false;
 
   // Instructor leaderboard state
@@ -94,13 +102,102 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     _fabController.forward();
     _loadData();
     _loadInstructorCourses();
+    _checkBiometricStatus();
+  }
+
+  Future<void> _checkBiometricStatus() async {
+    try {
+      final savedEmail = await _storage.read(key: 'user_email');
+      if (mounted) {
+        setState(() => _biometricsEnabled = savedEmail != null);
+      }
+    } catch (e) {
+      debugPrint('Biometric check error: $e');
+    }
+  }
+
+  Future<void> _toggleBiometrics(bool enabled) async {
+    if (enabled) {
+      _showEnableBiometricsDialog();
+    } else {
+      await _storage.delete(key: 'user_email');
+      await _storage.delete(key: 'user_password');
+      setState(() => _biometricsEnabled = false);
+    }
+  }
+
+  void _showEnableBiometricsDialog() {
+    final passController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.isDark
+            ? const Color(0xFF0A1128)
+            : Colors.white,
+        title: const Text(
+          'Enable Biometrics',
+          style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Enter your current password to enable fingerprint login.',
+              style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Current Password',
+                prefixIcon: Icon(Icons.lock_outline),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              if (passController.text.isEmpty) return;
+              final authenticated = await _localAuth.authenticate(
+                localizedReason: 'Confirm fingerprint to enable fast login',
+                options: const AuthenticationOptions(biometricOnly: true),
+              );
+              if (authenticated) {
+                await _storage.write(
+                  key: 'user_email',
+                  value: _currentUser?.email,
+                );
+                await _storage.write(
+                  key: 'user_password',
+                  value: passController.text.trim(),
+                );
+                if (mounted) {
+                  setState(() => _biometricsEnabled = true);
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Biometric login enabled!')),
+                  );
+                }
+              }
+            },
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   void dispose() {
     _glowController.dispose();
     _fabController.dispose();
-    _searchController.dispose();
+    _homeSearchController.dispose();
     super.dispose();
   }
 
@@ -1008,6 +1105,47 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   }
 
   Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.isDark
+            ? const Color(0xFF0A1128)
+            : Colors.white,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Log out?',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: const Text(
+          'You will need to sign in again to '
+          'access your account.',
+          style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel',
+                style: TextStyle(
+                    fontFamily: 'Poppins',
+                    color: context.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Log out',
+                style: TextStyle(
+                    fontFamily: 'Poppins',
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     try {
       await _supabase.auth.signOut();
       if (mounted) context.go(AppRoutes.opening);
@@ -1035,7 +1173,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                     index: _currentIndex,
                     children: [
                       _buildHomePage(),
-                      _buildClassesPage(),
                       _buildReportsPage(),
                       _buildInstructorLeaderboardPage(),
                       _buildProfilePage(),
@@ -1045,7 +1182,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
               ],
             ),
           ),
-          if (_currentIndex == 1)
+          if (_currentIndex == 0)
             Positioned(
               bottom: 80,
               right: 20,
@@ -1163,11 +1300,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   Widget _buildBottomNav() {
     final items = [
       {'icon': Icons.home_outlined, 'activeIcon': Icons.home, 'label': 'Home'},
-      {
-        'icon': Icons.class_outlined,
-        'activeIcon': Icons.class_,
-        'label': 'Classes',
-      },
       {
         'icon': Icons.bar_chart_outlined,
         'activeIcon': Icons.bar_chart,
@@ -1365,51 +1497,63 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             ],
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
-          // ─── Shortcut Buttons ───
-          Row(
-            children: [
-              Expanded(
-                child: _buildShortcutButton(
-                  '+ Create Class',
-                  AppColors.primaryDark,
-                  AppColors.primary,
-                  Icons.add_circle_outline,
-                  () {
-                    setState(() => _currentIndex = 1);
-                    Future.delayed(
-                      const Duration(milliseconds: 300),
-                      _showCreateCourseDialog,
-                    );
-                  },
+          // ─── Search bar ───
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: TextField(
+              controller: _homeSearchController,
+              onChanged: (v) => setState(() => _homeSearchQuery = v),
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                color: context.isDark ? Colors.white : const Color(0xFF0D1B4B),
+              ),
+              decoration: InputDecoration(
+                hintText: 'Search classes...',
+                hintStyle: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: context.textHint,
+                ),
+                prefixIcon: Icon(
+                  Icons.search_rounded,
+                  color: context.textHint,
+                  size: 20,
+                ),
+                filled: true,
+                fillColor: context.isDark
+                    ? const Color(0xFF111E3D)
+                    : Colors.white,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildShortcutButton(
-                  'Submissions', // Removed emoji from text
-                  AppColors.warning,
-                  const Color(0xFFFF8C61),
-                  Icons.assignment_outlined,
-                  () => setState(() => _currentIndex = 2),
-                ),
-              ),
-            ],
+            ),
           ),
 
-          const SizedBox(height: 24),
-
-          // ─── Sections Overview ───
-          if (_courses.any((c) => c['is_archived'] != true)) ...[
-            _buildSectionHeader(
-              'Sections Overview',
-              icon: Icons.analytics_outlined,
+          // ─── My Classes label ───
+          Padding(
+            padding: const EdgeInsets.only(top: 8, bottom: 8),
+            child: Text(
+              'My Classes',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: context.isDark ? Colors.white : const Color(0xFF0D1B4B),
+              ),
             ),
-            const SizedBox(height: 12),
-            _buildSectionsOverview(),
-            const SizedBox(height: 24),
-          ],
+          ),
+
+          // ─── Classes list (filtered by search) ───
+          ..._buildHomeClassesList(),
 
           const SizedBox(height: 100),
         ],
@@ -1417,111 +1561,56 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     );
   }
 
-  Widget _buildSectionsOverview() {
+  List<Widget> _buildHomeClassesList() {
+    if (_isLoadingCourses) {
+      return const [
+        Padding(
+          padding: EdgeInsets.all(32),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+
     final activeCourses = _courses
         .where((c) => c['is_archived'] != true)
         .toList();
-    return Container(
-      decoration: BoxDecoration(
-        color: context.cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.borderColor),
-      ),
-      child: Column(
-        children: activeCourses.asMap().entries.map((entry) {
-          final course = entry.value;
-          final index = entry.key;
-          final count = course['enrolled_count'] as int? ?? 0;
 
-          return Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              border: index < activeCourses.length - 1
-                  ? Border(bottom: BorderSide(color: context.borderColor))
-                  : null,
+    if (activeCourses.isEmpty) {
+      return [_buildEmptyClasses()];
+    }
+
+    final filtered = activeCourses.where((c) {
+      if (_homeSearchQuery.isEmpty) return true;
+      final title = (c['title'] as String? ?? '').toLowerCase();
+      final code = (c['course_code'] as String? ?? '').toLowerCase();
+      final query = _homeSearchQuery.toLowerCase();
+      return title.contains(query) || code.contains(query);
+    }).toList();
+
+    if (filtered.isEmpty) {
+      return [
+        Padding(
+          padding: const EdgeInsets.all(32),
+          child: Center(
+            child: Text(
+              'No classes match "$_homeSearchQuery"',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                color: context.textHint,
+              ),
             ),
-            child: Row(
-              children: [
-                // The "CP" Box (Structure Restored)
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: _cardGradients[index % _cardGradients.length],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'CP', // Original text from your structure
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        course['title'] ?? '',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: context.isDark
-                              ? Colors.white
-                              : const Color(0xFF0D1B4B),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        '${course['course_code']} • ${course['section'] ?? ''}',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 11,
-                          color: context.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Student Count (Aligned Right)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '$count',
-                      style: const TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    Text(
-                      'students',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 10,
-                        color: context.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
+          ),
+        ),
+      ];
+    }
+
+    return filtered
+        .asMap()
+        .entries
+        .map((entry) => _buildCourseCard(entry.value, entry.key))
+        .toList();
   }
 
   Widget _buildStatCard(
@@ -1567,208 +1656,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildShortcutButton(
-    String label,
-    Color c1,
-    Color c2,
-    IconData icon,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [c1, c2]),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.white, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: const TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionHeader(String title, {IconData? icon}) {
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    return Row(
-      children: [
-        if (icon != null) ...[
-          Icon(icon, color: AppColors.primary, size: 22),
-          const SizedBox(width: 10),
-        ],
-        Text(
-          title,
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: textColor,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ─── Classes Page ────────────────────────────────────────
-  Widget _buildClassesPage() {
-    final titleColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-
-    final filtered = _courses.where((c) {
-      final matchesSearch =
-          _searchController.text.isEmpty ||
-          c['title'].toString().toLowerCase().contains(
-            _searchController.text.toLowerCase(),
-          ) ||
-          c['course_code'].toString().toLowerCase().contains(
-            _searchController.text.toLowerCase(),
-          );
-
-      final isArchived = c['is_archived'] == true;
-      final matchesFilter = _courseFilter == 'Active'
-          ? !isArchived
-          : isArchived;
-
-      return matchesSearch && matchesFilter;
-    }).toList();
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'My Classes',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: titleColor,
-                ),
-              ),
-              const SizedBox(height: 12),
-              // ─── Search Bar ────────────────────────────────
-              TextField(
-                controller: _searchController,
-                onChanged: (_) => setState(() {}),
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  color: titleColor,
-                  fontSize: 14,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Search classes...',
-                  hintStyle: TextStyle(
-                    fontFamily: 'Poppins',
-                    color: context.textHint,
-                    fontSize: 14,
-                  ),
-                  prefixIcon: Icon(Icons.search, color: context.textHint),
-                  filled: true,
-                  fillColor: context.cardColor,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: context.borderColor),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: context.borderColor),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF1E90FF),
-                      width: 1.5,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              // ─── Filter Tabs ───────────────────────────────
-              Row(
-                children: ['Active', 'Archived'].map((filter) {
-                  final isActive = _courseFilter == filter;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _courseFilter = filter),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          gradient: isActive
-                              ? const LinearGradient(
-                                  colors: [
-                                    Color(0xFF1565C0),
-                                    Color(0xFF1E90FF),
-                                  ],
-                                )
-                              : null,
-                          color: isActive ? null : context.cardColor,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isActive
-                                ? Colors.transparent
-                                : context.borderColor,
-                          ),
-                        ),
-                        child: Text(
-                          filter,
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 13,
-                            fontWeight: isActive
-                                ? FontWeight.w700
-                                : FontWeight.w400,
-                            color: isActive
-                                ? Colors.white
-                                : titleColor.withValues(alpha: 0.5),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: filtered.isEmpty
-              ? _buildEmptyClasses()
-              : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) =>
-                      _buildCourseCard(filtered[index], index),
-                ),
-        ),
-      ],
     );
   }
 
@@ -3418,6 +3305,29 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             ),
           ),
           const SizedBox(height: 24),
+          // Section header
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.security_rounded,
+                  size: 16,
+                  color: textColor.withValues(alpha: 0.4),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'ACCOUNT SECURITY & PREFERENCES',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    color: textColor.withValues(alpha: 0.4),
+                    letterSpacing: 1.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
           // Unified Settings Area
           Container(
             clipBehavior: Clip.antiAlias,
@@ -3428,12 +3338,53 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             child: Column(
               children: [
                 _buildPremiumSettingsItem(
+                  Icons.fingerprint,
+                  'Biometric Login',
+                  trailing: _buildAnimatedToggle(
+                    value: _biometricsEnabled,
+                    onTap: () => _toggleBiometrics(!_biometricsEnabled),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Divider(
+                    height: 1,
+                    thickness: 0.5,
+                    color: context.borderColor.withValues(alpha: 0.5),
+                  ),
+                ),
+                _buildPremiumSettingsItem(
                   Icons.dark_mode_outlined,
                   'Dark Mode',
                   trailing: _buildAnimatedToggle(
                     value: ref.watch(themeProvider) == ThemeMode.dark,
                     onTap: () => ref.read(themeProvider.notifier).toggleTheme(),
                   ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Divider(
+                    height: 1,
+                    thickness: 0.5,
+                    color: context.borderColor.withValues(alpha: 0.5),
+                  ),
+                ),
+                _buildPremiumSettingsItem(
+                  Icons.archive_rounded,
+                  'Archived Classes',
+                  onTap: () async {
+                    final didRestore = await Navigator.push<bool>(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ArchivedClassesScreen(
+                          isInstructor: true,
+                        ),
+                      ),
+                    );
+                    if (didRestore == true) {
+                      _loadCourses();
+                    }
+                  },
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),

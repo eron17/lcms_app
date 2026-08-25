@@ -51,6 +51,7 @@ lib/
 │   │   ├── opening_screen.dart
 │   │   └── reset_password_screen.dart
 │   ├── courses/
+│   │   ├── archived_classes_screen.dart
 │   │   ├── assignment_detail_screen.dart
 │   │   ├── class_settings_screen.dart
 │   │   ├── code_viewer_screen.dart
@@ -75,6 +76,11 @@ lib/
 └── main.dart
 
 ## Screen Notes
+
+### lib/presentation/courses/archived_classes_screen.dart
+Shows archived classes for instructor (with restore/delete
+options) and student (read-only view). Accessed from Profile
+page on both dashboards.
 
 ### lib/presentation/courses/three_d_meet_detail_screen.dart
 Full detail screen for 3D Meet posts.
