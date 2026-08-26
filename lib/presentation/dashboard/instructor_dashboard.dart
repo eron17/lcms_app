@@ -47,7 +47,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
 
   // Instructor leaderboard state
   String? _lbSelectedCourseId;
-  bool _lbIsWeekly = false;
   bool _lbIsLoading = false;
   List<Map<String, dynamic>> _lbData = [];
   List<Map<String, dynamic>> _instructorCourses = [];
@@ -177,13 +176,13 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                   key: 'user_password',
                   value: passController.text.trim(),
                 );
-                if (mounted) {
-                  setState(() => _biometricsEnabled = true);
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Biometric login enabled!')),
-                  );
-                }
+                if (!context.mounted) return;
+                setState(() => _biometricsEnabled = true);
+                Navigator.pop(ctx);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Biometric login enabled!')),
+                );
               }
             },
             child: const Text('Confirm'),
@@ -666,28 +665,27 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                                             .trim(),
                                       );
 
-                                      if (mounted) {
-                                        Navigator.pop(
+                                      if (!context.mounted) return;
+                                      Navigator.pop(
+                                        context,
+                                      ); // Close bottom sheet
+                                      if (generatedCode != null) {
+                                        final fullTitle =
+                                            '${titleController.text.trim()} - ${programController.text.trim()} ${sectionController.text.trim()}';
+                                        _showClassCodeDialog(
+                                          generatedCode,
+                                          fullTitle,
+                                        );
+                                      } else {
+                                        ScaffoldMessenger.of(
                                           context,
-                                        ); // Close bottom sheet
-                                        if (generatedCode != null) {
-                                          final fullTitle =
-                                              '${titleController.text.trim()} - ${programController.text.trim()} ${sectionController.text.trim()}';
-                                          _showClassCodeDialog(
-                                            generatedCode,
-                                            fullTitle,
-                                          );
-                                        } else {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            const SnackBar(
-                                              content: Text(
-                                                'Failed to create class. Please try again.',
-                                              ),
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Failed to create class. Please try again.',
                                             ),
-                                          );
-                                        }
+                                          ),
+                                        );
                                       }
                                     },
                               scaleFactor: 0.96, // Tactile shrink
@@ -2554,61 +2552,19 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
           .select('student_id, users(id, name, avatar_url, xp)')
           .eq('course_id', courseId);
 
-      final studentIds = (enrollmentsData as List)
-          .map((e) => e['student_id'] as String)
-          .toList();
-
       List<Map<String, dynamic>> students;
 
-      if (_lbIsWeekly) {
-        // ─── Weekly: sum xp_awarded from submissions graded in the last 7 days ───
-        // Note: submissions has no course_id column, so we scope by this
-        // course's enrolled student_ids instead (verified against
-        // grading_service.dart, which is the real writer of these columns).
-        final weekAgo = DateTime.now()
-            .subtract(const Duration(days: 7))
-            .toIso8601String();
-        final weeklySubmissions = studentIds.isEmpty
-            ? []
-            : await _supabase
-                  .from('submissions')
-                  .select('student_id, xp_awarded')
-                  .inFilter('student_id', studentIds)
-                  .eq('is_graded', true)
-                  .gte('graded_at', weekAgo);
-
-        final Map<String, int> weeklyXp = {};
-        for (final s in weeklySubmissions) {
-          final uid = s['student_id'] as String?;
-          if (uid == null) continue;
-          weeklyXp[uid] = (weeklyXp[uid] ?? 0) + ((s['xp_awarded'] as int?) ?? 0);
-        }
-
-        students = enrollmentsData
-            .map((e) {
-              final u = e['users'] as Map<String, dynamic>?;
-              final uid = e['student_id'] as String;
-              return {
-                'id': uid,
-                'name': u?['name'] ?? 'Student',
-                'avatar_url': u?['avatar_url'],
-                'xp': weeklyXp[uid] ?? 0,
-              };
-            })
-            .toList();
-      } else {
-        students = enrollmentsData
-            .map((e) {
-              final u = e['users'] as Map<String, dynamic>?;
-              return {
-                'id': u?['id'] ?? e['student_id'],
-                'name': u?['name'] ?? 'Student',
-                'avatar_url': u?['avatar_url'],
-                'xp': u?['xp'] ?? 0,
-              };
-            })
-            .toList();
-      }
+      students = enrollmentsData
+          .map((e) {
+            final u = e['users'] as Map<String, dynamic>?;
+            return {
+              'id': u?['id'] ?? e['student_id'],
+              'name': u?['name'] ?? 'Student',
+              'avatar_url': u?['avatar_url'],
+              'xp': u?['xp'] ?? 0,
+            };
+          })
+          .toList();
 
       students.sort((a, b) => (b['xp'] as int).compareTo(a['xp'] as int));
 
@@ -2736,7 +2692,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                       onChanged: (val) {
                         setState(() {
                           _lbSelectedCourseId = val;
-                          _lbIsWeekly = false;
                         });
                         if (val != null) {
                           _loadInstructorLeaderboard(val);
@@ -2746,37 +2701,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                   ),
                 ),
 
-              const SizedBox(height: 14),
-
-              // Weekly/All-time toggle
-              Container(
-                height: 44,
-                decoration: BoxDecoration(
-                  color: context.cardColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.borderColor),
-                ),
-                child: Row(
-                  children: [
-                    _buildTab(
-                      'Weekly',
-                      _lbIsWeekly,
-                      () {
-                        setState(() => _lbIsWeekly = true);
-                        _loadInstructorLeaderboard(_lbSelectedCourseId!);
-                      },
-                    ),
-                    _buildTab(
-                      'All-time',
-                      !_lbIsWeekly,
-                      () {
-                        setState(() => _lbIsWeekly = false);
-                        _loadInstructorLeaderboard(_lbSelectedCourseId!);
-                      },
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
@@ -3149,41 +3073,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     );
   }
 
-  Widget _buildTab(String label, bool isActive, VoidCallback onTap) {
-    final inactiveTextColor = context.isDark
-        ? Colors.white70
-        : const Color(0xFF0D1B4B).withValues(alpha: 0.5);
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          margin: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            gradient: isActive
-                ? const LinearGradient(
-                    colors: [Color(0xFF1565C0), Color(0xFF1E90FF)],
-                  )
-                : null,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 14,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                color: isActive ? Colors.white : inactiveTextColor,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   String _getLevelTitle(int xp) {
     if (xp >= 2000) return 'Master';
     if (xp >= 1000) return 'Expert';
@@ -3537,7 +3426,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
           boxShadow: value
               ? [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.4),
+                    color: AppColors.primary.withValues(alpha:0.4),
                     blurRadius: 10,
                   ),
                 ]

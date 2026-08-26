@@ -33,7 +33,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   List<Map<String, dynamic>> _allCourses = [];
   List<Map<String, dynamic>> _leaderboard = [];
   bool _isLoadingCourses = true;
-  bool _isWeekly = true;
   String? _selectedLeaderboardCourseId; // null = All Classes
   RealtimeChannel? _xpChannel;
   final _storage = const FlutterSecureStorage(
@@ -157,13 +156,13 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                   key: 'user_password',
                   value: passController.text.trim(),
                 );
-                if (mounted) {
-                  setState(() => _biometricsEnabled = true);
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Biometric login enabled!')),
-                  );
-                }
+                if (!context.mounted) return;
+                setState(() => _biometricsEnabled = true);
+                Navigator.pop(ctx);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Biometric login enabled!')),
+                );
               }
             },
             child: const Text('Confirm'),
@@ -311,45 +310,15 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
 
       List<Map<String, dynamic>> sortedData;
 
-      if (_isWeekly) {
-        // ─── Weekly: sum xp_awarded from submissions graded in the last 7 days ───
-        final weekAgo = DateTime.now()
-            .subtract(const Duration(days: 7))
-            .toIso8601String();
-        final weeklySubmissions = await _supabase
-            .from('submissions')
-            .select('student_id, xp_awarded')
-            .inFilter('student_id', classmates)
-            .eq('is_graded', true)
-            .gte('graded_at', weekAgo);
+      final data = await _supabase
+          .from('users')
+          .select('id, name, xp, level, avatar_url')
+          .inFilter('id', classmates)
+          .eq('role', 'student')
+          .order('xp', ascending: false)
+          .limit(20);
 
-        final Map<String, int> weeklyXp = {};
-        for (final s in weeklySubmissions as List) {
-          final uid = s['student_id'] as String?;
-          if (uid == null) continue;
-          weeklyXp[uid] = (weeklyXp[uid] ?? 0) + ((s['xp_awarded'] as int?) ?? 0);
-        }
-
-        final classmateUsers = await _supabase
-            .from('users')
-            .select('id, name, level, avatar_url')
-            .inFilter('id', classmates)
-            .eq('role', 'student');
-
-        sortedData = List<Map<String, dynamic>>.from(classmateUsers)
-            .map((u) => {...u, 'xp': weeklyXp[u['id']] ?? 0})
-            .toList();
-      } else {
-        final data = await _supabase
-            .from('users')
-            .select('id, name, xp, level, avatar_url')
-            .inFilter('id', classmates)
-            .eq('role', 'student')
-            .order('xp', ascending: false)
-            .limit(20);
-
-        sortedData = List<Map<String, dynamic>>.from(data);
-      }
+      sortedData = List<Map<String, dynamic>>.from(data);
 
       if (mounted) {
         // Apply the exact same sorting logic here
@@ -523,7 +492,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                                   if (code.isEmpty) return;
                                   setDialogState(() => isJoining = true);
                                   await _joinClass(code);
-                                  if (mounted) Navigator.pop(context);
+                                  if (!context.mounted) return;
+                                  Navigator.pop(context);
                                 },
                           scaleFactor: 0.96,
                           opacityFactor: 0.7,
@@ -1699,37 +1669,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                   ),
                 ),
 
-              const SizedBox(height: 14),
-
-              // Weekly/All-time toggle
-              Container(
-                height: 44,
-                decoration: BoxDecoration(
-                  color: context.cardColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: context.borderColor),
-                ),
-                child: Row(
-                  children: [
-                    _buildTab(
-                      'Weekly',
-                      _isWeekly,
-                      () {
-                        setState(() => _isWeekly = true);
-                        _loadLeaderboard(courseId: _selectedLeaderboardCourseId);
-                      },
-                    ),
-                    _buildTab(
-                      'All-time',
-                      !_isWeekly,
-                      () {
-                        setState(() => _isWeekly = false);
-                        _loadLeaderboard(courseId: _selectedLeaderboardCourseId);
-                      },
-                    ),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
@@ -2093,41 +2032,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTab(String label, bool isActive, VoidCallback onTap) {
-    final inactiveTextColor = context.isDark
-        ? Colors.white70
-        : const Color(0xFF0D1B4B).withValues(alpha: 0.5);
-
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          margin: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            gradient: isActive
-                ? const LinearGradient(
-                    colors: [Color(0xFF1565C0), Color(0xFF1E90FF)],
-                  )
-                : null,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 14,
-                fontWeight: isActive ? FontWeight.bold : FontWeight.w500,
-                color: isActive ? Colors.white : inactiveTextColor,
-              ),
-            ),
           ),
         ),
       ),
@@ -2654,7 +2558,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           boxShadow: value
               ? [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.4),
+                    color: AppColors.primary.withValues(alpha:0.4),
                     blurRadius: 10,
                     offset: const Offset(0, 2),
                   ),

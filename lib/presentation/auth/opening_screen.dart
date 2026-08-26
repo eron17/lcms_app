@@ -197,7 +197,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withOpacity(_glowAnimation.value),
+                  color: AppColors.primary.withValues(alpha:_glowAnimation.value),
                   blurRadius: 100,
                   spreadRadius: 20,
                 ),
@@ -227,7 +227,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               borderRadius: BorderRadius.circular(32),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.primary.withOpacity(0.4 * _glowAnimation.value),
+                  color: AppColors.primary.withValues(alpha:0.4 * _glowAnimation.value),
                   blurRadius: 15,
                   offset: const Offset(0, 6),
                 ),

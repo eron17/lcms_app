@@ -91,7 +91,7 @@ class GradingService {
           .gte('score', 75)
           .count();
 
-      final correctSubmissionRank = (rankResponse.count ?? 0) + 1;
+      final correctSubmissionRank = rankResponse.count + 1;
 
       // ── Step 4: Run AutoGrader ───────────────────────────────────────────
       final result = AutoGrader.grade(

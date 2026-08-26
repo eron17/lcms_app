@@ -1,10 +1,7 @@
 // lib/presentation/courses/post_detail_screen.dart
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io';
 import 'dart:convert';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
@@ -33,7 +30,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   List<Map<String, dynamic>> _comments = [];
   final _commentController = TextEditingController();
   bool _isSubmittingComment = false;
-  bool _isSavingOffline = false;
   bool _materialSaved = false;
   bool _assessmentSaved = false;
   String? _currentUserName;
@@ -329,17 +325,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                             .update({'text': newText})
                             .eq('id', comment['id']);
 
-                        if (mounted) {
-                          Navigator.pop(context); // Close dialog
-                          _loadComments(); // Refresh UI list
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Comment updated')),
-                          );
-                        }
+                        if (!context.mounted) return;
+                        Navigator.pop(context); // Close dialog
+                        _loadComments(); // Refresh UI list
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Comment updated')),
+                        );
                       } catch (e) {
                         setDialogState(() => isSaving = false);
                         debugPrint('Edit Error: $e');
                         // This will show you exactly why it failed (usually RLS)
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('Update failed: $e'),
@@ -401,115 +397,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       }
     } catch (e) {
       debugPrint('Check saved: $e');
-    }
-  }
-
-  Future<void> _saveFilesOffline() async {
-    final materialUrl = widget.post['material_url'] as String?;
-    final materialName = widget.post['material_name'] as String?;
-    final assessmentUrl = widget.post['assessment_url'] as String?;
-    final assessmentName = widget.post['assessment_name'] as String?;
-
-    if (materialUrl == null && assessmentUrl == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No files attached to this post.'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isSavingOffline = true);
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final filesJson = prefs.getStringList('offline_files') ?? [];
-      final tempDir =
-          await getApplicationDocumentsDirectory(); // Internal storage safer for offline
-      int savedCount = 0;
-
-      if (materialUrl != null && !_materialSaved && materialName != null) {
-        final response = await http.get(Uri.parse(materialUrl));
-        if (response.statusCode == 200) {
-          final fileName =
-              '${DateTime.now().millisecondsSinceEpoch}_$materialName';
-          final filePath = '${tempDir.path}/$fileName';
-          await File(filePath).writeAsBytes(response.bodyBytes);
-          filesJson.add(
-            jsonEncode({
-              'name': materialName,
-              'path': filePath,
-              'source_url': materialUrl,
-              'course_title': widget.course['title'],
-              'post_title': widget.post['title'],
-              'saved_at': DateTime.now().toIso8601String(),
-              'type': 'material',
-            }),
-          );
-          savedCount++;
-        }
-      }
-
-      if (assessmentUrl != null &&
-          !_assessmentSaved &&
-          assessmentName != null) {
-        final response = await http.get(Uri.parse(assessmentUrl));
-        if (response.statusCode == 200) {
-          final fileName =
-              '${DateTime.now().millisecondsSinceEpoch}_$assessmentName';
-          final filePath = '${tempDir.path}/$fileName';
-          await File(filePath).writeAsBytes(response.bodyBytes);
-          filesJson.add(
-            jsonEncode({
-              'name': assessmentName,
-              'path': filePath,
-              'source_url': assessmentUrl,
-              'course_title': widget.course['title'],
-              'post_title': widget.post['title'],
-              'saved_at': DateTime.now().toIso8601String(),
-              'type': 'assessment',
-            }),
-          );
-          savedCount++;
-        }
-      }
-
-      await prefs.setStringList('offline_files', filesJson);
-      if (mounted) {
-        setState(() {
-          _materialSaved = materialUrl != null;
-          _assessmentSaved = assessmentUrl != null;
-          _isSavingOffline = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              savedCount > 0
-                  ? '$savedCount file${savedCount > 1 ? 's' : ''} saved for offline access!'
-                  : 'Files already saved offline.',
-            ),
-            backgroundColor: savedCount > 0
-                ? Colors.green.shade700
-                : Colors.orange,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isSavingOffline = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error saving files: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
     }
   }
 
@@ -945,7 +832,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha:0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -964,7 +851,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 12,
-                  color: textColor.withOpacity(0.5),
+                  color: textColor.withValues(alpha:0.5),
                 ),
               ),
             ],
@@ -1005,7 +892,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         style: TextStyle(
           fontFamily: 'Poppins',
           fontSize: 15,
-          color: textColor.withOpacity(0.8),
+          color: textColor.withValues(alpha:0.8),
           height: 1.6,
         ),
       ),
@@ -1027,14 +914,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 fontWeight: FontWeight.w800,
                 fontSize: 11,
                 letterSpacing: 1.1,
-                color: textColor.withOpacity(0.4),
+                color: textColor.withValues(alpha:0.4),
               ),
             ),
           ),
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(
-              color: textColor.withOpacity(0.03),
+              color: textColor.withValues(alpha:0.03),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Column(
@@ -1314,49 +1201,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             )
           : null,
       trailing: Icon(Icons.chevron_right, color: context.textHint, size: 20),
-    );
-  }
-
-  Widget _buildSimpleOfflineButton(bool isSaved) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 8), // Added subtle spacing
-        child: TextButton.icon(
-          onPressed: (_isSavingOffline || isSaved) ? null : _saveFilesOffline,
-          icon: _isSavingOffline
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.primary,
-                  ),
-                )
-              : Icon(
-                  isSaved
-                      ? Icons.check_circle_rounded
-                      : Icons.cloud_download_outlined,
-                  size: 20,
-                  color: isSaved ? Colors.green : AppColors.primary,
-                ),
-          label: Text(
-            isSaved ? 'FILES SAVED' : 'SAVE FILES OFFLINE',
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontWeight: FontWeight.w800,
-              fontSize: 12,
-              letterSpacing: 1.1,
-              color: isSaved ? Colors.green : AppColors.primary,
-            ),
-          ),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-      ),
     );
   }
 

@@ -57,7 +57,6 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   List<Map<String, dynamic>> _myPrivateComments = [];
   final _myPrivateCommentController = TextEditingController();
   bool _isSubmittingMyComment = false;
-  bool _isUploadingWork = false;
   List<String> _myWorkFileUrls = [];
   List<String> _myWorkFileNames = [];
 
@@ -470,10 +469,9 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                   .update({'text': newText})
                   .eq('id', comment['id']);
 
-              if (mounted) {
-                Navigator.pop(context);
-                _loadClassComments(); // Refresh the comment list
-              }
+              if (!context.mounted) return;
+              Navigator.pop(context);
+              _loadClassComments(); // Refresh the comment list
             },
             child: const Text('Save'),
           ),
@@ -495,7 +493,6 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
   void _showCommentOptions(Map<String, dynamic> comment) {
     final isOwn = comment['user_id'] == _supabase.auth.currentUser?.id;
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     showModalBottomSheet(
       context: context,
@@ -652,6 +649,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;
+    if (!mounted) return;
 
     if (_myWorkFileUrls.length + result.files.length > 5) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -663,7 +661,6 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       return;
     }
 
-    setState(() => _isUploadingWork = true);
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) {
@@ -766,7 +763,6 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         );
       }
     } finally {
-      if (mounted) setState(() => _isUploadingWork = false);
     }
   }
 
@@ -848,7 +844,6 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     );
     if (confirmed != true) return;
 
-    setState(() => _isUploadingWork = true); // Show loading spinner
     try {
       // 1. Update Supabase
       await _supabase
@@ -874,7 +869,6 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         );
       }
     } finally {
-      if (mounted) setState(() => _isUploadingWork = false);
     }
   }
 
@@ -2533,7 +2527,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                 boxShadow: _acceptSubmissions
                     ? [
                         BoxShadow(
-                          color: AppColors.primary.withOpacity(0.4),
+                          color: AppColors.primary.withValues(alpha:0.4),
                           blurRadius: 10,
                           offset: const Offset(0, 2),
                         ),
@@ -2683,14 +2677,14 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               if (url != null && url.isNotEmpty) {
                 return CircleAvatar(
                   radius: 22,
-                  backgroundColor: AppColors.primary.withOpacity(0.15),
+                  backgroundColor: AppColors.primary.withValues(alpha:0.15),
                   backgroundImage: NetworkImage(url),
                   onBackgroundImageError: (_, __) {},
                 );
               }
               return CircleAvatar(
                 radius: 22,
-                backgroundColor: AppColors.primary.withOpacity(0.15),
+                backgroundColor: AppColors.primary.withValues(alpha:0.15),
                 child: Text(
                   name.substring(0, 1).toUpperCase(),
                   style: const TextStyle(
@@ -3295,7 +3289,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: textColor.withOpacity(0.1),
+        color: textColor.withValues(alpha:0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -3331,7 +3325,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         color: context.surfaceColor,
         border: Border(
           top: BorderSide(
-            color: textColor.withOpacity(0.1),
+            color: textColor.withValues(alpha:0.1),
             width: 0.5,
           ),
         ),
@@ -3664,7 +3658,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: textColor.withOpacity(0.03),
+            color: textColor.withValues(alpha:0.03),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: context.borderColor),
           ),
@@ -3711,7 +3705,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                   ),
                   child: Icon(
                     Icons.visibility_outlined,
-                    color: textColor.withOpacity(0.3),
+                    color: textColor.withValues(alpha:0.3),
                     size: 18,
                   ),
                 ),

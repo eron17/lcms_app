@@ -352,7 +352,7 @@ class _ClassSettingsScreenState extends State<ClassSettingsScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           color: value ? AppColors.primary : Colors.black12,
-          boxShadow: value ? [BoxShadow(color: AppColors.primary.withOpacity(0.4), blurRadius: 10)] : [],
+          boxShadow: value ? [BoxShadow(color: AppColors.primary.withValues(alpha:0.4), blurRadius: 10)] : [],
         ),
         child: AnimatedAlign(
           duration: const Duration(milliseconds: 250),

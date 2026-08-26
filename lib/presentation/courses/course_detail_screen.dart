@@ -157,7 +157,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   bool _isLoadingPeople = true;
 
   // Comments state
-  final Map<String, List<Map<String, dynamic>>> _comments = {};
   final Map<String, TextEditingController> _commentControllers = {};
 
   // Coursework topic expansion
@@ -618,22 +617,20 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                           .insert(notifs);
                                     }
 
-                                    if (mounted) {
-                                      Navigator.pop(context);
-                                      await _loadStream();
-                                    }
+                                    if (!context.mounted) return;
+                                    Navigator.pop(context);
+                                    await _loadStream();
                                   } catch (e) {
                                     setSheet(() => isPosting = false);
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Error: $e'),
-                                          backgroundColor: AppColors.error,
-                                        ),
-                                      );
-                                    }
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(
+                                      context,
+                                    ).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Error: $e'),
+                                        backgroundColor: AppColors.error,
+                                      ),
+                                    );
                                   }
                                 },
                           child: isPosting
@@ -699,7 +696,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     bool isPosting = false;
 
     if (existing?['scheduled_time'] != null) {
-      final dt = DateTime.parse(existing!['scheduled_time']);
+      final dt = DateTime.parse(existing!['scheduled_time']).toLocal();
       scheduledDate = dt;
       scheduledTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
     }
@@ -1010,6 +1007,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                           ),
                                         );
                                         if (p != null) {
+                                          if (!context.mounted) return;
                                           final t = await showTimePicker(
                                             context: context,
                                             initialTime:
@@ -1421,18 +1419,18 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
                                   if (title.isEmpty) {
                                     error = "Post title is required";
-                                  } else if (desc.isEmpty)
+                                  } else if (desc.isEmpty) {
                                     error =
                                         "Instructions/Description are required";
-                                  else if (postType == 'material' &&
-                                      materialUrl == null)
+                                  } else if (postType == 'material' &&
+                                      materialUrl == null) {
                                     error =
                                         "Please attach a Lesson Material file";
-                                  else if (postType == 'assignment' &&
-                                      assessmentUrl == null)
+                                  } else if (postType == 'assignment' &&
+                                      assessmentUrl == null) {
                                     error =
                                         "Please attach Assignment Instructions (PDF)";
-                                  else if (postType == 'assignment' &&
+                                  } else if (postType == 'assignment' &&
                                       (int.tryParse(
                                                 pointsController.text.trim(),
                                               ) ==
@@ -1440,19 +1438,20 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                           int.parse(
                                                 pointsController.text.trim(),
                                               ) <=
-                                              0))
+                                              0)) {
                                     error = "Please enter valid maximum points";
-                                  else if (postType == '3d_meet') {
+                                  } else if (postType == '3d_meet') {
                                     if (materialUrl == null) {
                                       error =
                                           "Lesson material is required for 3D Meet";
-                                    } else if (assessmentUrl == null)
+                                    } else if (assessmentUrl == null) {
                                       error =
                                           "Assessment instruction is required for 3D Meet";
-                                    else if (scheduledDate == null ||
-                                        scheduledTime == null)
+                                    } else if (scheduledDate == null ||
+                                        scheduledTime == null) {
                                       error =
                                           "Date and Time are required for 3D Meet";
+                                    }
                                   }
 
                                   if (error != null) {
@@ -1705,12 +1704,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                       );
                                     }
 
-                                    if (mounted) {
-                                      Navigator.pop(context);
-                                      // Refresh both tabs
-                                      await _loadStream();
-                                      await _loadCoursework();
-                                    }
+                                    if (!context.mounted) return;
+                                    Navigator.pop(context);
+                                    // Refresh both tabs
+                                    await _loadStream();
+                                    await _loadCoursework();
                                   } catch (e) {
                                     setSheet(() => isPosting = false);
                                     debugPrint('Error posting: $e');
@@ -1884,10 +1882,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                     'created_at': DateTime.now()
                                         .toIso8601String(),
                                   });
-                                  if (mounted) {
-                                    Navigator.pop(context);
-                                    await _loadCoursework();
-                                  }
+                                  if (!context.mounted) return;
+                                  Navigator.pop(context);
+                                  await _loadCoursework();
                                 } catch (e) {
                                   setDialog(() => isCreating = false);
                                 }
@@ -3330,7 +3327,6 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     final type = post['type'] as String;
     final postColor = _getPostColor(type);
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    final comments = _comments[post['id']] ?? [];
     final int commentCount =
         (post['comments'] != null && (post['comments'] as List).isNotEmpty)
         ? post['comments'][0]['count'] as int
@@ -3658,7 +3654,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                           _showTopicOptions(topic), // Open options bottom sheet
                       child: Icon(
                         Icons.more_vert,
-                        color: textColor.withOpacity(0.4),
+                        color: textColor.withValues(alpha:0.4),
                         size: 20,
                       ),
                     ),
@@ -3877,7 +3873,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           ),
         ),
         const SizedBox(height: 8),
-        Divider(color: context.borderColor.withOpacity(0.5)),
+        Divider(color: context.borderColor.withValues(alpha:0.5)),
         if (_instructor != null)
           _buildPersonTile(_instructor!, isInstructorTile: true),
 
@@ -3899,7 +3895,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
               decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
+                color: AppColors.primary.withValues(alpha:0.1),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -3915,7 +3911,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           ],
         ),
         const SizedBox(height: 8),
-        Divider(color: context.borderColor.withOpacity(0.5)),
+        Divider(color: context.borderColor.withValues(alpha:0.5)),
 
         if (_students.isEmpty)
           Padding(
@@ -4251,7 +4247,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.redAccent.withOpacity(0.1),
+                        color: Colors.redAccent.withValues(alpha:0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(
@@ -4455,6 +4451,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               ),
             );
             if (selectedCategory == null) return;
+            if (!mounted) return;
 
             if (selectedCategory == 'Custom') {
               final customController = TextEditingController();

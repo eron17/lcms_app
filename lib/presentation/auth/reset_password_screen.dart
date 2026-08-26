@@ -55,6 +55,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
       );
       if (mounted) {
         await _supabase.auth.signOut();
+        if (!mounted) return;
         setState(() { _isLoading = false; _isSuccess = true; });
 
         ScaffoldMessenger.of(context).showSnackBar(

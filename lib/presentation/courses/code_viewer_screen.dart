@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/constants/app_colors.dart';
-import '../../core/theme/theme_extensions.dart';
 
 class CodeViewerScreen extends StatelessWidget {
   final String studentName;
@@ -15,8 +14,6 @@ class CodeViewerScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = context.isDark;
-
     return Scaffold(
       backgroundColor: const Color(0xFF0D1117),
       appBar: AppBar(

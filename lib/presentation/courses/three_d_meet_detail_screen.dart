@@ -548,7 +548,7 @@ class _ThreeDMeetDetailScreenState
           ],
 
           // Join 3D Classroom button
-          if (scheduleStatus != 'none') ...[
+          if (!widget.isInstructor && scheduleStatus != 'none') ...[
             _buildJoinButton(isLive, isUpcoming),
             const SizedBox(height: 16),
           ],
@@ -939,8 +939,6 @@ class _ThreeDMeetDetailScreenState
 
   // ── Student Work Tab (Instructor) ─────────────────────────────
   Widget _buildStudentWorkTab() {
-    final isDark = context.isDark;
-
     // Score distribution
     final scores = _studentSubmissions
         .where((s) => s['is_graded'] == true)

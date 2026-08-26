@@ -128,9 +128,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       final postData = results[0];
       final courseData = results[1];
 
-      if (mounted) {
-        Navigator.pop(context); // Remove loading spinner
-      }
+      if (!mounted) return;
+      Navigator.pop(context); // Remove loading spinner
 
       // 4. ROUTE TO THE CORRECT DETAIL SCREEN
       if (postData['type'] == 'assignment') {

@@ -367,7 +367,8 @@ class _LoginScreenState extends State<LoginScreen>
                               setDialog(() { isSending = false; step = 2; });
                             } catch (e) {
                               setDialog(() => isSending = false);
-                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
                             }
                           },
                           child: Container(
@@ -415,10 +416,13 @@ class _LoginScreenState extends State<LoginScreen>
                             setDialog(() => isVerifying = true);
                             try {
                               await _supabase.auth.verifyOTP(email: _forgotEmailController.text.trim(), token: otp, type: OtpType.recovery);
-                              if (mounted) { Navigator.pop(context); context.push(AppRoutes.resetPassword); }
+                              if (!context.mounted) return;
+                              Navigator.pop(context);
+                              context.push(AppRoutes.resetPassword);
                             } catch (e) {
                               setDialog(() => isVerifying = false);
-                              if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid or expired OTP.'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid or expired OTP.'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
                             }
                           },
                           child: Container(
@@ -633,7 +637,12 @@ class _LoginScreenState extends State<LoginScreen>
                                         ],
                                       ),
                                       const SizedBox(height: 8),
-                                      Row(
+                                      RadioGroup<String>(
+                                        groupValue: _selectedSex,
+                                        onChanged: (v) => setState(
+                                          () => _selectedSex = v ?? 'male',
+                                        ),
+                                        child: Row(
                                         children: [
                                           // Male
                                           Expanded(
@@ -678,15 +687,9 @@ class _LoginScreenState extends State<LoginScreen>
                                                   mainAxisAlignment:
                                                       MainAxisAlignment.center,
                                                   children: [
-                                                    Radio<String>(
+                                                    const Radio<String>(
                                                       value: 'male',
-                                                      groupValue: _selectedSex,
-                                                      onChanged: (v) =>
-                                                          setState(
-                                                            () => _selectedSex =
-                                                                v!,
-                                                          ),
-                                                      activeColor: const Color(
+                                                      activeColor: Color(
                                                         0xFF1E90FF,
                                                       ),
                                                       materialTapTargetSize:
@@ -758,15 +761,9 @@ class _LoginScreenState extends State<LoginScreen>
                                                   mainAxisAlignment:
                                                       MainAxisAlignment.center,
                                                   children: [
-                                                    Radio<String>(
+                                                    const Radio<String>(
                                                       value: 'female',
-                                                      groupValue: _selectedSex,
-                                                      onChanged: (v) =>
-                                                          setState(
-                                                            () => _selectedSex =
-                                                                v!,
-                                                          ),
-                                                      activeColor: const Color(
+                                                      activeColor: Color(
                                                         0xFFFF69B4,
                                                       ),
                                                       materialTapTargetSize:
@@ -794,6 +791,7 @@ class _LoginScreenState extends State<LoginScreen>
                                             ),
                                           ),
                                         ],
+                                      ),
                                       ),
                                     ],
                                   ),
