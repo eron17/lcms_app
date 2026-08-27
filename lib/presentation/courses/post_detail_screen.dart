@@ -423,7 +423,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   String _formatScheduleTime(String? scheduledTime) {
     if (scheduledTime == null) return '';
-    final dt = DateTime.parse(scheduledTime);
+    final dt = DateTime.parse(scheduledTime).toLocal();
     final months = [
       'Jan',
       'Feb',
@@ -449,7 +449,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 
   String _formatDate(String dateStr) {
-    final date = DateTime.parse(dateStr);
+    final date = DateTime.parse(dateStr).toLocal();
     final now = DateTime.now();
     final diff = now.difference(date);
     if (diff.inDays == 0) return 'Today';

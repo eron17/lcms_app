@@ -706,7 +706,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     DateTime? assignmentDueDate;
     TimeOfDay? assignmentDueTime;
     if (existing?['due_date'] != null) {
-      final due = DateTime.parse(existing!['due_date']);
+      final due = DateTime.parse(existing!['due_date']).toLocal();
       assignmentDueDate = due;
       assignmentDueTime = TimeOfDay(hour: due.hour, minute: due.minute);
     }
@@ -2529,7 +2529,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   }
 
   String _formatDate(String dateStr) {
-    final date = DateTime.parse(dateStr);
+    final date = DateTime.parse(dateStr).toLocal();
     final now = DateTime.now();
     final diff = now.difference(date);
     if (diff.inDays == 0) return 'Today';

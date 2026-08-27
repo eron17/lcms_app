@@ -2123,6 +2123,15 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   Widget _buildProfilePage() {
     final user = _currentUser;
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    // Sum client-side from _enrolledCourses (kept live by
+    // _subscribeToEnrollmentChanges) rather than user.xp, which only
+    // reflects reality when writes go through increment_student_xp —
+    // a manual edit to enrollments.class_xp in the Supabase table
+    // editor never triggers that RPC, so users.xp would stay stale.
+    final totalXp = _enrolledCourses.fold<int>(
+      0,
+      (sum, c) => sum + ((c['class_xp'] as int?) ?? 0),
+    );
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -2139,7 +2148,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
               Expanded(
                 child: _buildProfileStat(
                   'Total XP',
-                  '${user?.xp ?? 0}',
+                  '$totalXp',
                   Icons.bolt_rounded,
                   const Color(0xFFFFD700),
                 ),

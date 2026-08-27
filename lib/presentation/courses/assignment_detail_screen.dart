@@ -1211,7 +1211,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
   String _formatDate(String? dateStr) {
     if (dateStr == null) return '';
-    final date = DateTime.parse(dateStr);
+    final date = DateTime.parse(dateStr).toLocal();
     final now = DateTime.now();
     final diff = date.difference(now);
     final months = [
