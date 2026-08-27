@@ -1143,9 +1143,20 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       if (xpDifference != 0) {
         await _supabase.rpc(
           'increment_student_xp',
-          params: {'p_student_id': studentId, 'p_xp': xpDifference},
+          params: {
+            'p_student_id': studentId,
+            'p_course_id': widget.course['id'],
+            'p_xp': xpDifference,
+          },
         );
       }
+      await _supabase.rpc(
+        'update_class_streak',
+        params: {
+          'p_student_id': studentId,
+          'p_course_id': widget.course['id'],
+        },
+      );
 
       await _supabase.from('notifications').insert({
         'user_id': studentId, // Student receives this

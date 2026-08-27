@@ -56,10 +56,13 @@ class GradingService {
       final postData = await _supabase
           .from('posts')
           .select(
-            'expected_output, required_keywords, forbidden_patterns, points',
+            'course_id, expected_output, required_keywords, forbidden_patterns, points',
           )
           .eq('id', postId)
           .single();
+
+      final courseId = postData['course_id'] as String?;
+      if (courseId == null) return;
 
       final expectedOutput =
           (postData['expected_output'] as String?) ?? '';
@@ -68,18 +71,6 @@ class GradingService {
       final forbiddenPatterns =
           List<String>.from(postData['forbidden_patterns'] ?? []);
       final totalPoints = (postData['points'] as int?) ?? 100;
-
-      // ── Step 2: Fetch student streak + pending bonus ─────────────────────
-      final userData = await _supabase
-          .from('users')
-          .select('streak, pending_bonus_points, xp')
-          .eq('id', studentId)
-          .single();
-
-      final currentStreak = (userData['streak'] as int?) ?? 0;
-      final pendingBonusPoints =
-          (userData['pending_bonus_points'] as int?) ?? 0;
-      final currentXp = (userData['xp'] as int?) ?? 0;
 
       // ── Step 3: Get correct submission rank ──────────────────────────────
       // Count submissions for this post that are already graded with score >= 75
@@ -94,6 +85,11 @@ class GradingService {
       final correctSubmissionRank = rankResponse.count + 1;
 
       // ── Step 4: Run AutoGrader ───────────────────────────────────────────
+      // Streak/bonus inputs are no longer sourced from the student — XP and
+      // streak are now per-class (enrollments.class_xp/class_streak), and
+      // the streak itself is now a simple day-based counter (updated below
+      // via update_class_streak) rather than the old genuine-100 gate, so
+      // AutoGrader's streak-bonus params are left at their defaults (0).
       final result = AutoGrader.grade(
         sourceCode: sourceCode,
         actualOutput: actualOutput,
@@ -101,16 +97,12 @@ class GradingService {
         requiredKeywords: requiredKeywords,
         forbiddenPatterns: forbiddenPatterns,
         totalPoints: totalPoints,
-        currentStreak: currentStreak,
-        pendingBonusPoints: pendingBonusPoints,
         isThreeDMeet: true,
         correctSubmissionRank: correctSubmissionRank,
       );
 
       final score = result['score'] as int;
       final xpAwarded = result['xpAwarded'] as int;
-      final newStreak = result['newStreak'] as int;
-      final newPendingBonusPoints = result['newPendingBonusPoints'] as int;
       final gradeFeedback =
           List<String>.from(result['gradeFeedback'] ?? []);
       final rank = result['rank'] as int;
@@ -126,18 +118,32 @@ class GradingService {
         'graded_at': DateTime.now().toIso8601String(),
       }).eq('id', submissionId);
 
-      // ── Step 6: Update users table ───────────────────────────────────────
-      await _supabase.from('users').update({
-        'xp': currentXp + xpAwarded,
-        'streak': newStreak,
-        'pending_bonus_points': newPendingBonusPoints,
-      }).eq('id', studentId);
+      // ── Step 6: Award per-class XP and update the per-class streak ───────
+      if (xpAwarded != 0) {
+        await _supabase.rpc(
+          'increment_student_xp',
+          params: {
+            'p_student_id': studentId,
+            'p_course_id': courseId,
+            'p_xp': xpAwarded,
+          },
+        );
+      }
+      await _supabase.rpc(
+        'update_class_streak',
+        params: {'p_student_id': studentId, 'p_course_id': courseId},
+      );
 
       // ── Step 7: Update leaderboard (if you have one) ────────────────────
+      final updatedUser = await _supabase
+          .from('users')
+          .select('xp')
+          .eq('id', studentId)
+          .single();
       await _updateLeaderboard(
         studentId: studentId,
-        courseId: await _getCourseIdFromPost(postId),
-        newTotalXp: currentXp + xpAwarded,
+        courseId: courseId,
+        newTotalXp: (updatedUser['xp'] as int?) ?? 0,
       );
     } catch (e) {
       // Mark as failed so Unity doesn't spin forever
@@ -177,17 +183,4 @@ class GradingService {
     }
   }
 
-  // ── Helper: Get course_id from a post ────────────────────────────────────
-  static Future<String?> _getCourseIdFromPost(String postId) async {
-    try {
-      final post = await _supabase
-          .from('posts')
-          .select('course_id')
-          .eq('id', postId)
-          .single();
-      return post['course_id'] as String?;
-    } catch (_) {
-      return null;
-    }
-  }
 }

@@ -42,12 +42,14 @@ class AppConstants {
   static const int xpPerPerfectScore = 50;
 
   static const Map<String, int> levelThresholds = {
-    'Beginner': 0,
-    'Novice': 100,
-    'Intermediate': 300,
-    'Advanced': 600,
-    'Expert': 1000,
-    'Master': 2000,
+    'Script Kiddie': 0,
+    'Code Newbie': 300,
+    'Junior Dev': 1000,
+    'Refactorer': 2500,
+    'Stack Overflow Guru': 5000,
+    'Tech Lead': 8000,
+    '10x Developer': 12000,
+    'Compiler Whisperer': 18000,
   };
 
   // ─── JDoodle API ───────────────────────────────────────────

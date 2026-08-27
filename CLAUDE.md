@@ -317,13 +317,15 @@ never trigger the streak bonus (which checks
 score == 100 exactly, not "100%"). Not yet
 reconciled in code — see Pending Features.
 
-### XP Titles
-Beginner: 0 XP
-Novice: 100 XP
-Intermediate: 300 XP
-Advanced: 600 XP
-Expert: 1000 XP
-Master: 2000 XP
+### XP Titles (Rank System)
+Script Kiddie: 0 XP
+Code Newbie: 300 XP
+Junior Dev: 1000 XP
+Refactorer: 2500 XP
+Stack Overflow Guru: 5000 XP
+Tech Lead: 8000 XP
+10x Developer: 12000 XP
+Compiler Whisperer: 18000 XP
 
 ### Important: RLS Bypass for XP Updates
 Always use Supabase RPC to update student XP —

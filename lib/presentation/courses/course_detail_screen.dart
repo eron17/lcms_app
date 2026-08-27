@@ -165,6 +165,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   // FAB state (instructor coursework)
   bool _fabExpanded = false;
 
+  // Per-class rank/XP/streak (student side)
+  int _classXp = 0;
+  int _classStreak = 0;
+
   // ─── Card Gradients ──────────────────────────────────────
   final List<List<Color>> _cardGradients = [
     [const Color(0xFF7B2FBE), const Color(0xFF4A90D9)],
@@ -206,6 +210,24 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     _loadStream();
     _loadCoursework();
     _loadPeople();
+    if (!widget.isInstructor) _loadEnrollment();
+  }
+
+  Future<void> _loadEnrollment() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    final data = await _supabase
+        .from('enrollments')
+        .select('class_xp, class_streak')
+        .eq('student_id', userId)
+        .eq('course_id', widget.course['id'])
+        .maybeSingle();
+    if (data != null && mounted) {
+      setState(() {
+        _classXp = (data['class_xp'] as int?) ?? 0;
+        _classStreak = (data['class_streak'] as int?) ?? 0;
+      });
+    }
   }
 
   @override
@@ -1001,7 +1023,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                           initialDate:
                                               assignmentDueDate ??
                                               DateTime.now(),
-                                          firstDate: DateTime.now(),
+                                          firstDate: DateTime(2020),
                                           lastDate: DateTime.now().add(
                                             const Duration(days: 365),
                                           ),
@@ -2772,6 +2794,146 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     );
   }
 
+  Map<String, dynamic> _getRank(int xp) {
+    if (xp >= 18000) {
+      return {
+        'name': 'Compiler Whisperer',
+        'icon': Icons.auto_awesome_rounded,
+        'color': const Color(0xFFFFD700),
+        'nextXp': null,
+      };
+    } else if (xp >= 12000) {
+      return {
+        'name': '10x Developer',
+        'icon': Icons.bolt_rounded,
+        'color': const Color(0xFFE040FB),
+        'nextXp': 18000,
+      };
+    } else if (xp >= 8000) {
+      return {
+        'name': 'Tech Lead',
+        'icon': Icons.account_tree_rounded,
+        'color': const Color(0xFF2196F3),
+        'nextXp': 12000,
+      };
+    } else if (xp >= 5000) {
+      return {
+        'name': 'Stack Overflow Guru',
+        'icon': Icons.search_rounded,
+        'color': const Color(0xFFFF9800),
+        'nextXp': 8000,
+      };
+    } else if (xp >= 2500) {
+      return {
+        'name': 'Refactorer',
+        'icon': Icons.refresh_rounded,
+        'color': const Color(0xFF00BCD4),
+        'nextXp': 5000,
+      };
+    } else if (xp >= 1000) {
+      return {
+        'name': 'Junior Dev',
+        'icon': Icons.laptop_rounded,
+        'color': const Color(0xFF4CAF50),
+        'nextXp': 2500,
+      };
+    } else if (xp >= 300) {
+      return {
+        'name': 'Code Newbie',
+        'icon': Icons.eco_rounded,
+        'color': const Color(0xFF9E9E9E),
+        'nextXp': 1000,
+      };
+    } else {
+      return {
+        'name': 'Script Kiddie',
+        'icon': Icons.content_copy_rounded,
+        'color': const Color(0xFFFF5252),
+        'nextXp': 300,
+      };
+    }
+  }
+
+  Widget _buildCourseRankCard() {
+    final rank = _getRank(_classXp);
+    final nextXp = rank['nextXp'] as int?;
+    final rankColor = rank['color'] as Color;
+
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF111D33),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: rankColor.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(rank['icon'] as IconData, color: rankColor, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  rank['name'] as String,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: rankColor,
+                  ),
+                ),
+              ),
+              const Icon(
+                Icons.local_fire_department_rounded,
+                color: Color(0xFFFF9800),
+                size: 18,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                '$_classStreak',
+                style: const TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFFF9800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: LinearProgressIndicator(
+                    value: nextXp != null
+                        ? (_classXp / nextXp).clamp(0.0, 1.0)
+                        : 1.0,
+                    minHeight: 6,
+                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                    valueColor: AlwaysStoppedAnimation(rankColor),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                nextXp != null ? '$_classXp / $nextXp XP' : 'MAX RANK',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 11,
+                  color: Colors.white.withValues(alpha: 0.45),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTopBar() {
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
@@ -3258,6 +3420,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
           // Course card in Stream only
           _buildCourseCard(),
+
+          if (!widget.isInstructor) ...[
+            _buildCourseRankCard(),
+            const SizedBox(height: 12),
+          ],
 
           // Instructor: Create Announcement button
           if (widget.isInstructor && !isArchived) ...[

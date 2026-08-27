@@ -3074,12 +3074,14 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   }
 
   String _getLevelTitle(int xp) {
-    if (xp >= 2000) return 'Master';
-    if (xp >= 1000) return 'Expert';
-    if (xp >= 600) return 'Advanced';
-    if (xp >= 300) return 'Intermediate';
-    if (xp >= 100) return 'Novice';
-    return 'Beginner';
+    if (xp >= 18000) return 'Compiler Whisperer';
+    if (xp >= 12000) return '10x Developer';
+    if (xp >= 8000) return 'Tech Lead';
+    if (xp >= 5000) return 'Stack Overflow Guru';
+    if (xp >= 2500) return 'Refactorer';
+    if (xp >= 1000) return 'Junior Dev';
+    if (xp >= 300) return 'Code Newbie';
+    return 'Script Kiddie';
   }
 
   Widget _buildProfilePage() {

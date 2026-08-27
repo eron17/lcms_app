@@ -242,12 +242,16 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       if (userId == null) return;
       final data = await _supabase
           .from('enrollments')
-          .select('course_id, courses(*)')
+          .select('course_id, class_xp, class_streak, courses(*)')
           .eq('student_id', userId);
       if (mounted) {
         setState(() {
           _allCourses = List<Map<String, dynamic>>.from(
-            data.map((e) => e['courses'] as Map<String, dynamic>),
+            data.map((e) => {
+              ...e['courses'] as Map<String, dynamic>,
+              'class_xp': e['class_xp'],
+              'class_streak': e['class_streak'],
+            }),
           );
           // My Classes / leaderboard filter should not surface archived
           // classes; the Active/Archived toggle in _buildCoursesPage still
@@ -268,12 +272,34 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
 
+      if (courseId != null) {
+        // ─── Specific class: per-class XP/streak from enrollments ───
+        final data = await _supabase
+            .from('enrollments')
+            .select('class_xp, class_streak, users(id, name, avatar_url)')
+            .eq('course_id', courseId)
+            .order('class_xp', ascending: false)
+            .limit(20);
+        if (mounted) {
+          setState(() {
+            _leaderboard = List<Map<String, dynamic>>.from(data).map((e) {
+              final u = e['users'] as Map<String, dynamic>? ?? {};
+              return {
+                'id': u['id'],
+                'name': u['name'],
+                'avatar_url': u['avatar_url'],
+                'xp': e['class_xp'],
+                'class_streak': e['class_streak'],
+              };
+            }).toList();
+          });
+        }
+        return;
+      }
+
       List<String> courseIds;
 
-      if (courseId != null) {
-        // ─── Specific class filter selected ───
-        courseIds = [courseId];
-      } else {
+      {
         // ─── All Classes: get all enrolled course IDs ───
         final enrollments = await _supabase
             .from('enrollments')
@@ -824,22 +850,65 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
 
   // ─── UTILS ───────────────────────────────────────────────
 
-  String _getLevelTitle(int xp) {
-    if (xp >= 2000) return 'Master';
-    if (xp >= 1000) return 'Expert';
-    if (xp >= 600) return 'Advanced';
-    if (xp >= 300) return 'Intermediate';
-    if (xp >= 100) return 'Novice';
-    return 'Beginner';
-  }
 
-  int _getNextLevelXp(int xp) {
-    if (xp >= 2000) return 2000;
-    if (xp >= 1000) return 2000;
-    if (xp >= 600) return 1000;
-    if (xp >= 300) return 600;
-    if (xp >= 100) return 300;
-    return 100;
+  Map<String, dynamic> _getRank(int xp) {
+    if (xp >= 18000) {
+      return {
+        'name': 'Compiler Whisperer',
+        'icon': Icons.auto_awesome_rounded,
+        'color': const Color(0xFFFFD700),
+        'nextXp': null,
+      };
+    } else if (xp >= 12000) {
+      return {
+        'name': '10x Developer',
+        'icon': Icons.bolt_rounded,
+        'color': const Color(0xFFE040FB),
+        'nextXp': 18000,
+      };
+    } else if (xp >= 8000) {
+      return {
+        'name': 'Tech Lead',
+        'icon': Icons.account_tree_rounded,
+        'color': const Color(0xFF2196F3),
+        'nextXp': 12000,
+      };
+    } else if (xp >= 5000) {
+      return {
+        'name': 'Stack Overflow Guru',
+        'icon': Icons.search_rounded,
+        'color': const Color(0xFFFF9800),
+        'nextXp': 8000,
+      };
+    } else if (xp >= 2500) {
+      return {
+        'name': 'Refactorer',
+        'icon': Icons.refresh_rounded,
+        'color': const Color(0xFF00BCD4),
+        'nextXp': 5000,
+      };
+    } else if (xp >= 1000) {
+      return {
+        'name': 'Junior Dev',
+        'icon': Icons.laptop_rounded,
+        'color': const Color(0xFF4CAF50),
+        'nextXp': 2500,
+      };
+    } else if (xp >= 300) {
+      return {
+        'name': 'Code Newbie',
+        'icon': Icons.eco_rounded,
+        'color': const Color(0xFF9E9E9E),
+        'nextXp': 1000,
+      };
+    } else {
+      return {
+        'name': 'Script Kiddie',
+        'icon': Icons.content_copy_rounded,
+        'color': const Color(0xFFFF5252),
+        'nextXp': 300,
+      };
+    }
   }
 
   @override
@@ -1073,8 +1142,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
         children: [
           _buildWelcomeBanner(),
           const SizedBox(height: 24),
-          _buildStatsRow(),
-          const SizedBox(height: 32),
           _buildSectionHeader(
             'My Classes',
             icon: Icons.auto_stories, // Added proper icon
@@ -1105,11 +1172,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   }
 
   Widget _buildWelcomeBanner() {
-    final xp = _currentUser?.xp ?? 0;
-    final nextXp = _getNextLevelXp(xp);
-    final levelTitle = _getLevelTitle(xp);
-
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -1129,164 +1193,24 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Welcome back,',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 13,
-                      fontFamily: 'Poppins',
-                    ),
-                  ),
-                  Text(
-                    _currentUser?.name.split(' ').first ?? 'Student',
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      height: 1.1,
-                    ),
-                  ),
-                ],
-              ),
-              // --- STREAK BADGE ---
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.local_fire_department_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${_currentUser?.streak ?? 0}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          const Text(
+            'Welcome back,',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontFamily: 'Poppins',
+            ),
           ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '$levelTitle • Level ${_currentUser?.level ?? 1}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-              Text(
-                '$xp / $nextXp XP',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: (xp / nextXp).clamp(0.0, 1.0),
-              backgroundColor: Colors.white.withValues(alpha: 0.2),
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-              minHeight: 8,
+          Text(
+            _currentUser?.name.split(' ').first ?? 'Student',
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
+              height: 1.1,
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildStatsRow() {
-    return Row(
-      children: [
-        _buildStatCard(
-          Icons.bolt_rounded, // Proper Icon
-          '${_currentUser?.xp ?? 0}',
-          'Total XP',
-          AppColors.gold,
-        ),
-        const SizedBox(width: 14),
-        _buildStatCard(
-          Icons.military_tech_rounded, // Proper Icon
-          '${_currentUser?.badges.length ?? 0}',
-          'Badges',
-          AppColors.accent,
-        ),
-        const SizedBox(width: 14),
-        _buildStatCard(
-          Icons.auto_stories_rounded, // Proper Icon
-          '${_enrolledCourses.length}',
-          'Classes',
-          AppColors.primary,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard(
-    IconData icon,
-    String value,
-    String label,
-    Color color,
-  ) {
-    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.05), // Tonal Background
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 10),
-            Text(
-              value,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: textColor,
-              ),
-            ),
-            Text(
-              label.toUpperCase(),
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                color: textColor.withValues(alpha: 0.4),
-                letterSpacing: 1,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1917,6 +1841,66 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
               overflow: TextOverflow.ellipsis,
             ),
 
+            Builder(
+              builder: (context) {
+                final xp = (user['xp'] as int?) ?? 0;
+                final rankInfo = _getRank(xp);
+                final rankColor = rankInfo['color'] as Color;
+                final badgeAsset = _getBadgeAsset(
+                  rankInfo['name'] as String,
+                );
+                final isFirst = rank == 1;
+                final imageSize = isFirst ? 72.0 : 64.0;
+                final glowSize = isFirst ? 60.0 : 52.0;
+
+                return Column(
+                  children: [
+                    SizedBox(
+                      width: imageSize,
+                      height: imageSize,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: glowSize,
+                            height: glowSize,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(
+                                isFirst ? 14 : 12,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: rankColor.withValues(alpha: 0.35),
+                                  blurRadius: 18,
+                                  spreadRadius: 4,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Image.asset(
+                            badgeAsset,
+                            width: imageSize,
+                            height: imageSize,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      rankInfo['name'] as String,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        color: rankColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 4),
+
             Text(
               '${user['xp'] ?? 0} XP',
               style: TextStyle(
@@ -2013,23 +1997,57 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                         fontSize: 14,
                       ),
                     ),
-                    Text(
-                      _getLevelTitle(user['xp'] ?? 0),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: themeColor.withValues(alpha: 0.4),
-                      ),
+                    Builder(
+                      builder: (_) {
+                        final xp = (user['xp'] as int?) ?? 0;
+                        final rankInfo = _getRank(xp);
+                        return Text(
+                          rankInfo['name'] as String,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 10,
+                            color: rankInfo['color'] as Color,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
               ),
-              Text(
-                '${user['xp']} XP',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.gold,
-                  fontSize: 14,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${user['xp']} XP',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.gold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (user['class_streak'] != null) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.local_fire_department_rounded,
+                          color: Color(0xFFFF9800),
+                          size: 12,
+                        ),
+                        Text(
+                          '${user['class_streak']}',
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 11,
+                            color: Color(0xFFFF9800),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -2042,9 +2060,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
 
   Widget _buildProfilePage() {
     final user = _currentUser;
-    final xp = user?.xp ?? 0;
-    final nextXp = _getNextLevelXp(xp);
-    final levelTitle = _getLevelTitle(xp);
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return SingleChildScrollView(
@@ -2054,7 +2069,30 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ─── 1. IDENTITY HERO CARD ───
-          _buildIdentityCard(user, levelTitle, xp, nextXp),
+          _buildIdentityCard(user),
+
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildProfileStat(
+                  'Total XP',
+                  '${user?.xp ?? 0}',
+                  Icons.bolt_rounded,
+                  const Color(0xFFFFD700),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildProfileStat(
+                  'Classes',
+                  '${_enrolledCourses.length}',
+                  Icons.menu_book_rounded,
+                  AppColors.primary,
+                ),
+              ),
+            ],
+          ),
 
           const SizedBox(height: 24),
 
@@ -2063,13 +2101,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
 
           const SizedBox(height: 32),
 
-          // ─── 3. BADGES SECTION (Simplified) ───
-          _buildPremiumSectionHeader(
-            'ACHIEVEMENTS',
-            Icons.military_tech_rounded,
-            textColor,
-          ),
-          _buildBadgesContent(user, textColor),
+          // ─── 3. RANKING PER CLASS ───
+          _buildRankingPerClass(),
 
           const SizedBox(height: 32),
 
@@ -2090,8 +2123,9 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
 
   // ─── COMPONENT BUILDERS ────────────────────────────────────────────────────
 
-  Widget _buildIdentityCard(user, levelTitle, xp, nextXp) {
+  Widget _buildIdentityCard(user) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -2179,60 +2213,242 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
               fontWeight: FontWeight.w500,
             ),
           ),
-          const SizedBox(height: 20),
-          // Level Badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '$levelTitle • Level ${user?.level ?? 1}',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: 0.5,
-              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileStat(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: context.textPrimary,
             ),
           ),
-          const SizedBox(height: 24),
-          // XP Bar
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '$xp XP',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 11,
-                ),
-              ),
-              Text(
-                '$nextXp XP',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: (xp / nextXp).clamp(0.0, 1.0),
-              backgroundColor: Colors.white.withValues(alpha: 0.15),
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-              minHeight: 6,
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 10,
+              color: context.textHint,
             ),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildRankingPerClass() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            children: [
+              Icon(Icons.shield_rounded, size: 14, color: context.textHint),
+              const SizedBox(width: 6),
+              Text(
+                'RANKING PER CLASS',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: context.textHint,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: context.cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: context.borderColor),
+          ),
+          child: Column(
+            children: _enrolledCourses.asMap().entries.map((entry) {
+              final course = entry.value;
+              final xp = (course['class_xp'] as int?) ?? 0;
+              final streak = (course['class_streak'] as int?) ?? 0;
+              final rank = _getRank(xp);
+              final rankColor = rank['color'] as Color;
+              final courseTitle = course['title'] ?? '';
+              final courseCode = course['course_code'] ?? '';
+              final isLast = entry.key == _enrolledCourses.length - 1;
+              final badgeAsset = _getBadgeAsset(rank['name'] as String);
+
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 56,
+                          height: 56,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(10),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: rankColor.withValues(
+                                        alpha: 0.35,
+                                      ),
+                                      blurRadius: 14,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Image.asset(
+                                badgeAsset,
+                                width: 56,
+                                height: 56,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                rank['name'] as String,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: rankColor,
+                                ),
+                              ),
+                              Text(
+                                '$courseCode – $courseTitle',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 10,
+                                  color: context.textHint,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: context.borderColor.withValues(
+                                  alpha: 0.3,
+                                ),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                '$xp XP',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 10,
+                                  color: context.textSecondary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.local_fire_department_rounded,
+                                  color: Color(0xFFFF9800),
+                                  size: 12,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  '$streak',
+                                  style: const TextStyle(
+                                    fontFamily: 'Poppins',
+                                    fontSize: 11,
+                                    color: Color(0xFFFF9800),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!isLast)
+                    Divider(
+                      height: 1,
+                      thickness: 0.5,
+                      color: context.borderColor,
+                    ),
+                ],
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getBadgeAsset(String rankName) {
+    switch (rankName) {
+      case 'Script Kiddie':
+        return 'assets/images/ranks/badge_01_script_kiddie.png';
+      case 'Code Newbie':
+        return 'assets/images/ranks/badge_02_code_newbie.png';
+      case 'Junior Dev':
+        return 'assets/images/ranks/badge_03_junior_dev.png';
+      case 'Refactorer':
+        return 'assets/images/ranks/badge_04_refactorer.png';
+      case 'Stack Overflow Guru':
+        return 'assets/images/ranks/badge_05_stackoverflow_guru.png';
+      case 'Tech Lead':
+        return 'assets/images/ranks/badge_06_tech_lead.png';
+      case '10x Developer':
+        return 'assets/images/ranks/badge_07_10x_developer.png';
+      case 'Compiler Whisperer':
+        return 'assets/images/ranks/badge_08_compiler_whisperer.png';
+      default:
+        return 'assets/images/ranks/badge_01_script_kiddie.png';
+    }
   }
 
   Widget _build3DAvatarButton(Color textColor) {
@@ -2465,54 +2681,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       color: context.borderColor.withValues(alpha: 0.5),
     ),
   );
-
-  Widget _buildBadgesContent(user, textColor) {
-    if (user?.badges.isEmpty ?? true) {
-      return Padding(
-        padding: const EdgeInsets.all(20),
-        child: Text(
-          'No badges earned yet. Complete lessons to unlock!',
-          style: TextStyle(
-            fontSize: 13,
-            color: textColor.withValues(alpha: 0.4),
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-      );
-    }
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
-        children: (user?.badges ?? [])
-            .map<Widget>(
-              (badge) => Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF7B2FBE).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: const Color(0xFF7B2FBE).withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Text(
-                  badge,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF7B2FBE),
-                  ),
-                ),
-              ),
-            )
-            .toList(),
-      ),
-    );
-  }
 
   Widget _buildGlowEffect(Size size) {
     return Positioned(
