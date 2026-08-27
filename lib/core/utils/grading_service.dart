@@ -72,6 +72,15 @@ class GradingService {
           List<String>.from(postData['forbidden_patterns'] ?? []);
       final totalPoints = (postData['points'] as int?) ?? 100;
 
+      // ── Step 2: Fetch this student's current per-class streak ────────────
+      final enrollmentData = await _supabase
+          .from('enrollments')
+          .select('class_streak')
+          .eq('student_id', studentId)
+          .eq('course_id', courseId)
+          .maybeSingle();
+      final currentStreak = (enrollmentData?['class_streak'] as int?) ?? 0;
+
       // ── Step 3: Get correct submission rank ──────────────────────────────
       // Count submissions for this post that are already graded with score >= 75
       final rankResponse = await _supabase
@@ -85,11 +94,10 @@ class GradingService {
       final correctSubmissionRank = rankResponse.count + 1;
 
       // ── Step 4: Run AutoGrader ───────────────────────────────────────────
-      // Streak/bonus inputs are no longer sourced from the student — XP and
-      // streak are now per-class (enrollments.class_xp/class_streak), and
-      // the streak itself is now a simple day-based counter (updated below
-      // via update_class_streak) rather than the old genuine-100 gate, so
-      // AutoGrader's streak-bonus params are left at their defaults (0).
+      // Streak is per-class now (enrollments.class_streak) but the
+      // genuine-100 gate is unchanged: it only advances on a genuine
+      // rank-1 correct submission, never on a bonus-assisted or
+      // non-100 result.
       final result = AutoGrader.grade(
         sourceCode: sourceCode,
         actualOutput: actualOutput,
@@ -97,12 +105,14 @@ class GradingService {
         requiredKeywords: requiredKeywords,
         forbiddenPatterns: forbiddenPatterns,
         totalPoints: totalPoints,
+        currentStreak: currentStreak,
         isThreeDMeet: true,
         correctSubmissionRank: correctSubmissionRank,
       );
 
       final score = result['score'] as int;
       final xpAwarded = result['xpAwarded'] as int;
+      final isGenuineHundred = result['isGenuineHundred'] as bool;
       final gradeFeedback =
           List<String>.from(result['gradeFeedback'] ?? []);
       final rank = result['rank'] as int;
@@ -131,7 +141,11 @@ class GradingService {
       }
       await _supabase.rpc(
         'update_class_streak',
-        params: {'p_student_id': studentId, 'p_course_id': courseId},
+        params: {
+          'p_student_id': studentId,
+          'p_course_id': courseId,
+          'p_activate': isGenuineHundred,
+        },
       );
 
       // ── Step 7: Update leaderboard (if you have one) ────────────────────

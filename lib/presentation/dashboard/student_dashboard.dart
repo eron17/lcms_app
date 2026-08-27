@@ -35,6 +35,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   bool _isLoadingCourses = true;
   String? _selectedLeaderboardCourseId; // null = All Classes
   RealtimeChannel? _xpChannel;
+  RealtimeChannel? _enrollmentChannel;
   final _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
@@ -81,7 +82,38 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
 
     _loadData();
     _subscribeToXpChanges();
+    _subscribeToEnrollmentChanges();
     _checkBiometricStatus();
+  }
+
+  void _subscribeToEnrollmentChanges() {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    _enrollmentChannel?.unsubscribe();
+
+    _enrollmentChannel = _supabase
+        .channel(
+          'enrollments_${userId}_${DateTime.now().millisecondsSinceEpoch}',
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'enrollments',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'student_id',
+            value: userId,
+          ),
+          callback: (payload) {
+            // Re-fetch rather than hand-patch _enrolledCourses, same
+            // reasoning as _subscribeToXpChanges: keeps every merged
+            // field (class_xp, class_streak, course data) in sync
+            // through the one already-working load path.
+            if (mounted) _loadEnrolledCourses();
+          },
+        )
+        .subscribe();
   }
 
   Future<void> _checkBiometricStatus() async {
@@ -204,6 +236,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   @override
   void dispose() {
     _xpChannel?.unsubscribe();
+    _enrollmentChannel?.unsubscribe();
     _fabController.dispose();
     _glowController.dispose();
     super.dispose();
@@ -1083,7 +1116,12 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
         children: List.generate(items.length, (index) {
           final isActive = _currentIndex == index;
           return GestureDetector(
-            onTap: () => setState(() => _currentIndex = index),
+            onTap: () {
+              setState(() => _currentIndex = index);
+              // Safety net: refresh per-class XP/streak when Profile
+              // tab opens, in case the realtime update was missed.
+              if (index == 2) _loadEnrolledCourses();
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -2031,18 +2069,42 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.local_fire_department_rounded,
-                          color: Color(0xFFFF9800),
-                          size: 12,
+                        Builder(
+                          builder: (_) {
+                            final s = (user['class_streak'] as int?) ?? 0;
+                            return Icon(
+                              Icons.local_fire_department_rounded,
+                              color: s > 0
+                                  ? const Color(0xFFFF9800)
+                                  : Colors.grey,
+                              size: 12,
+                              shadows: s > 0
+                                  ? [
+                                      Shadow(
+                                        color: const Color(
+                                          0xFFFF9800,
+                                        ).withValues(alpha: 0.5),
+                                        blurRadius: 6,
+                                      ),
+                                    ]
+                                  : null,
+                            );
+                          },
                         ),
-                        Text(
-                          '${user['class_streak']}',
-                          style: const TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 11,
-                            color: Color(0xFFFF9800),
-                          ),
+                        Builder(
+                          builder: (_) {
+                            final s = (user['class_streak'] as int?) ?? 0;
+                            return Text(
+                              '$s',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 11,
+                                color: s > 0
+                                    ? const Color(0xFFFF9800)
+                                    : Colors.grey.withValues(alpha: 0.4),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -2392,18 +2454,32 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.local_fire_department_rounded,
-                                  color: Color(0xFFFF9800),
+                                  color: streak > 0
+                                      ? const Color(0xFFFF9800)
+                                      : Colors.grey,
                                   size: 12,
+                                  shadows: streak > 0
+                                      ? [
+                                          Shadow(
+                                            color: const Color(
+                                              0xFFFF9800,
+                                            ).withValues(alpha: 0.5),
+                                            blurRadius: 6,
+                                          ),
+                                        ]
+                                      : null,
                                 ),
                                 const SizedBox(width: 2),
                                 Text(
                                   '$streak',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 11,
-                                    color: Color(0xFFFF9800),
+                                    color: streak > 0
+                                        ? const Color(0xFFFF9800)
+                                        : Colors.grey.withValues(alpha: 0.4),
                                   ),
                                 ),
                               ],

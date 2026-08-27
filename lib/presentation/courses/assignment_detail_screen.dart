@@ -1150,13 +1150,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           },
         );
       }
-      await _supabase.rpc(
-        'update_class_streak',
-        params: {
-          'p_student_id': studentId,
-          'p_course_id': widget.course['id'],
-        },
-      );
+      // Assignment grades never activate or reset the streak —
+      // only a genuine 100 on a 3D Meet does (see grading_service.dart).
 
       await _supabase.from('notifications').insert({
         'user_id': studentId, // Student receives this

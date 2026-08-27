@@ -2885,19 +2885,33 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                   ),
                 ),
               ),
-              const Icon(
+              Icon(
                 Icons.local_fire_department_rounded,
-                color: Color(0xFFFF9800),
+                color: _classStreak > 0
+                    ? const Color(0xFFFF9800)
+                    : Colors.grey,
                 size: 18,
+                shadows: _classStreak > 0
+                    ? [
+                        Shadow(
+                          color: const Color(
+                            0xFFFF9800,
+                          ).withValues(alpha: 0.6),
+                          blurRadius: 8,
+                        ),
+                      ]
+                    : null,
               ),
               const SizedBox(width: 4),
               Text(
                 '$_classStreak',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFFFF9800),
+                  color: _classStreak > 0
+                      ? const Color(0xFFFF9800)
+                      : Colors.grey.withValues(alpha: 0.5),
                 ),
               ),
             ],

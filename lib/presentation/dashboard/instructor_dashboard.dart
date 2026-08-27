@@ -50,6 +50,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   bool _lbIsLoading = false;
   List<Map<String, dynamic>> _lbData = [];
   List<Map<String, dynamic>> _instructorCourses = [];
+  RealtimeChannel? _rankingChannel;
 
   // Reports drill-down state
   Map<String, dynamic>? _selectedCourse;
@@ -194,6 +195,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
 
   @override
   void dispose() {
+    _rankingChannel?.unsubscribe();
     _glowController.dispose();
     _fabController.dispose();
     _homeSearchController.dispose();
@@ -2537,19 +2539,49 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         setState(
           () => _instructorCourses = List<Map<String, dynamic>>.from(data),
         );
+        // Auto-select the first class so the ranking page loads
+        // immediately without requiring a manual pick.
+        if (_lbSelectedCourseId == null && _instructorCourses.isNotEmpty) {
+          final firstCourseId = _instructorCourses.first['id'] as String;
+          setState(() => _lbSelectedCourseId = firstCourseId);
+          _loadInstructorLeaderboard(firstCourseId);
+          _subscribeToRankingInstructor(firstCourseId);
+        }
       }
     } catch (e) {
       debugPrint('Load instructor courses: $e');
     }
   }
 
+  void _subscribeToRankingInstructor(String courseId) {
+    _rankingChannel?.unsubscribe();
+    _rankingChannel = _supabase
+        .channel('instructor-ranking-${courseId}_${DateTime.now().millisecondsSinceEpoch}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'enrollments',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'course_id',
+            value: courseId,
+          ),
+          callback: (_) {
+            if (mounted) _loadInstructorLeaderboard(courseId);
+          },
+        )
+        .subscribe();
+  }
+
   Future<void> _loadInstructorLeaderboard(String courseId) async {
     setState(() => _lbIsLoading = true);
     try {
-      // Real enrolled-student IDs for this course.
+      // Per-class XP/streak, not the student's global users.xp — this
+      // leaderboard is scoped to one class, matching what students see
+      // on their own per-class ranking view.
       final enrollmentsData = await _supabase
           .from('enrollments')
-          .select('student_id, users(id, name, avatar_url, xp)')
+          .select('student_id, class_xp, class_streak, users(id, name, avatar_url)')
           .eq('course_id', courseId);
 
       List<Map<String, dynamic>> students;
@@ -2561,7 +2593,8 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
               'id': u?['id'] ?? e['student_id'],
               'name': u?['name'] ?? 'Student',
               'avatar_url': u?['avatar_url'],
-              'xp': u?['xp'] ?? 0,
+              'xp': (e['class_xp'] as int?) ?? 0,
+              'class_streak': (e['class_streak'] as int?) ?? 0,
             };
           })
           .toList();
@@ -2695,6 +2728,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                         });
                         if (val != null) {
                           _loadInstructorLeaderboard(val);
+                          _subscribeToRankingInstructor(val);
                         }
                       },
                     ),
@@ -2952,6 +2986,66 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
               overflow: TextOverflow.ellipsis,
             ),
 
+            Builder(
+              builder: (context) {
+                final xp = (user['xp'] as int?) ?? 0;
+                final rankInfo = _getRank(xp);
+                final rankColor = rankInfo['color'] as Color;
+                final badgeAsset = _getBadgeAsset(
+                  rankInfo['name'] as String,
+                );
+                final isFirst = rank == 1;
+                final imageSize = isFirst ? 72.0 : 64.0;
+                final glowSize = isFirst ? 60.0 : 52.0;
+
+                return Column(
+                  children: [
+                    SizedBox(
+                      width: imageSize,
+                      height: imageSize,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          Container(
+                            width: glowSize,
+                            height: glowSize,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(
+                                isFirst ? 14 : 12,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: rankColor.withValues(alpha: 0.35),
+                                  blurRadius: 18,
+                                  spreadRadius: 4,
+                                ),
+                              ],
+                            ),
+                          ),
+                          Image.asset(
+                            badgeAsset,
+                            width: imageSize,
+                            height: imageSize,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      rankInfo['name'] as String,
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        color: rankColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 4),
+
             Text(
               '${user['xp'] ?? 0} XP',
               style: TextStyle(
@@ -3048,23 +3142,81 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                         fontSize: 14,
                       ),
                     ),
-                    Text(
-                      _getLevelTitle(user['xp'] ?? 0),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: themeColor.withValues(alpha: 0.4),
-                      ),
+                    Builder(
+                      builder: (_) {
+                        final xp = (user['xp'] as int?) ?? 0;
+                        final rankInfo = _getRank(xp);
+                        return Text(
+                          rankInfo['name'] as String,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 10,
+                            color: rankInfo['color'] as Color,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        );
+                      },
                     ),
                   ],
                 ),
               ),
-              Text(
-                '${user['xp']} XP',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  color: AppColors.gold,
-                  fontSize: 14,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${user['xp']} XP',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.gold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (user['class_streak'] != null) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Builder(
+                          builder: (_) {
+                            final s = (user['class_streak'] as int?) ?? 0;
+                            return Icon(
+                              Icons.local_fire_department_rounded,
+                              color: s > 0
+                                  ? const Color(0xFFFF9800)
+                                  : Colors.grey,
+                              size: 12,
+                              shadows: s > 0
+                                  ? [
+                                      Shadow(
+                                        color: const Color(
+                                          0xFFFF9800,
+                                        ).withValues(alpha: 0.5),
+                                        blurRadius: 6,
+                                      ),
+                                    ]
+                                  : null,
+                            );
+                          },
+                        ),
+                        Builder(
+                          builder: (_) {
+                            final s = (user['class_streak'] as int?) ?? 0;
+                            return Text(
+                              '$s',
+                              style: TextStyle(
+                                fontFamily: 'Poppins',
+                                fontSize: 11,
+                                color: s > 0
+                                    ? const Color(0xFFFF9800)
+                                    : Colors.grey.withValues(alpha: 0.4),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -3073,15 +3225,87 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     );
   }
 
-  String _getLevelTitle(int xp) {
-    if (xp >= 18000) return 'Compiler Whisperer';
-    if (xp >= 12000) return '10x Developer';
-    if (xp >= 8000) return 'Tech Lead';
-    if (xp >= 5000) return 'Stack Overflow Guru';
-    if (xp >= 2500) return 'Refactorer';
-    if (xp >= 1000) return 'Junior Dev';
-    if (xp >= 300) return 'Code Newbie';
-    return 'Script Kiddie';
+  Map<String, dynamic> _getRank(int xp) {
+    if (xp >= 18000) {
+      return {
+        'name': 'Compiler Whisperer',
+        'icon': Icons.auto_awesome_rounded,
+        'color': const Color(0xFFFFD700),
+        'nextXp': null,
+      };
+    } else if (xp >= 12000) {
+      return {
+        'name': '10x Developer',
+        'icon': Icons.bolt_rounded,
+        'color': const Color(0xFFE040FB),
+        'nextXp': 18000,
+      };
+    } else if (xp >= 8000) {
+      return {
+        'name': 'Tech Lead',
+        'icon': Icons.account_tree_rounded,
+        'color': const Color(0xFF2196F3),
+        'nextXp': 12000,
+      };
+    } else if (xp >= 5000) {
+      return {
+        'name': 'Stack Overflow Guru',
+        'icon': Icons.search_rounded,
+        'color': const Color(0xFFFF9800),
+        'nextXp': 8000,
+      };
+    } else if (xp >= 2500) {
+      return {
+        'name': 'Refactorer',
+        'icon': Icons.refresh_rounded,
+        'color': const Color(0xFF00BCD4),
+        'nextXp': 5000,
+      };
+    } else if (xp >= 1000) {
+      return {
+        'name': 'Junior Dev',
+        'icon': Icons.laptop_rounded,
+        'color': const Color(0xFF4CAF50),
+        'nextXp': 2500,
+      };
+    } else if (xp >= 300) {
+      return {
+        'name': 'Code Newbie',
+        'icon': Icons.eco_rounded,
+        'color': const Color(0xFF9E9E9E),
+        'nextXp': 1000,
+      };
+    } else {
+      return {
+        'name': 'Script Kiddie',
+        'icon': Icons.content_copy_rounded,
+        'color': const Color(0xFFFF5252),
+        'nextXp': 300,
+      };
+    }
+  }
+
+  String _getBadgeAsset(String rankName) {
+    switch (rankName) {
+      case 'Script Kiddie':
+        return 'assets/images/ranks/badge_01_script_kiddie.png';
+      case 'Code Newbie':
+        return 'assets/images/ranks/badge_02_code_newbie.png';
+      case 'Junior Dev':
+        return 'assets/images/ranks/badge_03_junior_dev.png';
+      case 'Refactorer':
+        return 'assets/images/ranks/badge_04_refactorer.png';
+      case 'Stack Overflow Guru':
+        return 'assets/images/ranks/badge_05_stackoverflow_guru.png';
+      case 'Tech Lead':
+        return 'assets/images/ranks/badge_06_tech_lead.png';
+      case '10x Developer':
+        return 'assets/images/ranks/badge_07_10x_developer.png';
+      case 'Compiler Whisperer':
+        return 'assets/images/ranks/badge_08_compiler_whisperer.png';
+      default:
+        return 'assets/images/ranks/badge_01_script_kiddie.png';
+    }
   }
 
   Widget _buildProfilePage() {
