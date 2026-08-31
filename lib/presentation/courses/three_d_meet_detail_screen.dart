@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import 'code_viewer_screen.dart';
@@ -686,6 +688,136 @@ class _ThreeDMeetDetailScreenState
     );
   }
 
+  Future<void> _launchUnity(Map<String, dynamic> post) async {
+    // Check 15-minute join window
+    final scheduledTime = post['scheduled_time'];
+    if (scheduledTime != null) {
+      final scheduled = DateTime.parse(scheduledTime).toLocal();
+      final now = DateTime.now();
+      final windowEnd = scheduled.add(const Duration(minutes: 15));
+
+      if (now.isBefore(scheduled)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Session has not started yet.',
+                style: TextStyle(fontFamily: 'Poppins'),
+              ),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (now.isAfter(windowEnd)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Session has already ended.',
+                style: TextStyle(fontFamily: 'Poppins'),
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    // Get current student data
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    try {
+      final userData = await _supabase
+          .from('users')
+          .select('streak, pending_bonus_points, avatar_config')
+          .eq('id', userId)
+          .single();
+
+      // Build comma separated strings
+      final keywords =
+          (post['required_keywords'] as List?)
+              ?.map((k) => k.toString())
+              .join(',') ??
+          '';
+      final forbidden =
+          (post['forbidden_patterns'] as List?)
+              ?.map((f) => f.toString())
+              .join(',') ??
+          '';
+
+      // Build deep link URI
+      final uri = Uri(
+        scheme: 'unitydemo',
+        host: 'join',
+        queryParameters: {
+          'student_id': userId,
+          'post_id': post['id'].toString(),
+          'lesson_url': post['material_url']?.toString() ?? '',
+          'assessment_url': post['assessment_url']?.toString() ?? '',
+          'expected_output': post['expected_output']?.toString() ?? '',
+          'required_keywords': keywords,
+          'forbidden_patterns': forbidden,
+          'duration_minutes': (post['duration_minutes'] ?? 60).toString(),
+          'points': (post['points'] ?? 100).toString(),
+          'streak': (userData['streak'] ?? 0).toString(),
+          'pending_bonus_points': (userData['pending_bonus_points'] ?? 0)
+              .toString(),
+          'avatar_config': jsonEncode(userData['avatar_config'] ?? {}),
+        },
+      );
+
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                '3D Classroom app is not installed on this device.',
+                style: TextStyle(fontFamily: 'Poppins'),
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Launch Unity error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Failed to launch 3D Classroom. Please try again.',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildJoinButton(bool isLive, bool isUpcoming) {
     Color btnColor;
     String btnLabel;
@@ -711,17 +843,7 @@ class _ThreeDMeetDetailScreenState
     }
 
     return GestureDetector(
-      onTap: isLive
-          ? () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Launching 3D Classroom...',
-                      style: TextStyle(fontFamily: 'Poppins')),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            }
-          : null,
+      onTap: isLive ? () => _launchUnity(widget.post) : null,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),

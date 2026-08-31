@@ -37,6 +37,7 @@ class _LCMSAppState extends ConsumerState<LCMSApp> {
   void initState() {
     super.initState();
     _handleAuthDeepLink();
+    _handleUnityReturnDeepLink();
     AppSecurityManager().initialize(
       onLogout: _forceLogout,
     );
@@ -59,6 +60,30 @@ class _LCMSAppState extends ConsumerState<LCMSApp> {
       }
     });
   }
+
+  // TODO(Joshua): Wire up the return deep link from Unity here.
+  //
+  // Unity finishes a 3D Meet session and hands control back to this app
+  // via a deep link to com.psulubao.it.lcms_app://return, carrying
+  // 'score' and 'post_id' as query parameters (source_code/actual_output
+  // are written straight to Supabase by Unity — GradingService.initialize()
+  // in main() already picks those up via its own realtime listener, so
+  // this handler's only job is catching the app *opening* and routing
+  // the student to the right screen).
+  //
+  // This app currently has no package that listens for incoming links
+  // while already running (url_launcher, used by _launchUnity() in
+  // three_d_meet_detail_screen.dart, only sends links out). Adding one
+  // (app_links or uni_links) means touching pubspec.yaml and the Android
+  // manifest's intent-filter for that scheme/host, which is bigger than
+  // a Find→Replace change, so it wasn't added here.
+  //
+  // Once that package is in: subscribe to its incoming-link stream,
+  // check uri.host == 'return', read score/post_id from
+  // uri.queryParameters, then something like:
+  //   ref.read(appRouterProvider).go(AppRoutes.courseDetail, extra: {...});
+  // to land the student back on the right post showing their grade.
+  void _handleUnityReturnDeepLink() {}
 
   Future<void> _forceLogout() async {
     try {

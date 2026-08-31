@@ -30,6 +30,7 @@ dependencies:
   # ─── Networking / API ───────────────────────────────────────
   dio: ^5.7.0
   http: ^1.2.2
+  url_launcher: ^6.3.0
 
   # ─── UI Components ──────────────────────────────────────────
   cached_network_image: ^3.4.1

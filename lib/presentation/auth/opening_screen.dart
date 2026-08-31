@@ -158,6 +158,8 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                             _buildGetStartedButton(context),
                             const SizedBox(height: 24),
                             _buildLoginLink(context),
+                            const SizedBox(height: 8),
+                            _buildDownloadButton(context),
                           ],
                         ),
                       ),
@@ -267,6 +269,51 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
             fontWeight: FontWeight.w600,
             color: Color(0xFF1E90FF), 
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDownloadButton(BuildContext context) {
+    return PressableScale(
+      onPressed: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'APK download coming soon!',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: const Color(0xFF22C55E),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        color: Colors.transparent,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.android_rounded,
+              size: 18,
+              color: const Color(0xFF22C55E).withValues(alpha: 0.8),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Download Android app',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFF22C55E).withValues(alpha: 0.8),
+              ),
+            ),
+          ],
         ),
       ),
     );
