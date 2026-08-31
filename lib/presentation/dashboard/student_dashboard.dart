@@ -1,5 +1,6 @@
 // lib/presentation/dashboard/student_dashboard.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2649,17 +2650,19 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       ),
       child: Column(
         children: [
-          // Biometric Login
-          _buildPremiumSettingsItem(
-            Icons.fingerprint,
-            'Biometric Login',
-            trailing: _buildAnimatedToggle(
-              value: _biometricsEnabled,
-              onTap: () => _toggleBiometrics(!_biometricsEnabled),
+          // Biometric Login (not applicable on web)
+          if (!kIsWeb) ...[
+            _buildPremiumSettingsItem(
+              Icons.fingerprint,
+              'Biometric Login',
+              trailing: _buildAnimatedToggle(
+                value: _biometricsEnabled,
+                onTap: () => _toggleBiometrics(!_biometricsEnabled),
+              ),
+              showChevron: false,
             ),
-            showChevron: false,
-          ),
-          _buildPremiumDivider(),
+            _buildPremiumDivider(),
+          ],
           // Dark Mode Toggle (Toggle itself handles its own animation)
           _buildPremiumSettingsItem(
             Icons.dark_mode_outlined,

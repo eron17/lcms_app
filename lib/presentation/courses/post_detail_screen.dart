@@ -1,5 +1,7 @@
 // lib/presentation/courses/post_detail_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -1149,16 +1151,26 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     required bool isSaved,
   }) {
     return ListTile(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => FileViewerScreen(
-            url: url,
-            fileName: name,
-            isStudent: !widget.isInstructor,
-          ),
-        ),
-      ),
+      onTap: () async {
+        if (kIsWeb) {
+          final uri = Uri.parse(url);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        } else {
+          if (!context.mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => FileViewerScreen(
+                url: url,
+                fileName: name,
+                isStudent: !widget.isInstructor,
+              ),
+            ),
+          );
+        }
+      },
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       leading: Container(
         width: 54,

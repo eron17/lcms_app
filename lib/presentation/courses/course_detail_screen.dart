@@ -1473,6 +1473,12 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                         scheduledTime == null) {
                                       error =
                                           "Date and Time are required for 3D Meet";
+                                    } else if (requiredKeywordControllers
+                                        .every(
+                                          (c) => c.text.trim().isEmpty,
+                                        )) {
+                                      error =
+                                          "Please add at least one required keyword";
                                     }
                                   }
 
@@ -4014,6 +4020,12 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         course: widget.course,
                         isInstructor: widget.isInstructor,
                       )
+                    : post['type'] == '3d_meet'
+                    ? ThreeDMeetDetailScreen(
+                        post: post,
+                        course: widget.course,
+                        isInstructor: widget.isInstructor,
+                      )
                     : PostDetailScreen(
                         post: post,
                         course: widget.course,
@@ -4479,7 +4491,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Required Keywords',
+          'Required Keywords *',
           style: TextStyle(
             fontFamily: 'Poppins',
             fontSize: 13,

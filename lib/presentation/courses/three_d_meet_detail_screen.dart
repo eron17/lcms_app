@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
@@ -550,6 +551,10 @@ class _ThreeDMeetDetailScreenState
           ],
 
           // Join 3D Classroom button
+          if (widget.isInstructor && scheduleStatus != 'none') ...[
+            _buildInstructorSessionCard(isLive, isUpcoming),
+            const SizedBox(height: 16),
+          ],
           if (!widget.isInstructor && scheduleStatus != 'none') ...[
             _buildJoinButton(isLive, isUpcoming),
             const SizedBox(height: 16),
@@ -673,16 +678,26 @@ class _ThreeDMeetDetailScreenState
         ),
         trailing:
             Icon(Icons.chevron_right_rounded, color: color, size: 20),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => FileViewerScreen(
-              url: url,
-              fileName: label,
-              isStudent: !widget.isInstructor,
-            ),
-          ),
-        ),
+        onTap: () async {
+          if (kIsWeb) {
+            final uri = Uri.parse(url);
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          } else {
+            if (!context.mounted) return;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => FileViewerScreen(
+                  url: url,
+                  fileName: label,
+                  isStudent: !widget.isInstructor,
+                ),
+              ),
+            );
+          }
+        },
         dense: true,
       ),
     );
@@ -816,6 +831,94 @@ class _ThreeDMeetDetailScreenState
         );
       }
     }
+  }
+
+  Widget _buildInstructorSessionCard(bool isLive, bool isUpcoming) {
+    final scheduledStr = widget.post['scheduled_time'] as String?;
+    String timeInfo = '';
+    if (scheduledStr != null) {
+      try {
+        final scheduled = DateTime.parse(scheduledStr).toLocal();
+        final windowEnd = scheduled.add(const Duration(minutes: 15));
+        final endHour = windowEnd.hour > 12
+            ? windowEnd.hour - 12
+            : windowEnd.hour;
+        final ampm = windowEnd.hour >= 12 ? 'PM' : 'AM';
+        final min = windowEnd.minute.toString().padLeft(2, '0');
+        timeInfo = 'Session ends at $endHour:$min $ampm';
+      } catch (_) {}
+    }
+
+    Color cardColor;
+    IconData cardIcon;
+    String cardTitle;
+    String cardSub;
+
+    if (isLive) {
+      cardColor = const Color(0xFF22C55E);
+      cardIcon = Icons.cast_connected_rounded;
+      cardTitle = 'Session is live now';
+      cardSub = timeInfo.isNotEmpty
+          ? timeInfo
+          : 'Students can join right now';
+    } else if (isUpcoming) {
+      cardColor = AppColors.primary;
+      cardIcon = Icons.schedule_rounded;
+      cardTitle = '3D Meet scheduled';
+      cardSub = 'Students will be able to join at the scheduled time';
+    } else {
+      cardColor = context.textHint;
+      cardIcon = Icons.event_busy_rounded;
+      cardTitle = 'Session has ended';
+      cardSub = 'The 15-minute join window has passed';
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: cardColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: cardColor.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(cardIcon, color: cardColor, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  cardTitle,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: cardColor,
+                  ),
+                ),
+                Text(
+                  cardSub,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    color: cardColor.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildJoinButton(bool isLive, bool isUpcoming) {

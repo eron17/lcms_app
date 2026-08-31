@@ -90,6 +90,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       // ── Already on auth screen while logged in ──────
       if (isAuthRoute) {
+        // EXCEPTION: always allow resetPassword screen even when a
+        // session exists — this is the password recovery flow, where
+        // Supabase creates a session before the user has actually
+        // reset anything.
+        if (state.matchedLocation == AppRoutes.resetPassword) {
+          return null;
+        }
         return routeForRole();
       }
 

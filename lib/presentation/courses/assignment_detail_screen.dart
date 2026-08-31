@@ -1,5 +1,7 @@
 // lib/presentation/courses/assignment_detail_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
@@ -3466,16 +3468,26 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     Color color,
   ) {
     return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => FileViewerScreen(
-            url: url,
-            fileName: name,
-            isStudent: !widget.isInstructor,
-          ),
-        ),
-      ),
+      onTap: () async {
+        if (kIsWeb) {
+          final uri = Uri.parse(url);
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        } else {
+          if (!context.mounted) return;
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => FileViewerScreen(
+                url: url,
+                fileName: name,
+                isStudent: !widget.isInstructor,
+              ),
+            ),
+          );
+        }
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -3699,16 +3711,29 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                 )
               else
                 GestureDetector(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => FileViewerScreen(
-                        url: fileUrl,
-                        fileName: fileName,
-                        isStudent: !widget.isInstructor,
-                      ),
-                    ),
-                  ),
+                  onTap: () async {
+                    if (kIsWeb) {
+                      final uri = Uri.parse(fileUrl);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    } else {
+                      if (!context.mounted) return;
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => FileViewerScreen(
+                            url: fileUrl,
+                            fileName: fileName,
+                            isStudent: !widget.isInstructor,
+                          ),
+                        ),
+                      );
+                    }
+                  },
                   child: Icon(
                     Icons.visibility_outlined,
                     color: textColor.withValues(alpha:0.3),
