@@ -947,6 +947,18 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth > 900;
+        if (isDesktop) {
+          return _buildDesktopLayout();
+        }
+        return _buildMobileLayout();
+      },
+    );
+  }
+
+  Widget _buildMobileLayout() {
     return Scaffold(
       backgroundColor: context.bgColor,
       body: Stack(
@@ -979,6 +991,120 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
         ],
       ),
       bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    final pages = [_buildHomePage(), _buildLeaderboardPage(), _buildProfilePage()];
+    final navItems = [
+      (Icons.home_rounded, 'Home'),
+      (Icons.emoji_events_rounded, 'Ranking'),
+      (Icons.person_rounded, 'Profile'),
+    ];
+
+    return Scaffold(
+      backgroundColor: context.bgColor,
+      body: Row(
+        children: [
+          // Sidebar
+          Container(
+            width: 220,
+            decoration: BoxDecoration(
+              color: context.isDark ? const Color(0xFF0A1128) : Colors.white,
+              border: Border(
+                right: BorderSide(color: context.borderColor, width: 0.5),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Logo
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 32, 20, 24),
+                  child: Text(
+                    'Code Lab 3D',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ),
+                // Nav items
+                ...List.generate(navItems.length, (i) {
+                  final isActive = _currentIndex == i;
+                  return GestureDetector(
+                    onTap: () => setState(() => _currentIndex = i),
+                    child: Container(
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 2,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? AppColors.primary.withValues(alpha: 0.12)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            navItems[i].$1,
+                            color: isActive
+                                ? AppColors.primary
+                                : context.textSecondary,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            navItems[i].$2,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              fontWeight: isActive
+                                  ? FontWeight.w700
+                                  : FontWeight.w400,
+                              color: isActive
+                                  ? AppColors.primary
+                                  : context.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                const Spacer(),
+                // Notification bell
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const NotificationsScreen(isInstructor: false),
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.notifications_outlined,
+                      color: context.textSecondary,
+                      size: 22,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Content area
+          Expanded(child: pages[_currentIndex]),
+        ],
+      ),
     );
   }
 

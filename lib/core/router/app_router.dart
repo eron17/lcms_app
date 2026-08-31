@@ -22,6 +22,27 @@ class AppRoutes {
   static const String resetPassword = '/reset-password';
 }
 
+CustomTransitionPage<void> _fadeScalePage(Widget child, GoRouterState state) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionDuration: const Duration(milliseconds: 300),
+    reverseTransitionDuration: const Duration(milliseconds: 250),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      // Fade + slight scale (Option C)
+      return FadeTransition(
+        opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.95, end: 1.0).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          ),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
 final appRouterProvider = Provider<GoRouter>((ref) {
   final supabase = Supabase.instance.client;
 
@@ -107,37 +128,45 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.opening,
         name: 'opening',
-        builder: (context, state) => const OpeningScreen(),
+        pageBuilder: (context, state) =>
+            _fadeScalePage(const OpeningScreen(), state),
       ),
       GoRoute(
         path: AppRoutes.login,
         name: 'login',
-        builder: (context, state) => const LoginScreen(showRegister: false),
+        pageBuilder: (context, state) =>
+            _fadeScalePage(const LoginScreen(showRegister: false), state),
       ),
       GoRoute(
         path: AppRoutes.register,
         name: 'register',
-        builder: (context, state) => const LoginScreen(showRegister: true),
+        pageBuilder: (context, state) =>
+            _fadeScalePage(const LoginScreen(showRegister: true), state),
       ),
       GoRoute(
         path: AppRoutes.studentDashboard,
         name: 'studentDashboard',
-        builder: (context, state) => const StudentDashboard(),
+        pageBuilder: (context, state) =>
+            _fadeScalePage(const StudentDashboard(), state),
       ),
       GoRoute(
         path: AppRoutes.instructorDashboard,
         name: 'instructorDashboard',
-        builder: (context, state) => const InstructorDashboard(),
+        pageBuilder: (context, state) =>
+            _fadeScalePage(const InstructorDashboard(), state),
       ),
       GoRoute(
         path: AppRoutes.courseDetail,
         name: 'courseDetail',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final extra = state.extra as Map<String, dynamic>;
-          return CourseDetailScreen(
-            course: extra['course'] as Map<String, dynamic>,
-            isInstructor: extra['isInstructor'] as bool,
-            initialTab: extra['initialTab'] ?? 0,
+          return _fadeScalePage(
+            CourseDetailScreen(
+              course: extra['course'] as Map<String, dynamic>,
+              isInstructor: extra['isInstructor'] as bool,
+              initialTab: extra['initialTab'] ?? 0,
+            ),
+            state,
           );
         },
       ),
@@ -145,7 +174,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.resetPassword,
         name: 'resetPassword',
-        builder: (context, state) => const ResetPasswordScreen(),
+        pageBuilder: (context, state) =>
+            _fadeScalePage(const ResetPasswordScreen(), state),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

@@ -7,6 +7,7 @@ import 'core/router/app_router.dart';
 import 'providers/theme_provider.dart';
 import 'core/utils/grading_service.dart';
 import 'core/utils/app_security_manager.dart';
+import 'presentation/shared/theme_ripple_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,7 +33,12 @@ class LCMSApp extends ConsumerStatefulWidget {
   ConsumerState<LCMSApp> createState() => _LCMSAppState();
 }
 
-class _LCMSAppState extends ConsumerState<LCMSApp> {
+class _LCMSAppState extends ConsumerState<LCMSApp>
+    with TickerProviderStateMixin {
+  Offset _rippleOrigin = Offset.zero;
+  OverlayEntry? _rippleEntry;
+  AnimationController? _rippleController;
+
   @override
   void initState() {
     super.initState();
@@ -84,6 +90,58 @@ class _LCMSAppState extends ConsumerState<LCMSApp> {
   //   ref.read(appRouterProvider).go(AppRoutes.courseDetail, extra: {...});
   // to land the student back on the right post showing their grade.
   void _handleUnityReturnDeepLink() {}
+
+  void triggerThemeRipple({
+    required Offset origin,
+    required bool toIsDark,
+    required BuildContext context,
+  }) async {
+    _rippleController?.dispose();
+    _rippleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+
+    final newTheme = toIsDark ? ThemeMode.dark : ThemeMode.light;
+
+    final animation = CurvedAnimation(
+      parent: _rippleController!,
+      curve: Curves.easeInOut,
+    );
+
+    // Build the new-theme widget as overlay
+    _rippleEntry = OverlayEntry(
+      builder: (_) => ThemeRippleOverlay(
+        animation: animation,
+        center: origin,
+        isDarkTarget: toIsDark,
+        child: MaterialApp.router(
+          title: 'Code Lab 3D',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: newTheme,
+          routerConfig: ref.read(appRouterProvider),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.noScaling),
+            child: child!,
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_rippleEntry!);
+    await _rippleController!.forward();
+
+    // Apply the theme change and remove overlay
+    ref.read(themeProvider.notifier).setTheme(newTheme);
+    _rippleEntry?.remove();
+    _rippleEntry = null;
+    _rippleController?.dispose();
+    _rippleController = null;
+  }
 
   Future<void> _forceLogout() async {
     try {

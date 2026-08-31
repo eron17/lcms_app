@@ -2,12 +2,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'dart:io' show File;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import '../../data/models/user_model.dart';
 import '../../shared/widgets/pressable_scale.dart';
 import '../../core/utils/string_utils.dart';
+import '../../core/utils/snack_bar_helper.dart';
 
 class EditProfileScreen extends StatefulWidget {
   final UserModel user;
@@ -23,7 +25,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
   bool _isUploadingPhoto = false;
-  File? _newPhotoFile;
+  dynamic _newPhotoFile;
   String? _avatarUrl;
 
   @override
@@ -48,7 +50,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       imageQuality: 80,
     );
     if (picked != null && mounted) {
-      setState(() => _newPhotoFile = File(picked.path));
+      setState(() => _newPhotoFile = picked);
     }
   }
 
@@ -57,9 +59,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() => _isUploadingPhoto = true);
     try {
       final userId = _supabase.auth.currentUser?.id;
-      final ext = _newPhotoFile!.path.split('.').last;
+      final path = _newPhotoFile!.path;
+      final ext = path.contains('.') ? path.split('.').last : 'jpg';
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'avatar_${userId}_$timestamp.$ext';
+      // XFile.readAsBytes() works on both web and mobile unlike
+      // File.readAsBytes()
       final bytes = await _newPhotoFile!.readAsBytes();
       await _supabase.storage
           .from('avatars')
@@ -99,27 +104,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       PaintingBinding.instance.imageCache.clear();
       PaintingBinding.instance.imageCache.clearLiveImages();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Profile Updated!'),
-            backgroundColor: Colors.green.shade700,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
+        showSnack(context, 'Profile updated', type: SnackType.success);
         Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        showSnack(context, 'Failed to save profile', type: SnackType.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -233,8 +223,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                     alpha: 0.15,
                                   ),
                                   backgroundImage: _newPhotoFile != null
-                                      ? FileImage(_newPhotoFile!)
-                                            as ImageProvider
+                                      ? (kIsWeb
+                                            ? NetworkImage(
+                                                _newPhotoFile!.path,
+                                              )
+                                            : FileImage(
+                                                    File(_newPhotoFile!.path),
+                                                  )
+                                                  as ImageProvider)
                                       : (_avatarUrl != null
                                             ? NetworkImage(_avatarUrl!)
                                             : null),
