@@ -558,6 +558,13 @@ class _LoginScreenState extends State<LoginScreen>
           const SizedBox(height: 36),
 
           // ─── Header Image ──────────────────────
+          if (!kIsWeb)
+            Image.asset(
+              'assets/images/logo.png',
+              height: 120,
+              fit: BoxFit.contain,
+            ),
+          if (!kIsWeb) const SizedBox(height: 16),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 250),
             child: Image.asset(
