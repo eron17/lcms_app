@@ -1836,17 +1836,22 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
 
     if (MediaQuery.of(context).size.width > 900) {
       return [
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 2.4,
-          ),
-          itemCount: filtered.length,
-          itemBuilder: (ctx, i) => _buildWebClassCard(filtered[i], i),
+        LayoutBuilder(
+          builder: (ctx, constraints) {
+            final w = constraints.maxWidth;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: w > 1200 ? 3 : 2,
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+                childAspectRatio: w > 1200 ? 2.2 : 2.0,
+              ),
+              itemCount: filtered.length,
+              itemBuilder: (ctx, i) => _buildWebClassCard(filtered[i], i),
+            );
+          },
         ),
       ];
     }

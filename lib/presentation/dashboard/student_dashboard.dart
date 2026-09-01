@@ -1320,18 +1320,33 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           else if (_enrolledCourses.isEmpty)
             _buildEmptyClasses()
           else if (isDesktop)
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 2.4,
-              ),
-              itemCount: _enrolledCourses.length,
-              itemBuilder: (ctx, i) =>
-                  _buildWebClassCard(_enrolledCourses[i], i),
+            LayoutBuilder(
+              builder: (ctx, constraints) {
+                final w = constraints.maxWidth;
+                final cols = w > 1200
+                    ? 3
+                    : w > 900
+                    ? 2
+                    : 1;
+                final ratio = w > 1200
+                    ? 2.2
+                    : w > 900
+                    ? 2.0
+                    : 3.0;
+                return GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
+                    childAspectRatio: ratio,
+                  ),
+                  itemCount: _enrolledCourses.length,
+                  itemBuilder: (ctx, i) =>
+                      _buildWebClassCard(_enrolledCourses[i], i),
+                );
+              },
             )
           else
             Column(
