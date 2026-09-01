@@ -1,4 +1,5 @@
 // lib/presentation/auth/opening_screen.dart
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -158,8 +159,10 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                             _buildGetStartedButton(context),
                             const SizedBox(height: 24),
                             _buildLoginLink(context),
-                            const SizedBox(height: 8),
-                            _buildDownloadButton(context),
+                            if (kIsWeb) ...[
+                              const SizedBox(height: 8),
+                              _buildDownloadButton(context),
+                            ],
                           ],
                         ),
                       ),
