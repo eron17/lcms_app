@@ -1534,7 +1534,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     final isDesktop = MediaQuery.of(context).size.width > 900;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.fromLTRB(20, isDesktop ? 32 : 0, 20, 20),
       physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2261,11 +2261,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
 
   // ── LEVEL 1: All classes overview ─────────────────────────────
   Widget _buildLevel1() {
+    final isDesktop = MediaQuery.of(context).size.width > 900;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: EdgeInsets.fromLTRB(16, isDesktop ? 32 : 16, 16, 8),
           child: Text(
             'Reports',
             style: TextStyle(
@@ -3009,11 +3010,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   Widget _buildInstructorLeaderboardPage() {
     final currentUserId = _supabase.auth.currentUser?.id;
     final themeColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    final isDesktop = MediaQuery.of(context).size.width > 900;
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          padding: EdgeInsets.fromLTRB(20, isDesktop ? 32 : 8, 20, 16),
           child: Column(
             children: [
               // ─── Header with Proper Icon ───
@@ -3707,7 +3709,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
     final isDesktop = MediaQuery.of(context).size.width > 900;
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, isDesktop ? 0 : 20, 20, 20),
+      padding: EdgeInsets.fromLTRB(20, isDesktop ? 32 : 20, 20, 20),
       child: Column(
         children: [
           // Instructor Identity Card
