@@ -500,98 +500,16 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ),
             Expanded(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      color: const Color(0xFF080e20),
-                      padding: const EdgeInsets.fromLTRB(56, 48, 48, 48),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Image.asset(
-                            'assets/images/app_name.png',
-                            height: 36,
-                          ),
-                          const SizedBox(height: 28),
-                          const Text(
-                            'Your 3D coding\nclassroom awaits',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 28,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                              height: 1.25,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          const Text(
-                            'Join your class, submit code in Unity, earn '
-                            'ranks, and compete with your classmates on '
-                            'live leaderboards.',
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 13,
-                              color: Color(0x80FFFFFF),
-                              height: 1.6,
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                          ...[
-                            'Real C++ code execution via JDoodle',
-                            'Auto-graded by CodeScanner & AutoGrader',
-                            '8 rank badges — Script Kiddie to Compiler '
-                                'Whisperer',
-                            'Per-class XP and streak system',
-                          ].map((f) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 6,
-                                    height: 6,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF3B9EFF),
-                                      shape: BoxShape.circle,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    f,
-                                    style: const TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 13,
-                                      color: Color(0x99FFFFFF),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 48),
+                  child: SingleChildScrollView(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: _buildLoginForm(showHeader: false),
                     ),
                   ),
-                  Container(
-                    width: 0.5,
-                    color: Colors.white.withValues(alpha: 0.07),
-                  ),
-                  SizedBox(
-                    width: 380,
-                    child: Container(
-                      color: const Color(0xFF060d1f),
-                      padding: const EdgeInsets.fromLTRB(40, 0, 40, 0),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 320),
-                          child: _buildLoginForm(),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ],
@@ -630,7 +548,7 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildLoginForm() {
+  Widget _buildLoginForm({bool showHeader = true}) {
     final size = MediaQuery.of(context).size;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -638,26 +556,28 @@ class _LoginScreenState extends State<LoginScreen>
       key: _formKey,
       child: Column(
         children: [
-          const SizedBox(height: 36),
+          if (showHeader) ...[
+            const SizedBox(height: 36),
 
-          // ─── Logo ──────────────────────────────
-          Image.asset('assets/images/logo.png', width: size.width * 0.35),
+            // ─── Logo ──────────────────────────────
+            Image.asset('assets/images/logo.png', width: size.width * 0.35),
 
-          const SizedBox(height: 14),
+            const SizedBox(height: 14),
 
-          // ─── Header Image ──────────────────────
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 400),
-            child: Image.asset(
-              _isSignIn
-                  ? 'assets/images/welcome_text.png'
-                  : 'assets/images/create_account_text.png',
-              key: ValueKey(_isSignIn),
-              width: size.width * 0.70,
+            // ─── Header Image ──────────────────────
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: Image.asset(
+                _isSignIn
+                    ? 'assets/images/welcome_text.png'
+                    : 'assets/images/create_account_text.png',
+                key: ValueKey(_isSignIn),
+                width: size.width * 0.70,
+              ),
             ),
-          ),
 
-          const SizedBox(height: 26),
+            const SizedBox(height: 26),
+          ],
 
           // ─── Sign In / Sign Up Toggle ──────────
           _buildTabSwitcher(

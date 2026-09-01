@@ -433,42 +433,25 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
       height: 56,
       color: const Color(0xFF080e20),
       padding: const EdgeInsets.symmetric(horizontal: 40),
-      child: Row(
-        children: [
-          Image.asset('assets/images/logo.png', height: 32),
-          const SizedBox(width: 10),
-          Image.asset('assets/images/app_name.png', height: 22),
-          const Spacer(),
-          _navLink('Home', () => _scrollTo(_heroKey)),
-          const SizedBox(width: 28),
-          _navLink('Features', () => _scrollTo(_featuresKey)),
-          const SizedBox(width: 28),
-          _navLink('About', () => _scrollTo(_aboutKey)),
-          const SizedBox(width: 32),
-          ElevatedButton(
-            onPressed: () => context.go(AppRoutes.login),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3B9EFF),
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 10,
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              elevation: 0,
-            ),
-            child: const Text(
-              'Get started',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (ctx, constraints) {
+          final isNarrow = constraints.maxWidth < 600;
+          return Row(
+            children: [
+              Image.asset('assets/images/logo.png', height: 32),
+              const SizedBox(width: 10),
+              Image.asset('assets/images/app_name.png', height: 22),
+              const Spacer(),
+              if (!isNarrow) ...[
+                _navLink('Home', () => _scrollTo(_heroKey)),
+                const SizedBox(width: 28),
+                _navLink('Features', () => _scrollTo(_featuresKey)),
+                const SizedBox(width: 28),
+                _navLink('About', () => _scrollTo(_aboutKey)),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -491,111 +474,190 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     return Container(
       key: _heroKey,
       color: const Color(0xFF060d1f),
-      padding: const EdgeInsets.fromLTRB(60, 80, 60, 60),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: LayoutBuilder(
+        builder: (ctx, constraints) {
+          final isNarrow = constraints.maxWidth < 700;
+          if (isNarrow) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(24, 48, 24, 40),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [_buildHeroLeft(context)],
+              ),
+            );
+          }
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(60, 80, 60, 60),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [Expanded(child: _buildHeroLeft(context))],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildHeroLeft(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF3B9EFF).withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: const Color(0xFF3B9EFF).withValues(alpha: 0.3),
+            ),
+          ),
+          child: const Text(
+            '3D immersive coding platform',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 11,
+              color: Color(0xFF3B9EFF),
+            ),
+          ),
+        ),
+        const SizedBox(height: 20),
+        RichText(
+          text: const TextSpan(
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 38,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              height: 1.15,
+            ),
+            children: [
+              TextSpan(text: 'Learn to code in\na '),
+              TextSpan(
+                text: '3D classroom',
+                style: TextStyle(color: Color(0xFF3B9EFF)),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'An immersive learning management system where '
+          'students write real C++ code, get auto-graded in '
+          'real time, and compete on live leaderboards.',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 14,
+            color: Color(0x80FFFFFF),
+            height: 1.6,
+          ),
+        ),
+        const SizedBox(height: 28),
+        Row(
+          children: [
+            ElevatedButton(
+              onPressed: () => context.go(AppRoutes.login),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3B9EFF),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                elevation: 0,
+              ),
+              child: const Text(
+                'Get started',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            OutlinedButton(
+              onPressed: () => context.go(AppRoutes.login),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white.withValues(alpha: 0.8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 14,
+                ),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text(
+                'Sign in',
+                style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 32),
+        const Text(
+          'ALSO AVAILABLE ON',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 11,
+            color: Color(0x55FFFFFF),
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 10),
+        GestureDetector(
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'APK download coming soon!',
+                  style: TextStyle(fontFamily: 'Poppins'),
+                ),
+                backgroundColor: Color(0xFF111d33),
+              ),
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 12,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF3B9EFF).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: const Color(0xFF3B9EFF).withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: const Text(
-                    '3D immersive coding platform',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 11,
-                      color: Color(0xFF3B9EFF),
-                    ),
-                  ),
+                const Icon(
+                  Icons.android_rounded,
+                  color: Color(0xFF4CAF50),
+                  size: 22,
                 ),
-                const SizedBox(height: 20),
-                RichText(
-                  text: const TextSpan(
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 38,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      height: 1.15,
-                    ),
-                    children: [
-                      TextSpan(text: 'Learn to code in\na '),
-                      TextSpan(
-                        text: '3D classroom',
-                        style: TextStyle(color: Color(0xFF3B9EFF)),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'An immersive learning management system where '
-                  'students write real C++ code, get auto-graded in '
-                  'real time, and compete on live leaderboards.',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 14,
-                    color: Color(0x80FFFFFF),
-                    height: 1.6,
-                  ),
-                ),
-                const SizedBox(height: 28),
-                Row(
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ElevatedButton(
-                      onPressed: () => context.go(AppRoutes.login),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF3B9EFF),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 14,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'Get started',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    const Text(
+                      'Download for Android',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    OutlinedButton(
-                      onPressed: () => context.go(AppRoutes.login),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white.withValues(alpha: 0.8),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 14,
-                        ),
-                        side: BorderSide(
-                          color: Colors.white.withValues(alpha: 0.15),
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: const Text(
-                        'Sign in',
-                        style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+                    Text(
+                      'APK • Coming soon',
+                      style: TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        color: Colors.white.withValues(alpha: 0.45),
                       ),
                     ),
                   ],
@@ -603,68 +665,10 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               ],
             ),
           ),
-          const SizedBox(width: 48),
-          Container(
-            width: 240,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            ),
-            child: Column(
-              children: [
-                _heroStat('3D', 'Immersive classroom', Colors.white),
-                _heroDivider(),
-                _heroStat(
-                  'Live',
-                  'Auto-grading system',
-                  const Color(0xFF3B9EFF),
-                ),
-                _heroDivider(),
-                _heroStat(
-                  '🔥',
-                  'Streak-based ranking',
-                  const Color(0xFFFF9800),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
-
-  Widget _heroStat(String value, String label, Color color) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
-          Text(
-            label,
-            style: const TextStyle(
-              fontFamily: 'Poppins',
-              fontSize: 11,
-              color: Color(0x66FFFFFF),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _heroDivider() =>
-      Container(height: 0.5, color: Colors.white.withValues(alpha: 0.08));
 
   Widget _buildFeaturesSection() {
     return Container(
@@ -693,71 +697,85 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
             ),
           ),
           const SizedBox(height: 32),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate:
-                const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
+          LayoutBuilder(
+            builder: (ctx, constraints) {
+              final w = constraints.maxWidth;
+              final cols = w > 900
+                  ? 3
+                  : w > 600
+                  ? 2
+                  : 1;
+              final ratio = w > 900
+                  ? 1.6
+                  : w > 600
+                  ? 1.8
+                  : 3.5;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: cols,
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
-                  childAspectRatio: 1.6,
+                  childAspectRatio: ratio,
                 ),
-            itemCount: _features.length,
-            itemBuilder: (ctx, i) {
-              final f = _features[i];
-              final isExpanded = _expandedFeature == i;
-              final color = f['color'] as Color;
+                itemCount: _features.length,
+                itemBuilder: (ctx, i) {
+                  final f = _features[i];
+                  final isExpanded = _expandedFeature == i;
+                  final color = f['color'] as Color;
 
-              return GestureDetector(
-                onTap: () => setState(
-                  () => _expandedFeature = isExpanded ? -1 : i,
-                ),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: isExpanded
-                        ? color.withValues(alpha: 0.1)
-                        : const Color(0xFF111d33),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isExpanded
-                          ? color.withValues(alpha: 0.4)
-                          : Colors.white.withValues(alpha: 0.07),
+                  return GestureDetector(
+                    onTap: () => setState(
+                      () => _expandedFeature = isExpanded ? -1 : i,
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(f['icon'] as IconData, color: color, size: 22),
-                      const SizedBox(height: 10),
-                      Text(
-                        f['title'] as String,
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: isExpanded ? color : Colors.white,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: isExpanded
+                            ? color.withValues(alpha: 0.1)
+                            : const Color(0xFF111d33),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isExpanded
+                              ? color.withValues(alpha: 0.4)
+                              : Colors.white.withValues(alpha: 0.07),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isExpanded
-                            ? f['detail'] as String
-                            : f['summary'] as String,
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 11,
-                          color: Colors.white.withValues(alpha: 0.5),
-                          height: 1.5,
-                        ),
-                        maxLines: isExpanded ? 6 : 2,
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(f['icon'] as IconData, color: color, size: 22),
+                          const SizedBox(height: 10),
+                          Text(
+                            f['title'] as String,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isExpanded ? color : Colors.white,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            isExpanded
+                                ? f['detail'] as String
+                                : f['summary'] as String,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 11,
+                              color: Colors.white.withValues(alpha: 0.5),
+                              height: 1.5,
+                            ),
+                            maxLines: isExpanded ? 6 : 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
+                    ),
+                  );
+                },
               );
             },
           ),
