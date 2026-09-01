@@ -158,13 +158,18 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       if (userId == null) return;
 
       // 1. Save the comment
-      await _supabase.from('comments').insert({
-        'post_id': widget.post['id'],
-        'user_id': userId,
-        'user_name': _currentUserName ?? 'User',
-        'text': text,
-        'created_at': DateTime.now().toUtc().toIso8601String(),
-      });
+      final now = DateTime.now().toUtc().toIso8601String();
+      final inserted = await _supabase
+          .from('comments')
+          .insert({
+            'post_id': widget.post['id'],
+            'user_id': userId,
+            'user_name': _currentUserName ?? 'User',
+            'text': text,
+            'created_at': now,
+          })
+          .select()
+          .single();
 
       // 2. SEND NOTIFICATIONS
       if (widget.isInstructor) {
@@ -196,7 +201,15 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       }
 
       _classCommentController.clear();
-      _loadClassComments(); 
+      // Add to local state immediately for instant UI update
+      if (mounted) {
+        setState(() {
+          _classComments.add({
+            ...inserted,
+            'avatar_url': _currentUserAvatarUrl,
+          });
+        });
+      }
     } catch (e) { debugPrint('Notif Error: $e'); }
   }
 
@@ -471,9 +484,23 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                   .update({'text': newText})
                   .eq('id', comment['id']);
 
+              // Update local state immediately
+              if (mounted) {
+                setState(() {
+                  final index = _classComments.indexWhere(
+                    (c) => c['id'] == comment['id'],
+                  );
+                  if (index != -1) {
+                    _classComments[index] = {
+                      ..._classComments[index],
+                      'text': newText,
+                    };
+                  }
+                });
+              }
+
               if (!context.mounted) return;
               Navigator.pop(context);
-              _loadClassComments(); // Refresh the comment list
             },
             child: const Text('Save'),
           ),
@@ -486,8 +513,12 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   Future<void> _deleteComment(String commentId, String postId) async {
     try {
       await _supabase.from('comments').delete().eq('id', commentId);
-      // Refresh the list immediately
-      _loadClassComments();
+      // Remove from local state immediately
+      if (mounted) {
+        setState(
+          () => _classComments.removeWhere((c) => c['id'] == commentId),
+        );
+      }
     } catch (e) {
       debugPrint('Delete error: $e');
     }
@@ -957,18 +988,36 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       await _loadMySubmission();
 
       try {
-        await _supabase.from('notifications').insert({
-          'user_id': widget.course['instructor_id'],
-          'course_id': widget.course['id'],
-          'post_id': widget.post['id'],
-          'sender_id': userId,
-          'type': 'submission_received',
-          'title': 'New Submission: $_currentUserName',
-          'body': 'Work turned in for: ${widget.post['title']}',
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-        });
+        // Fetch instructor_id from courses table since it may not be
+        // in the widget.course map (e.g. when navigated here with only
+        // a partial course object).
+        final courseData = await _supabase
+            .from('courses')
+            .select('instructor_id')
+            .eq('id', widget.course['id'])
+            .single();
+
+        final instructorId = courseData['instructor_id'] as String?;
+
+        if (instructorId != null) {
+          await _supabase.from('notifications').insert({
+            'user_id': instructorId,
+            'course_id': widget.course['id'],
+            'post_id': widget.post['id'],
+            'type': 'submission_received',
+            'title': 'New submission received',
+            'body':
+                '${_currentUserName ?? 'A student'} turned in '
+                '${widget.post['title'] ?? 'an assignment'}',
+            'is_read': false,
+            'created_at': DateTime.now().toUtc().toIso8601String(),
+          });
+          debugPrint(
+            'Submission notification sent to instructor: $instructorId',
+          );
+        }
       } catch (notifErr) {
-        debugPrint('Notif Fail: $notifErr');
+        debugPrint('Notification failed: $notifErr');
       }
 
       if (mounted) {
@@ -3470,7 +3519,14 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     return GestureDetector(
       onTap: () async {
         if (kIsWeb) {
-          final uri = Uri.parse(url);
+          // Use Google Docs Viewer so file is displayed in browser
+          // not downloaded. Works for PDF, Word, PPT, Excel
+          final cleanUrl = url.split('?').first;
+          final viewerUrl =
+              'https://docs.google.com/viewer'
+              '?url=${Uri.encodeComponent(cleanUrl)}'
+              '&embedded=false';
+          final uri = Uri.parse(viewerUrl);
           if (await canLaunchUrl(uri)) {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
           }
@@ -3713,7 +3769,15 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                 GestureDetector(
                   onTap: () async {
                     if (kIsWeb) {
-                      final uri = Uri.parse(fileUrl);
+                      // Use Google Docs Viewer so file is displayed in
+                      // browser not downloaded. Works for PDF, Word,
+                      // PPT, Excel
+                      final cleanUrl = fileUrl.split('?').first;
+                      final viewerUrl =
+                          'https://docs.google.com/viewer'
+                          '?url=${Uri.encodeComponent(cleanUrl)}'
+                          '&embedded=false';
+                      final uri = Uri.parse(viewerUrl);
                       if (await canLaunchUrl(uri)) {
                         await launchUrl(
                           uri,

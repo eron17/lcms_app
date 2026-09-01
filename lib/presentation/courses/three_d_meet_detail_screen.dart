@@ -115,7 +115,7 @@ class _ThreeDMeetDetailScreenState
     try {
       final data = await _supabase
           .from('comments')
-          .select('id, content, created_at, user_id, users(name, avatar_url)')
+          .select('id, text, created_at, user_id, users(name, avatar_url)')
           .eq('post_id', widget.post['id'])
           .order('created_at');
       if (mounted) {
@@ -140,14 +140,27 @@ class _ThreeDMeetDetailScreenState
     setState(() => _isPostingComment = true);
     try {
       final userId = _supabase.auth.currentUser?.id;
+      final now = DateTime.now().toIso8601String();
       await _supabase.from('comments').insert({
         'post_id': widget.post['id'],
         'user_id': userId,
-        'content': text,
-        'created_at': DateTime.now().toIso8601String(),
+        'text': text,
+        'created_at': now,
       });
       _commentController.clear();
-      await _loadComments();
+      // Add to local state immediately for instant UI update
+      if (mounted) {
+        setState(() {
+          _comments.add({
+            'post_id': widget.post['id'],
+            'user_id': userId,
+            'user_name': _currentUser?['name'] ?? 'You',
+            'avatar_url': _currentUser?['avatar_url'],
+            'text': text,
+            'created_at': now,
+          });
+        });
+      }
     } catch (e) {
       debugPrint('Post comment: $e');
     } finally {
@@ -680,7 +693,14 @@ class _ThreeDMeetDetailScreenState
             Icon(Icons.chevron_right_rounded, color: color, size: 20),
         onTap: () async {
           if (kIsWeb) {
-            final uri = Uri.parse(url);
+            // Use Google Docs Viewer so file is displayed in browser
+            // not downloaded. Works for PDF, Word, PPT, Excel
+            final cleanUrl = url.split('?').first;
+            final viewerUrl =
+                'https://docs.google.com/viewer'
+                '?url=${Uri.encodeComponent(cleanUrl)}'
+                '&embedded=false';
+            final uri = Uri.parse(viewerUrl);
             if (await canLaunchUrl(uri)) {
               await launchUrl(uri, mode: LaunchMode.externalApplication);
             }
@@ -1147,7 +1167,7 @@ class _ThreeDMeetDetailScreenState
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  comment['content'] ?? '',
+                  comment['text'] ?? '',
                   style: TextStyle(
                     fontFamily: 'Poppins',
                     fontSize: 13,

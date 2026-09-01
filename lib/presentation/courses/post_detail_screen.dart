@@ -1153,7 +1153,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     return ListTile(
       onTap: () async {
         if (kIsWeb) {
-          final uri = Uri.parse(url);
+          // Use Google Docs Viewer so file is displayed in browser
+          // not downloaded. Works for PDF, Word, PPT, Excel
+          final cleanUrl = url.split('?').first;
+          final viewerUrl =
+              'https://docs.google.com/viewer'
+              '?url=${Uri.encodeComponent(cleanUrl)}'
+              '&embedded=false';
+          final uri = Uri.parse(viewerUrl);
           if (await canLaunchUrl(uri)) {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
           }
