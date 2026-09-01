@@ -137,13 +137,19 @@ class _ThreeDMeetDetailScreenState
   Future<void> _postComment() async {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
+    // Ensure user data is loaded
+    if (_currentUser == null) {
+      await _loadAll();
+    }
     setState(() => _isPostingComment = true);
     try {
       final userId = _supabase.auth.currentUser?.id;
       final now = DateTime.now().toIso8601String();
+      final userName = _currentUser?['name'] as String? ?? 'User';
       await _supabase.from('comments').insert({
         'post_id': widget.post['id'],
         'user_id': userId,
+        'user_name': userName,
         'text': text,
         'created_at': now,
       });
@@ -1126,60 +1132,303 @@ class _ThreeDMeetDetailScreenState
 
   Widget _buildCommentTile(Map<String, dynamic> comment) {
     final isDark = context.isDark;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _avatarWidget(
-            name: comment['user_name'] ?? 'U',
-            avatarUrl: comment['avatar_url'] as String?,
-            radius: 16,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      comment['user_name'] ?? '',
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: isDark
-                            ? Colors.white
-                            : const Color(0xFF0D1B4B),
+    final currentUserId = _supabase.auth.currentUser?.id;
+    final commentUserId = comment['user_id'] as String?;
+    final isOwnComment = currentUserId == commentUserId;
+    final canDelete = isOwnComment || widget.isInstructor;
+    final canEdit = isOwnComment;
+    return GestureDetector(
+      onTap: (canDelete || canEdit)
+          ? () => _showCommentOptions(comment)
+          : null,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _avatarWidget(
+              name: comment['user_name'] ?? 'U',
+              avatarUrl: comment['avatar_url'] as String?,
+              radius: 16,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        comment['user_name'] ?? '',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isDark
+                              ? Colors.white
+                              : const Color(0xFF0D1B4B),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _formatDate(comment['created_at']),
-                      style: TextStyle(
-                        fontFamily: 'Poppins',
-                        fontSize: 11,
-                        color: context.textHint,
+                      const SizedBox(width: 6),
+                      Text(
+                        _formatDate(comment['created_at']),
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 11,
+                          color: context.textHint,
+                        ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    comment['text'] ?? '',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      color: context.textSecondary,
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCommentOptions(Map<String, dynamic> comment) {
+    final isOwn =
+        comment['user_id'] == _supabase.auth.currentUser?.id;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        decoration: BoxDecoration(
+          color: context.cardColor,
+          borderRadius:
+              const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: context.borderColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            // Edit Option (Only for owners)
+            if (isOwn)
+              ListTile(
+                leading: const Icon(
+                  Icons.edit_outlined,
+                  color: AppColors.primary,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  comment['text'] ?? '',
+                title: const Text(
+                  'Edit comment',
                   style: TextStyle(
                     fontFamily: 'Poppins',
-                    fontSize: 13,
-                    color: context.textSecondary,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-              ],
+                onTap: () {
+                  Navigator.pop(context);
+                  _editComment(comment);
+                },
+              ),
+
+            // Delete Option (Owners OR Instructor can delete)
+            if (isOwn || widget.isInstructor)
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.redAccent,
+                ),
+                title: Text(
+                  isOwn ? 'Delete comment' : 'Remove student comment',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _deleteComment(comment['id'].toString());
+                },
+              ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _editComment(Map<String, dynamic> comment) async {
+    final controller = TextEditingController(
+        text: comment['text'] as String? ?? '');
+    final newText = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.isDark
+            ? const Color(0xFF0A1128)
+            : Colors.white,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Edit comment',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 14,
+            color: context.isDark
+                ? Colors.white
+                : const Color(0xFF0D1B4B),
+          ),
+          decoration: InputDecoration(
+            hintText: 'Edit your comment...',
+            hintStyle: TextStyle(
+              fontFamily: 'Poppins',
+              color: context.textHint,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(
+                  color: AppColors.primary, width: 1.5),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                color: context.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(ctx, controller.text.trim()),
+            child: const Text(
+              'Save',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
       ),
     );
+
+    if (newText == null ||
+        newText.isEmpty ||
+        newText == comment['text']) return;
+
+    try {
+      await _supabase
+          .from('comments')
+          .update({'text': newText})
+          .eq('id', comment['id']);
+      if (!mounted) return;
+      setState(() {
+        final updated =
+            List<Map<String, dynamic>>.from(_comments);
+        final index =
+            updated.indexWhere((c) => c['id'] == comment['id']);
+        if (index != -1) {
+          updated[index] =
+              Map<String, dynamic>.from(updated[index])
+                ..['text'] = newText;
+          _comments = updated;
+        }
+      });
+    } catch (e) {
+      debugPrint('Edit comment error: $e');
+    }
+  }
+
+  Future<void> _deleteComment(String commentId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: context.isDark
+            ? const Color(0xFF0A1128)
+            : Colors.white,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Delete comment?',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        content: const Text(
+          'This comment will be permanently removed.',
+          style: TextStyle(fontFamily: 'Poppins', fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'Cancel',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                color: context.textSecondary,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                color: AppColors.error,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _supabase.from('comments').delete().eq('id', commentId);
+      if (!mounted) return;
+      setState(() => _comments
+          .removeWhere((c) => c['id'].toString() == commentId));
+    } catch (e) {
+      debugPrint('Delete comment error: $e');
+    }
   }
 
   // ── Student Work Tab (Instructor) ─────────────────────────────

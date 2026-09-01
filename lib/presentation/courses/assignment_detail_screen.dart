@@ -450,7 +450,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         .subscribe();
   }
 
-  void _showEditCommentDialog(Map<String, dynamic> comment, String postId) {
+  void _showEditCommentDialog(
+    Map<String, dynamic> comment,
+    String postId, {
+    VoidCallback? onUpdate,
+  }) {
     final controller = TextEditingController(text: comment['text']);
     showDialog(
       context: context,
@@ -498,6 +502,10 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                   }
                 });
               }
+              // Bottom-sheet comment lists live in their own
+              // StatefulBuilder, so the outer setState above doesn't
+              // rebuild them — this tells that sheet to refresh too.
+              onUpdate?.call();
 
               if (!context.mounted) return;
               Navigator.pop(context);
@@ -510,7 +518,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   }
 
   // ─── 2. MISSING DELETE METHOD ───
-  Future<void> _deleteComment(String commentId, String postId) async {
+  Future<void> _deleteComment(
+    String commentId,
+    String postId, {
+    VoidCallback? onUpdate,
+  }) async {
     try {
       await _supabase.from('comments').delete().eq('id', commentId);
       // Remove from local state immediately
@@ -519,12 +531,16 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           () => _classComments.removeWhere((c) => c['id'] == commentId),
         );
       }
+      onUpdate?.call();
     } catch (e) {
       debugPrint('Delete error: $e');
     }
   }
 
-  void _showCommentOptions(Map<String, dynamic> comment) {
+  void _showCommentOptions(
+    Map<String, dynamic> comment, {
+    VoidCallback? onUpdate,
+  }) {
     final isOwn = comment['user_id'] == _supabase.auth.currentUser?.id;
 
     showModalBottomSheet(
@@ -565,7 +581,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                 ),
                 onTap: () {
                   Navigator.pop(context);
-                  _showEditCommentDialog(comment, widget.post['id']);
+                  _showEditCommentDialog(
+                    comment,
+                    widget.post['id'],
+                    onUpdate: onUpdate,
+                  );
                 },
               ),
 
@@ -586,7 +606,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                 ),
                 onTap: () {
                   Navigator.pop(context);
-                  _deleteComment(comment['id'], widget.post['id']);
+                  _deleteComment(
+                    comment['id'],
+                    widget.post['id'],
+                    onUpdate: onUpdate,
+                  );
                 },
               ),
             const SizedBox(height: 20),
@@ -1908,6 +1932,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                               return _buildPremiumCommentBubble(
                                 comment,
                                 textColor,
+                                onUpdate: () => setSheetState(() {}),
                               );
                             },
                           ),
@@ -2620,14 +2645,20 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     );
   }
 
-  Widget _buildPremiumCommentBubble(Map<String, dynamic> c, Color textColor) {
+  Widget _buildPremiumCommentBubble(
+    Map<String, dynamic> c,
+    Color textColor, {
+    VoidCallback? onUpdate,
+  }) {
     final isOwn = c['user_id'] == _supabase.auth.currentUser?.id;
     final canManage = isOwn || widget.isInstructor;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
       child: GestureDetector(
-        onTap: canManage ? () => _showCommentOptions(c) : null,
+        onTap: canManage
+            ? () => _showCommentOptions(c, onUpdate: onUpdate)
+            : null,
         behavior: HitTestBehavior.opaque,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
