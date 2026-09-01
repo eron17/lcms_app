@@ -1005,6 +1005,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     return Scaffold(
       backgroundColor: context.bgColor,
       body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Sidebar
           Container(
@@ -2420,7 +2421,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
 
     final isDesktop = MediaQuery.of(context).size.width > 900;
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+      padding: EdgeInsets.fromLTRB(20, isDesktop ? 0 : 10, 20, 10),
       physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

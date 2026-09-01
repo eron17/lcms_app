@@ -1224,6 +1224,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     return Scaffold(
       backgroundColor: context.bgColor,
       body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Sidebar
           Container(
@@ -3709,7 +3710,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
     final isDesktop = MediaQuery.of(context).size.width > 900;
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 0, 20, 20),
+      padding: EdgeInsets.fromLTRB(20, isDesktop ? 0 : 20, 20, 20),
       child: Column(
         children: [
           // Instructor Identity Card
