@@ -506,7 +506,7 @@ class _LoginScreenState extends State<LoginScreen>
                   child: SingleChildScrollView(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 420),
-                      child: _buildLoginForm(showHeader: false),
+                      child: _buildLoginForm(),
                     ),
                   ),
                 ),
@@ -548,36 +548,28 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildLoginForm({bool showHeader = true}) {
-    final size = MediaQuery.of(context).size;
+  Widget _buildLoginForm() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Form(
       key: _formKey,
       child: Column(
         children: [
-          if (showHeader) ...[
-            const SizedBox(height: 36),
+          const SizedBox(height: 36),
 
-            // ─── Logo ──────────────────────────────
-            Image.asset('assets/images/logo.png', width: size.width * 0.35),
-
-            const SizedBox(height: 14),
-
-            // ─── Header Image ──────────────────────
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 400),
-              child: Image.asset(
-                _isSignIn
-                    ? 'assets/images/welcome_text.png'
-                    : 'assets/images/create_account_text.png',
-                key: ValueKey(_isSignIn),
-                width: size.width * 0.70,
-              ),
+          // ─── Header Image ──────────────────────
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: Image.asset(
+              _isSignIn
+                  ? 'assets/images/welcome_text.png'
+                  : 'assets/images/create_account_text.png',
+              key: ValueKey(_isSignIn),
+              height: 48,
+              fit: BoxFit.contain,
             ),
-
-            const SizedBox(height: 26),
-          ],
+          ),
+          const SizedBox(height: 20),
 
           // ─── Sign In / Sign Up Toggle ──────────
           _buildTabSwitcher(
