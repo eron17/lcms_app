@@ -30,6 +30,86 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   late Animation<Offset> _buttonSlide;
   late Animation<double> _glowAnimation;
 
+  final _scrollController = ScrollController();
+  final _heroKey = GlobalKey();
+  final _featuresKey = GlobalKey();
+  final _aboutKey = GlobalKey();
+  int _expandedFeature = 0;
+
+  final List<Map<String, dynamic>> _features = [
+    {
+      'icon': Icons.view_in_ar_rounded,
+      'color': const Color(0xFF3B9EFF),
+      'title': '3D Classroom',
+      'summary': 'Unity-powered immersive coding environment',
+      'detail':
+          'Students enter a live 3D classroom built in Unity 6. '
+          'They write real C++ code inside the environment and '
+          'submit directly from Unity to the grading system.',
+    },
+    {
+      'icon': Icons.qr_code_scanner_rounded,
+      'color': const Color(0xFF4CAF50),
+      'title': 'Code Scanner',
+      'summary': 'Auto-verifies student output vs expected results',
+      'detail':
+          'The CodeScanner checks required keywords, forbidden '
+          'patterns, and compares actual output to the instructor\'s '
+          'expected output. AutoGrader calculates the final score '
+          'instantly.',
+    },
+    {
+      'icon': Icons.shield_rounded,
+      'color': const Color(0xFF7B2FBE),
+      'title': 'Rank Badges',
+      'summary': '8 ranks from Script Kiddie to Compiler Whisperer',
+      'detail':
+          'Students earn ranks based on class XP: Script Kiddie → '
+          'Code Newbie → Junior Dev → Refactorer → Stack Overflow '
+          'Guru → Tech Lead → 10x Developer → Compiler Whisperer.',
+    },
+    {
+      'icon': Icons.leaderboard_rounded,
+      'color': const Color(0xFFFFD700),
+      'title': 'Live Leaderboard',
+      'summary': 'Per-class XP and streak rankings in real time',
+      'detail':
+          'Each class has its own leaderboard updated via Supabase '
+          'Realtime. XP and streak update the moment a grade is '
+          'given — no refresh needed.',
+    },
+    {
+      'icon': Icons.assignment_rounded,
+      'color': const Color(0xFFFF9800),
+      'title': 'Assignment Management',
+      'summary': 'Due dates, grading, and student work tracking',
+      'detail':
+          'Instructors post assignments with due dates, points, and '
+          'file attachments. Students submit work and instructors '
+          'grade with feedback. XP awarded automatically.',
+    },
+    {
+      'icon': Icons.bar_chart_rounded,
+      'color': const Color(0xFF00BCD4),
+      'title': 'Reports & Analytics',
+      'summary': 'Pass rate and submission tracking per class',
+      'detail':
+          'Instructors see total, graded, ungraded, and '
+          'no-submission counts per class. Drill down into '
+          'individual student performance.',
+    },
+  ];
+
+  void _scrollTo(GlobalKey key) {
+    final ctx = key.currentContext;
+    if (ctx == null) return;
+    Scrollable.ensureVisible(
+      ctx,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -92,12 +172,36 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     _textController.dispose();
     _buttonController.dispose();
     _glowController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+
+    if (kIsWeb) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF060d1f),
+        body: Column(
+          children: [
+            _buildNavbar(),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                child: Column(
+                  children: [
+                    _buildHeroSection(),
+                    _buildFeaturesSection(),
+                    _buildAboutSection(),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: context.bgColor,
@@ -318,6 +422,516 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── Web landing page (kIsWeb) ─────────────────────────────
+
+  Widget _buildNavbar() {
+    return Container(
+      height: 56,
+      color: const Color(0xFF080e20),
+      padding: const EdgeInsets.symmetric(horizontal: 40),
+      child: Row(
+        children: [
+          Image.asset('assets/images/logo.png', height: 32),
+          const SizedBox(width: 10),
+          Image.asset('assets/images/app_name.png', height: 22),
+          const Spacer(),
+          _navLink('Home', () => _scrollTo(_heroKey)),
+          const SizedBox(width: 28),
+          _navLink('Features', () => _scrollTo(_featuresKey)),
+          const SizedBox(width: 28),
+          _navLink('About', () => _scrollTo(_aboutKey)),
+          const SizedBox(width: 32),
+          ElevatedButton(
+            onPressed: () => context.go(AppRoutes.login),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3B9EFF),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 10,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 0,
+            ),
+            child: const Text(
+              'Get started',
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _navLink(String label, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 13,
+          color: Color(0x8CFFFFFF),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroSection() {
+    return Container(
+      key: _heroKey,
+      color: const Color(0xFF060d1f),
+      padding: const EdgeInsets.fromLTRB(60, 80, 60, 60),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3B9EFF).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: const Color(0xFF3B9EFF).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: const Text(
+                    '3D immersive coding platform',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 11,
+                      color: Color(0xFF3B9EFF),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                RichText(
+                  text: const TextSpan(
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 38,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      height: 1.15,
+                    ),
+                    children: [
+                      TextSpan(text: 'Learn to code in\na '),
+                      TextSpan(
+                        text: '3D classroom',
+                        style: TextStyle(color: Color(0xFF3B9EFF)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'An immersive learning management system where '
+                  'students write real C++ code, get auto-graded in '
+                  'real time, and compete on live leaderboards.',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 14,
+                    color: Color(0x80FFFFFF),
+                    height: 1.6,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                Row(
+                  children: [
+                    ElevatedButton(
+                      onPressed: () => context.go(AppRoutes.login),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF3B9EFF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 14,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Get started',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    OutlinedButton(
+                      onPressed: () => context.go(AppRoutes.login),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white.withValues(alpha: 0.8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 14,
+                        ),
+                        side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.15),
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text(
+                        'Sign in',
+                        style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 48),
+          Container(
+            width: 240,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            child: Column(
+              children: [
+                _heroStat('3D', 'Immersive classroom', Colors.white),
+                _heroDivider(),
+                _heroStat(
+                  'Live',
+                  'Auto-grading system',
+                  const Color(0xFF3B9EFF),
+                ),
+                _heroDivider(),
+                _heroStat(
+                  '🔥',
+                  'Streak-based ranking',
+                  const Color(0xFFFF9800),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroStat(String value, String label, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 11,
+              color: Color(0x66FFFFFF),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _heroDivider() =>
+      Container(height: 0.5, color: Colors.white.withValues(alpha: 0.08));
+
+  Widget _buildFeaturesSection() {
+    return Container(
+      key: _featuresKey,
+      color: const Color(0xFF080e20),
+      padding: const EdgeInsets.fromLTRB(60, 60, 60, 60),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Features',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Everything you need for immersive coding education',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 14,
+              color: Color(0x80FFFFFF),
+            ),
+          ),
+          const SizedBox(height: 32),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate:
+                const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 1.6,
+                ),
+            itemCount: _features.length,
+            itemBuilder: (ctx, i) {
+              final f = _features[i];
+              final isExpanded = _expandedFeature == i;
+              final color = f['color'] as Color;
+
+              return GestureDetector(
+                onTap: () => setState(
+                  () => _expandedFeature = isExpanded ? -1 : i,
+                ),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: isExpanded
+                        ? color.withValues(alpha: 0.1)
+                        : const Color(0xFF111d33),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isExpanded
+                          ? color.withValues(alpha: 0.4)
+                          : Colors.white.withValues(alpha: 0.07),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(f['icon'] as IconData, color: color, size: 22),
+                      const SizedBox(height: 10),
+                      Text(
+                        f['title'] as String,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: isExpanded ? color : Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isExpanded
+                            ? f['detail'] as String
+                            : f['summary'] as String,
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.5),
+                          height: 1.5,
+                        ),
+                        maxLines: isExpanded ? 6 : 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAboutSection() {
+    return Container(
+      key: _aboutKey,
+      color: const Color(0xFF060d1f),
+      padding: const EdgeInsets.fromLTRB(60, 60, 60, 80),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'About Code Lab 3D',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 28,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Code Lab 3D is an immersive learning management '
+                  'system built for Pampanga State University. Students '
+                  'write real C++ code inside a Unity 3D classroom, get '
+                  'auto-graded in real time, and compete on live '
+                  'per-class leaderboards.',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 13,
+                    color: Color(0x80FFFFFF),
+                    height: 1.7,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                const Text(
+                  'BUILT WITH',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 11,
+                    color: Color(0x55FFFFFF),
+                    letterSpacing: 1.0,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children:
+                      [
+                        'Flutter',
+                        'Unity 6',
+                        'Supabase',
+                        'JDoodle API',
+                        'Vercel',
+                        'Photon Fusion 2',
+                      ].map((tech) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(
+                              0xFF3B9EFF,
+                            ).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: const Color(
+                                0xFF3B9EFF,
+                              ).withValues(alpha: 0.2),
+                            ),
+                          ),
+                          child: Text(
+                            tech,
+                            style: const TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 12,
+                              color: Color(0xFF3B9EFF),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 48),
+          SizedBox(
+            width: 300,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'DEVELOPMENT TEAM',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 11,
+                    color: Color(0x55FFFFFF),
+                    letterSpacing: 1.0,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ...[
+                  {
+                    'name': 'Beltran, Joshua Alexandre',
+                    'initials': 'JB',
+                    'color': const Color(0xFF7B2FBE),
+                  },
+                  {
+                    'name': 'Bernal, Lynix Ivy D.',
+                    'initials': 'LB',
+                    'color': const Color(0xFF3B9EFF),
+                  },
+                  {
+                    'name': 'Guintu, John Dexter M.',
+                    'initials': 'JG',
+                    'color': const Color(0xFF4CAF50),
+                  },
+                  {
+                    'name': 'Hermano, Aaron L.',
+                    'initials': 'AH',
+                    'color': const Color(0xFFFF9800),
+                  },
+                  {
+                    'name': 'Rodriguez, Chrys-Enjie R.',
+                    'initials': 'CR',
+                    'color': const Color(0xFFFF5252),
+                  },
+                ].map((member) {
+                  final color = member['color'] as Color;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 18,
+                          backgroundColor: color.withValues(alpha: 0.2),
+                          child: Text(
+                            member['initials'] as String,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: color,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          member['name'] as String,
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

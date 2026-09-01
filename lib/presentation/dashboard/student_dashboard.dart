@@ -1300,12 +1300,14 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   // ════════════════════════════════════════════════════════
 
   Widget _buildHomePage() {
+    final isDesktop = MediaQuery.of(context).size.width > 900;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildWelcomeBanner(),
+          if (isDesktop) _buildWebWelcomeBanner() else _buildWelcomeBanner(),
           const SizedBox(height: 24),
           _buildSectionHeader(
             'My Classes',
@@ -1317,6 +1319,20 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
             const Center(child: CircularProgressIndicator())
           else if (_enrolledCourses.isEmpty)
             _buildEmptyClasses()
+          else if (isDesktop)
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 2.4,
+              ),
+              itemCount: _enrolledCourses.length,
+              itemBuilder: (ctx, i) =>
+                  _buildWebClassCard(_enrolledCourses[i], i),
+            )
           else
             Column(
               children: _enrolledCourses
@@ -1332,6 +1348,133 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
             ),
           const SizedBox(height: 100),
         ],
+      ),
+    );
+  }
+
+  Widget _buildWebWelcomeBanner() {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF7B2FBE), Color(0xFF2196F3)],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Welcome back,',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 12,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+          ),
+          Text(
+            _currentUser?.name.split(' ').first ?? 'Student',
+            style: const TextStyle(
+              fontFamily: 'Poppins',
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebClassCard(Map<String, dynamic> course, int index) {
+    final colors = [
+      [const Color(0xFF7B2FBE), const Color(0xFF4a90e2)],
+      [const Color(0xFF1a6eb5), const Color(0xFF0d9488)],
+      [const Color(0xFF2196F3), const Color(0xFF00BCD4)],
+      [const Color(0xFF7B2FBE), const Color(0xFF2196F3)],
+    ];
+    final c = colors[index % colors.length];
+
+    return GestureDetector(
+      onTap: () => context.push(
+        AppRoutes.courseDetail,
+        extra: {'course': course, 'isInstructor': false},
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF111d33),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: c,
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  course['course_code'] ?? '',
+                  style: const TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 10,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    course['title'] ?? '',
+                    style: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${course['instructor_name'] ?? ''} · '
+                    '${course['enrolled_count'] ?? 0} students',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.45),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1321,7 +1321,22 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             ),
           ),
           // Content area
-          Expanded(child: pages[_currentIndex]),
+          Expanded(
+            child: Stack(
+              children: [
+                pages[_currentIndex],
+                if (_currentIndex == 0)
+                  Positioned(
+                    bottom: 24,
+                    right: 24,
+                    child: ScaleTransition(
+                      scale: _fabAnimation,
+                      child: _buildFAB(),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -1516,6 +1531,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     final activeCoursesCount = _courses
         .where((c) => c['is_published'] == true)
         .length;
+    final isDesktop = MediaQuery.of(context).size.width > 900;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1523,114 +1539,193 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ─── Welcome Banner (Colors kept white for contrast) ───
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF7B2FBE), Color(0xFF1565C0)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF7B2FBE).withValues(alpha: 0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
+          if (isDesktop) ...[
+            // ─── Web Welcome Bar ───
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF7B2FBE), Color(0xFF2196F3)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
                 ),
-              ],
+                borderRadius: BorderRadius.circular(14),
+              ),
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Good day,',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  Text(
+                    'Manage your classes and track student progress',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: Row(
+            const SizedBox(height: 14),
+            Row(
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Good day,',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 13,
-                          color: Colors.white70,
-                        ),
-                      ),
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Manage your classes and track student progress.',
-                        style: TextStyle(
-                          fontFamily: 'Poppins',
-                          fontSize: 12,
-                          color: Colors.white70,
-                        ),
-                      ),
-                    ],
-                  ),
+                _buildWebStatCard(
+                  icon: Icons.book_rounded,
+                  color: const Color(0xFF3B9EFF),
+                  value: '${_courses.length}',
+                  label: 'Total classes',
                 ),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(
-                    Icons.school_outlined,
-                    color: Colors.white,
-                    size: 32,
-                  ),
+                const SizedBox(width: 10),
+                _buildWebStatCard(
+                  icon: Icons.people_rounded,
+                  color: const Color(0xFF4CAF50),
+                  value: '$_totalStudents',
+                  label: 'Total students',
+                ),
+                const SizedBox(width: 10),
+                _buildWebStatCard(
+                  icon: Icons.pending_actions_rounded,
+                  color: const Color(0xFFFF9800),
+                  value: '${_pendingSubmissions.length}',
+                  label: 'Pending grades',
+                ),
+                const SizedBox(width: 10),
+                _buildWebStatCard(
+                  icon: Icons.check_circle_rounded,
+                  color: const Color(0xFF7B2FBE),
+                  value: '$activeCoursesCount',
+                  label: 'Published',
                 ),
               ],
             ),
-          ),
+            const SizedBox(height: 16),
+          ] else ...[
+            // ─── Welcome Banner (Colors kept white for contrast) ───
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF7B2FBE), Color(0xFF1565C0)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF7B2FBE).withValues(alpha: 0.3),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Good day,',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 13,
+                            color: Colors.white70,
+                          ),
+                        ),
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Manage your classes and track student progress.',
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 12,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(
+                      Icons.school_outlined,
+                      color: Colors.white,
+                      size: 32,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-          // ─── Quick Stats (REPLACED EMOJIS WITH ICONS) ───
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            childAspectRatio: 1.4,
-            children: [
-              _buildStatCard(
-                Icons.auto_stories_rounded, // Proper Icon
-                '${_courses.length}',
-                'Total Classes',
-                AppColors.primary,
-              ),
-              _buildStatCard(
-                Icons.people_alt_rounded, // Proper Icon
-                '$_totalStudents',
-                'Total Students',
-                AppColors.accent,
-              ),
-              _buildStatCard(
-                Icons.pending_actions_rounded, // Proper Icon
-                '${_pendingSubmissions.length}',
-                'Pending Grades',
-                AppColors.warning,
-              ),
-              _buildStatCard(
-                Icons.check_circle_outline_rounded, // Proper Icon
-                '$activeCoursesCount',
-                'Published',
-                AppColors.success,
-              ),
-            ],
-          ),
+            // ─── Quick Stats (REPLACED EMOJIS WITH ICONS) ───
+            GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: 1.4,
+              children: [
+                _buildStatCard(
+                  Icons.auto_stories_rounded, // Proper Icon
+                  '${_courses.length}',
+                  'Total Classes',
+                  AppColors.primary,
+                ),
+                _buildStatCard(
+                  Icons.people_alt_rounded, // Proper Icon
+                  '$_totalStudents',
+                  'Total Students',
+                  AppColors.accent,
+                ),
+                _buildStatCard(
+                  Icons.pending_actions_rounded, // Proper Icon
+                  '${_pendingSubmissions.length}',
+                  'Pending Grades',
+                  AppColors.warning,
+                ),
+                _buildStatCard(
+                  Icons.check_circle_outline_rounded, // Proper Icon
+                  '$activeCoursesCount',
+                  'Published',
+                  AppColors.success,
+                ),
+              ],
+            ),
 
-          const SizedBox(height: 16),
+            const SizedBox(height: 16),
+          ],
 
           // ─── Search bar ───
           Padding(
@@ -1739,11 +1834,173 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
       ];
     }
 
+    if (MediaQuery.of(context).size.width > 900) {
+      return [
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 2.4,
+          ),
+          itemCount: filtered.length,
+          itemBuilder: (ctx, i) => _buildWebClassCard(filtered[i], i),
+        ),
+      ];
+    }
+
     return filtered
         .asMap()
         .entries
         .map((entry) => _buildCourseCard(entry.value, entry.key))
         .toList();
+  }
+
+  Widget _buildWebStatCard({
+    required IconData icon,
+    required Color color,
+    required String value,
+    required String label,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111d33),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 16),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: const TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 10,
+                color: Colors.white.withValues(alpha: 0.4),
+                letterSpacing: 0.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWebClassCard(Map<String, dynamic> course, int index) {
+    final colors = [
+      [const Color(0xFF7B2FBE), const Color(0xFF4a90e2)],
+      [const Color(0xFF1a6eb5), const Color(0xFF0d9488)],
+      [const Color(0xFF2196F3), const Color(0xFF00BCD4)],
+      [const Color(0xFF7B2FBE), const Color(0xFF2196F3)],
+    ];
+    final c = colors[index % colors.length];
+
+    return GestureDetector(
+      onTap: () => context.push(
+        AppRoutes.courseDetail,
+        extra: {'course': course, 'isInstructor': true},
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF111d33),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: c,
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      course['course_code'] ?? '',
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => _showCourseOptions(course),
+                    child: const Icon(
+                      Icons.more_vert,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    course['title'] ?? '',
+                    style: const TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${course['enrolled_count'] ?? 0} students',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 11,
+                      color: Colors.white.withValues(alpha: 0.45),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildStatCard(

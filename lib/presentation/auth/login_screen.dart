@@ -482,6 +482,123 @@ class _LoginScreenState extends State<LoginScreen>
     final size = MediaQuery.of(context).size;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    if (kIsWeb) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF060d1f),
+        body: Column(
+          children: [
+            Container(
+              height: 56,
+              color: const Color(0xFF080e20),
+              padding: const EdgeInsets.symmetric(horizontal: 40),
+              child: Row(
+                children: [
+                  Image.asset('assets/images/logo.png', height: 32),
+                  const SizedBox(width: 10),
+                  Image.asset('assets/images/app_name.png', height: 22),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      color: const Color(0xFF080e20),
+                      padding: const EdgeInsets.fromLTRB(56, 48, 48, 48),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Image.asset(
+                            'assets/images/app_name.png',
+                            height: 36,
+                          ),
+                          const SizedBox(height: 28),
+                          const Text(
+                            'Your 3D coding\nclassroom awaits',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 28,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              height: 1.25,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Join your class, submit code in Unity, earn '
+                            'ranks, and compete with your classmates on '
+                            'live leaderboards.',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 13,
+                              color: Color(0x80FFFFFF),
+                              height: 1.6,
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                          ...[
+                            'Real C++ code execution via JDoodle',
+                            'Auto-graded by CodeScanner & AutoGrader',
+                            '8 rank badges — Script Kiddie to Compiler '
+                                'Whisperer',
+                            'Per-class XP and streak system',
+                          ].map((f) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF3B9EFF),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    f,
+                                    style: const TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 13,
+                                      color: Color(0x99FFFFFF),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 0.5,
+                    color: Colors.white.withValues(alpha: 0.07),
+                  ),
+                  SizedBox(
+                    width: 380,
+                    child: Container(
+                      color: const Color(0xFF060d1f),
+                      padding: const EdgeInsets.fromLTRB(40, 0, 40, 0),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 320),
+                          child: _buildLoginForm(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
@@ -504,442 +621,405 @@ class _LoginScreenState extends State<LoginScreen>
             SafeArea(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.symmetric(horizontal: 28),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 36),
-
-                      // ─── Logo ──────────────────────────────
-                      Image.asset(
-                        'assets/images/logo.png',
-                        width: size.width * 0.35,
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // ─── Header Image ──────────────────────
-                      AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 400),
-                        child: Image.asset(
-                          _isSignIn
-                              ? 'assets/images/welcome_text.png'
-                              : 'assets/images/create_account_text.png',
-                          key: ValueKey(_isSignIn),
-                          width: size.width * 0.70,
-                        ),
-                      ),
-
-                      const SizedBox(height: 26),
-
-                      // ─── Sign In / Sign Up Toggle ──────────
-                      _buildTabSwitcher(
-                        leftLabel: 'Sign In',
-                        rightLabel: 'Sign Up',
-                        isLeftActive: _isSignIn,
-                        onLeftTap: () => setState(() => _isSignIn = true),
-                        onRightTap: () => setState(() => _isSignIn = false),
-                      ),
-
-                      const SizedBox(height: 22),
-
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeInOutCubic,
-                        child: Column(
-                          children: [
-                            // ─── Role Tab (Sign Up only) ───────
-                            _animatedField(
-                              isVisible: !_isSignIn,
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 20),
-                                child: _buildTabSwitcher(
-                                  leftLabel: 'Student',
-                                  rightLabel: 'Instructor',
-                                  isLeftActive: _isStudent,
-                                  onLeftTap: () =>
-                                      setState(() => _isStudent = true),
-                                  onRightTap: () =>
-                                      setState(() => _isStudent = false),
-                                ),
-                              ),
-                            ),
-
-                            // ─── Full Name (Sign Up only) ──────
-                            _animatedField(
-                              isVisible: !_isSignIn,
-                              child: _buildField(
-                                label: 'Full Name',
-                                controller: _nameController,
-                                icon: Icons.person_outline,
-                                validator: (v) {
-                                  if (!_isSignIn && (v == null || v.isEmpty)) {
-                                    return 'Enter your full name';
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ),
-
-                            // ─── Sex Radio Buttons (Student Sign Up only) ─
-                            _animatedField(
-                              isVisible: !_isSignIn && _isStudent,
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 18),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isDark
-                                        ? const Color(0xFF0A1128)
-                                        : Colors.white,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isDark
-                                          ? const Color(0xFF1E3A6E)
-                                          : const Color(0xFFDDE3F0),
-                                    ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.wc_outlined,
-                                            color: isDark
-                                                ? Colors.white.withValues(
-                                                    alpha: 0.3,
-                                                  )
-                                                : const Color(
-                                                    0xFF0D1B4B,
-                                                  ).withValues(alpha: 0.4),
-                                            size: 20,
-                                          ),
-                                          const SizedBox(width: 10),
-                                          Text(
-                                            'Sex',
-                                            style: TextStyle(
-                                              fontFamily: 'Poppins',
-                                              fontSize: 13,
-                                              color: isDark
-                                                  ? Colors.white.withValues(
-                                                      alpha: 0.5,
-                                                    )
-                                                  : const Color(
-                                                      0xFF0D1B4B,
-                                                    ).withValues(alpha: 0.4),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      RadioGroup<String>(
-                                        groupValue: _selectedSex,
-                                        onChanged: (v) => setState(
-                                          () => _selectedSex = v ?? 'male',
-                                        ),
-                                        child: Row(
-                                        children: [
-                                          // Male
-                                          Expanded(
-                                            child: GestureDetector(
-                                              onTap: () => setState(
-                                                () => _selectedSex = 'male',
-                                              ),
-                                              child: AnimatedContainer(
-                                                duration: const Duration(
-                                                  milliseconds: 200,
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 10,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: _selectedSex == 'male'
-                                                      ? const Color(
-                                                          0xFF1E90FF,
-                                                        ).withValues(
-                                                          alpha: 0.15,
-                                                        )
-                                                      : Colors.transparent,
-                                                  borderRadius:
-                                                      BorderRadius.circular(10),
-                                                  border: Border.all(
-                                                    color:
-                                                        _selectedSex == 'male'
-                                                        ? const Color(
-                                                            0xFF1E90FF,
-                                                          )
-                                                        : (isDark
-                                                              ? const Color(
-                                                                  0xFF1E3A6E,
-                                                                )
-                                                              : const Color(
-                                                                  0xFFDDE3F0,
-                                                                )), // FIXED BORDER
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: [
-                                                    const Radio<String>(
-                                                      value: 'male',
-                                                      activeColor: Color(
-                                                        0xFF1E90FF,
-                                                      ),
-                                                      materialTapTargetSize:
-                                                          MaterialTapTargetSize
-                                                              .shrinkWrap,
-                                                    ),
-                                                    Text(
-                                                      '♂ Male', // REMOVED const
-                                                      style: TextStyle(
-                                                        fontFamily: 'Poppins',
-                                                        fontSize: 14,
-                                                        // FIXED COLOR: White in Dark, Dark Blue in Light
-                                                        color: isDark
-                                                            ? Colors.white
-                                                            : const Color(
-                                                                0xFF0D1B4B,
-                                                              ),
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          // Female
-                                          Expanded(
-                                            child: GestureDetector(
-                                              onTap: () => setState(
-                                                () => _selectedSex = 'female',
-                                              ),
-                                              child: AnimatedContainer(
-                                                duration: const Duration(
-                                                  milliseconds: 200,
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      vertical: 10,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color:
-                                                      _selectedSex == 'female'
-                                                      ? const Color(
-                                                          0xFFFF69B4,
-                                                        ).withValues(
-                                                          alpha: 0.15,
-                                                        )
-                                                      : Colors.transparent,
-                                                  borderRadius:
-                                                      BorderRadius.circular(10),
-                                                  border: Border.all(
-                                                    color:
-                                                        _selectedSex == 'female'
-                                                        ? const Color(
-                                                            0xFFFF69B4,
-                                                          )
-                                                        : (isDark
-                                                              ? const Color(
-                                                                  0xFF1E3A6E,
-                                                                )
-                                                              : const Color(
-                                                                  0xFFDDE3F0,
-                                                                )), // FIXED BORDER
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: [
-                                                    const Radio<String>(
-                                                      value: 'female',
-                                                      activeColor: Color(
-                                                        0xFFFF69B4,
-                                                      ),
-                                                      materialTapTargetSize:
-                                                          MaterialTapTargetSize
-                                                              .shrinkWrap,
-                                                    ),
-                                                    Text(
-                                                      '♀ Female', // REMOVED const
-                                                      style: TextStyle(
-                                                        fontFamily: 'Poppins',
-                                                        fontSize: 14,
-                                                        // FIXED COLOR: White in Dark, Dark Blue in Light
-                                                        color: isDark
-                                                            ? Colors.white
-                                                            : const Color(
-                                                                0xFF0D1B4B,
-                                                              ),
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            // ─── Email ─────────────────────────
-                            _buildField(
-                              label: _isSignIn
-                                  ? 'Email Address'
-                                  : _isStudent
-                                  ? 'Student Email Address'
-                                  : 'Faculty Email Address',
-                              controller: _emailController,
-                              icon: Icons.email_outlined,
-                              keyboardType: TextInputType.emailAddress,
-                              validator: (v) {
-                                if (v == null || v.isEmpty) {
-                                  return 'Enter your email';
-                                }
-                                if (!v.contains('@')) {
-                                  return 'Enter a valid email';
-                                }
-                                return null;
-                              },
-                            ),
-
-                            // ─── Faculty Secret Code ───────────
-                            _animatedField(
-                              isVisible: !_isSignIn && !_isStudent,
-                              child: _buildField(
-                                label: 'Faculty Secret Code',
-                                controller: _secretController,
-                                icon: Icons.verified_user_outlined,
-                                isPassword: true,
-                                passwordVisible: _secretVisible,
-                                onToggle: () => setState(
-                                  () => _secretVisible = !_secretVisible,
-                                ),
-                                validator: (v) {
-                                  if (!_isSignIn &&
-                                      !_isStudent &&
-                                      (v == null || v.isEmpty)) {
-                                    return 'Enter the faculty secret code';
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ),
-
-                            // ─── Password ──────────────────────
-                            _buildField(
-                              label: 'Password',
-                              controller: _passwordController,
-                              icon: Icons.lock_outline,
-                              isPassword: true,
-                              passwordVisible: _passwordVisible,
-                              onToggle: () => setState(
-                                () => _passwordVisible = !_passwordVisible,
-                              ),
-                              validator: (v) {
-                                if (v == null || v.isEmpty) {
-                                  return 'Enter your password';
-                                }
-                                if (v.length < 6) {
-                                  return 'At least 6 characters';
-                                }
-                                return null;
-                              },
-                            ),
-
-                            // ─── Confirm Password (Sign Up only) ─
-                            _animatedField(
-                              isVisible: !_isSignIn,
-                              child: _buildField(
-                                label: 'Confirm Password',
-                                controller: _confirmPasswordController,
-                                icon: Icons.lock_outline,
-                                isPassword: true,
-                                passwordVisible: _confirmPasswordVisible,
-                                onToggle: () => setState(
-                                  () => _confirmPasswordVisible =
-                                      !_confirmPasswordVisible,
-                                ),
-                                validator: (v) {
-                                  if (!_isSignIn) {
-                                    if (v == null || v.isEmpty) {
-                                      return 'Confirm your password';
-                                    }
-                                    if (v != _passwordController.text) {
-                                      return 'Passwords do not match';
-                                    }
-                                  }
-                                  return null;
-                                },
-                              ),
-                            ),
-
-                            // ─── Forgot Password (Sign In only) ─
-                            _animatedField(
-                              isVisible: _isSignIn,
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: Align(
-                                  alignment: Alignment.centerRight,
-                                  child: PressableScale(
-                                    onPressed: _showForgotPasswordDialog,
-                                    scaleFactor:
-                                        1.0, // DISABLES the shrink/animation
-                                    opacityFactor:
-                                        0.5, // ENABLES the dimming effect
-                                    child: const Padding(
-                                      padding: EdgeInsets.symmetric(
-                                        vertical: 8,
-                                        horizontal: 4,
-                                      ),
-                                      child: Text(
-                                        'Forgot Password?',
-                                        style: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontSize: 13,
-                                          color: Color(0xFF1E90FF),
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      // ─── Submit Button ─────────────────────
-                      _buildActionButton(),
-
-                      const SizedBox(height: 40),
-                    ],
-                  ),
-                ),
+                child: _buildLoginForm(),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildLoginForm() {
+    final size = MediaQuery.of(context).size;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Form(
+      key: _formKey,
+      child: Column(
+        children: [
+          const SizedBox(height: 36),
+
+          // ─── Logo ──────────────────────────────
+          Image.asset('assets/images/logo.png', width: size.width * 0.35),
+
+          const SizedBox(height: 14),
+
+          // ─── Header Image ──────────────────────
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 400),
+            child: Image.asset(
+              _isSignIn
+                  ? 'assets/images/welcome_text.png'
+                  : 'assets/images/create_account_text.png',
+              key: ValueKey(_isSignIn),
+              width: size.width * 0.70,
+            ),
+          ),
+
+          const SizedBox(height: 26),
+
+          // ─── Sign In / Sign Up Toggle ──────────
+          _buildTabSwitcher(
+            leftLabel: 'Sign In',
+            rightLabel: 'Sign Up',
+            isLeftActive: _isSignIn,
+            onLeftTap: () => setState(() => _isSignIn = true),
+            onRightTap: () => setState(() => _isSignIn = false),
+          ),
+
+          const SizedBox(height: 22),
+
+          AnimatedSize(
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeInOutCubic,
+            child: Column(
+              children: [
+                // ─── Role Tab (Sign Up only) ───────
+                _animatedField(
+                  isVisible: !_isSignIn,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    child: _buildTabSwitcher(
+                      leftLabel: 'Student',
+                      rightLabel: 'Instructor',
+                      isLeftActive: _isStudent,
+                      onLeftTap: () => setState(() => _isStudent = true),
+                      onRightTap: () => setState(() => _isStudent = false),
+                    ),
+                  ),
+                ),
+
+                // ─── Full Name (Sign Up only) ──────
+                _animatedField(
+                  isVisible: !_isSignIn,
+                  child: _buildField(
+                    label: 'Full Name',
+                    controller: _nameController,
+                    icon: Icons.person_outline,
+                    validator: (v) {
+                      if (!_isSignIn && (v == null || v.isEmpty)) {
+                        return 'Enter your full name';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+
+                // ─── Sex Radio Buttons (Student Sign Up only) ─
+                _animatedField(
+                  isVisible: !_isSignIn && _isStudent,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 18),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF0A1128) : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isDark
+                              ? const Color(0xFF1E3A6E)
+                              : const Color(0xFFDDE3F0),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.wc_outlined,
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.3)
+                                    : const Color(
+                                        0xFF0D1B4B,
+                                      ).withValues(alpha: 0.4),
+                                size: 20,
+                              ),
+                              const SizedBox(width: 10),
+                              Text(
+                                'Sex',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 13,
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.5)
+                                      : const Color(
+                                          0xFF0D1B4B,
+                                        ).withValues(alpha: 0.4),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          RadioGroup<String>(
+                            groupValue: _selectedSex,
+                            onChanged: (v) =>
+                                setState(() => _selectedSex = v ?? 'male'),
+                            child: Row(
+                              children: [
+                                // Male
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        setState(() => _selectedSex = 'male'),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _selectedSex == 'male'
+                                            ? const Color(
+                                                0xFF1E90FF,
+                                              ).withValues(alpha: 0.15)
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(
+                                          10,
+                                        ),
+                                        border: Border.all(
+                                          color: _selectedSex == 'male'
+                                              ? const Color(0xFF1E90FF)
+                                              : (isDark
+                                                    ? const Color(0xFF1E3A6E)
+                                                    : const Color(
+                                                        0xFFDDE3F0,
+                                                      )), // FIXED BORDER
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const Radio<String>(
+                                            value: 'male',
+                                            activeColor: Color(0xFF1E90FF),
+                                            materialTapTargetSize:
+                                                MaterialTapTargetSize
+                                                    .shrinkWrap,
+                                          ),
+                                          Text(
+                                            '♂ Male', // REMOVED const
+                                            style: TextStyle(
+                                              fontFamily: 'Poppins',
+                                              fontSize: 14,
+                                              // FIXED COLOR: White in Dark, Dark Blue in Light
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : const Color(0xFF0D1B4B),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                // Female
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => setState(
+                                      () => _selectedSex = 'female',
+                                    ),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 10,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _selectedSex == 'female'
+                                            ? const Color(
+                                                0xFFFF69B4,
+                                              ).withValues(alpha: 0.15)
+                                            : Colors.transparent,
+                                        borderRadius: BorderRadius.circular(
+                                          10,
+                                        ),
+                                        border: Border.all(
+                                          color: _selectedSex == 'female'
+                                              ? const Color(0xFFFF69B4)
+                                              : (isDark
+                                                    ? const Color(0xFF1E3A6E)
+                                                    : const Color(
+                                                        0xFFDDE3F0,
+                                                      )), // FIXED BORDER
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          const Radio<String>(
+                                            value: 'female',
+                                            activeColor: Color(0xFFFF69B4),
+                                            materialTapTargetSize:
+                                                MaterialTapTargetSize
+                                                    .shrinkWrap,
+                                          ),
+                                          Text(
+                                            '♀ Female', // REMOVED const
+                                            style: TextStyle(
+                                              fontFamily: 'Poppins',
+                                              fontSize: 14,
+                                              // FIXED COLOR: White in Dark, Dark Blue in Light
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : const Color(0xFF0D1B4B),
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // ─── Email ─────────────────────────
+                _buildField(
+                  label: _isSignIn
+                      ? 'Email Address'
+                      : _isStudent
+                      ? 'Student Email Address'
+                      : 'Faculty Email Address',
+                  controller: _emailController,
+                  icon: Icons.email_outlined,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) {
+                      return 'Enter your email';
+                    }
+                    if (!v.contains('@')) {
+                      return 'Enter a valid email';
+                    }
+                    return null;
+                  },
+                ),
+
+                // ─── Faculty Secret Code ───────────
+                _animatedField(
+                  isVisible: !_isSignIn && !_isStudent,
+                  child: _buildField(
+                    label: 'Faculty Secret Code',
+                    controller: _secretController,
+                    icon: Icons.verified_user_outlined,
+                    isPassword: true,
+                    passwordVisible: _secretVisible,
+                    onToggle: () =>
+                        setState(() => _secretVisible = !_secretVisible),
+                    validator: (v) {
+                      if (!_isSignIn &&
+                          !_isStudent &&
+                          (v == null || v.isEmpty)) {
+                        return 'Enter the faculty secret code';
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+
+                // ─── Password ──────────────────────
+                _buildField(
+                  label: 'Password',
+                  controller: _passwordController,
+                  icon: Icons.lock_outline,
+                  isPassword: true,
+                  passwordVisible: _passwordVisible,
+                  onToggle: () =>
+                      setState(() => _passwordVisible = !_passwordVisible),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) {
+                      return 'Enter your password';
+                    }
+                    if (v.length < 6) {
+                      return 'At least 6 characters';
+                    }
+                    return null;
+                  },
+                ),
+
+                // ─── Confirm Password (Sign Up only) ─
+                _animatedField(
+                  isVisible: !_isSignIn,
+                  child: _buildField(
+                    label: 'Confirm Password',
+                    controller: _confirmPasswordController,
+                    icon: Icons.lock_outline,
+                    isPassword: true,
+                    passwordVisible: _confirmPasswordVisible,
+                    onToggle: () => setState(
+                      () => _confirmPasswordVisible = !_confirmPasswordVisible,
+                    ),
+                    validator: (v) {
+                      if (!_isSignIn) {
+                        if (v == null || v.isEmpty) {
+                          return 'Confirm your password';
+                        }
+                        if (v != _passwordController.text) {
+                          return 'Passwords do not match';
+                        }
+                      }
+                      return null;
+                    },
+                  ),
+                ),
+
+                // ─── Forgot Password (Sign In only) ─
+                _animatedField(
+                  isVisible: _isSignIn,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: PressableScale(
+                        onPressed: _showForgotPasswordDialog,
+                        scaleFactor: 1.0, // DISABLES the shrink/animation
+                        opacityFactor: 0.5, // ENABLES the dimming effect
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 4,
+                          ),
+                          child: Text(
+                            'Forgot Password?',
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 13,
+                              color: Color(0xFF1E90FF),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ─── Submit Button ─────────────────────
+          _buildActionButton(),
+
+          const SizedBox(height: 40),
+        ],
       ),
     );
   }
