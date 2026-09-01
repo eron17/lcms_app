@@ -2280,7 +2280,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             physics: const NeverScrollableScrollPhysics(),
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
-            childAspectRatio: 2.2,
+            childAspectRatio: 2.8,
             children: [
               _reportStatCard('Total', _reportTotalSubmissions, AppColors.primary),
               _reportStatCard('Graded', _reportGraded, AppColors.success),
@@ -3700,8 +3700,9 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
 
   Widget _buildProfilePage() {
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    final isDesktop = MediaQuery.of(context).size.width > 900;
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(20, isDesktop ? 0 : 20, 20, 20),
       child: Column(
         children: [
           // Instructor Identity Card

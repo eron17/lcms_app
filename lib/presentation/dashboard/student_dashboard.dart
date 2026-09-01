@@ -1303,7 +1303,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     final isDesktop = MediaQuery.of(context).size.width > 900;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: EdgeInsets.fromLTRB(20, isDesktop ? 0 : 10, 20, 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2403,8 +2403,9 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       (sum, c) => sum + ((c['class_xp'] as int?) ?? 0),
     );
 
+    final isDesktop = MediaQuery.of(context).size.width > 900;
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: EdgeInsets.fromLTRB(20, isDesktop ? 0 : 10, 20, 10),
       physics: const BouncingScrollPhysics(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
