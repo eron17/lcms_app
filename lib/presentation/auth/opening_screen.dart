@@ -890,7 +890,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                 const SizedBox(height: 14),
                 ...[
                   {
-                    'name': 'Beltran, Joshua Alexandre',
+                    'name': 'Beltran, Joshua Alexandre P.',
                     'initials': 'JB',
                     'color': const Color(0xFF7B2FBE),
                   },
