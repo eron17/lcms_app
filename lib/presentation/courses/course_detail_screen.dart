@@ -2870,7 +2870,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       margin: EdgeInsets.zero,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF111D33),
+        color: context.isDark ? const Color(0xFF111D33) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: rankColor.withValues(alpha: 0.25)),
       ),
@@ -2933,7 +2933,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         ? (_classXp / nextXp).clamp(0.0, 1.0)
                         : 1.0,
                     minHeight: 6,
-                    backgroundColor: Colors.white.withValues(alpha: 0.1),
+                    backgroundColor: context.isDark
+                        ? Colors.white.withValues(alpha: 0.1)
+                        : const Color(0xFF0D1B4B).withValues(alpha: 0.08),
                     valueColor: AlwaysStoppedAnimation(rankColor),
                   ),
                 ),
@@ -2944,7 +2946,9 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 11,
-                  color: Colors.white.withValues(alpha: 0.45),
+                  color: context.isDark
+                      ? Colors.white.withValues(alpha: 0.45)
+                      : const Color(0xFF0D1B4B).withValues(alpha: 0.5),
                 ),
               ),
             ],
