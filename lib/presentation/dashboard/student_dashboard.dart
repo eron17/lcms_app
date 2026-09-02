@@ -1352,7 +1352,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           else
             Column(
               children: _enrolledCourses
-                  .take(3)
                   .map(
                     (e) => _buildCourseCard(
                       e,
