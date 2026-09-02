@@ -1273,106 +1273,31 @@ class _ThreeDMeetDetailScreenState
     );
   }
 
-  Future<void> _editComment(Map<String, dynamic> comment) async {
-    final controller = TextEditingController(
-        text: comment['text'] as String? ?? '');
-    final newText = await showDialog<String>(
+  void _editComment(Map<String, dynamic> comment) {
+    showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: context.isDark
-            ? const Color(0xFF0A1128)
-            : Colors.white,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Edit comment',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: 3,
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 14,
-            color: context.isDark
-                ? Colors.white
-                : const Color(0xFF0D1B4B),
-          ),
-          decoration: InputDecoration(
-            hintText: 'Edit your comment...',
-            hintStyle: TextStyle(
-              fontFamily: 'Poppins',
-              color: context.textHint,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(
-                  color: AppColors.primary, width: 1.5),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                color: context.textSecondary,
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.pop(ctx, controller.text.trim()),
-            child: const Text(
-              'Save',
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                color: AppColors.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
+      barrierDismissible: false,
+      builder: (context) => EditCommentDialog(
+        comment: comment,
+        onSave: (newText) async {
+          await _supabase
+              .from('comments')
+              .update({'text': newText})
+              .eq('id', comment['id']);
+
+          if (!mounted) return;
+          setState(() {
+            final updated = List<Map<String, dynamic>>.from(_comments);
+            final index = updated.indexWhere((c) => c['id'] == comment['id']);
+            if (index != -1) {
+              updated[index] = Map<String, dynamic>.from(updated[index])
+                ..['text'] = newText;
+              _comments = updated;
+            }
+          });
+        },
       ),
     );
-
-    if (newText == null ||
-        newText.isEmpty ||
-        newText == comment['text']) {
-      return;
-    }
-
-    try {
-      await _supabase
-          .from('comments')
-          .update({'text': newText})
-          .eq('id', comment['id']);
-      if (!mounted) return;
-      setState(() {
-        final updated =
-            List<Map<String, dynamic>>.from(_comments);
-        final index =
-            updated.indexWhere((c) => c['id'] == comment['id']);
-        if (index != -1) {
-          updated[index] =
-              Map<String, dynamic>.from(updated[index])
-                ..['text'] = newText;
-          _comments = updated;
-        }
-      });
-    } catch (e) {
-      debugPrint('Edit comment error: $e');
-    }
   }
 
   Future<void> _deleteComment(String commentId) async {
@@ -2480,5 +2405,123 @@ class _ThreeDMeetDetailScreenState
     } catch (_) {
       return '';
     }
+  }
+}
+
+class EditCommentDialog extends StatefulWidget {
+  final Map<String, dynamic> comment;
+  final Future<void> Function(String) onSave;
+
+  const EditCommentDialog({
+    super.key,
+    required this.comment,
+    required this.onSave,
+  });
+
+  @override
+  State<EditCommentDialog> createState() => _EditCommentDialogState();
+}
+
+class _EditCommentDialogState extends State<EditCommentDialog> {
+  late TextEditingController _controller;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.comment['text'] ?? '');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0D1B4B);
+
+    return AlertDialog(
+      backgroundColor: Theme.of(context).cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      title: const Text(
+        'Edit Comment',
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        style: TextStyle(
+          color: textColor,
+          fontFamily: 'Poppins',
+          fontSize: 14,
+        ),
+        decoration: InputDecoration(
+          hintText: 'Edit your message...',
+          hintStyle: TextStyle(color: Theme.of(context).hintColor, fontSize: 14),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          onPressed: _isSaving
+              ? null
+              : () async {
+                  final newText = _controller.text.trim();
+                  if (newText.isEmpty || newText == widget.comment['text']) {
+                    Navigator.pop(context);
+                    return;
+                  }
+
+                  setState(() => _isSaving = true);
+
+                  try {
+                    await widget.onSave(newText);
+                    if (mounted) Navigator.pop(context);
+                  } catch (e) {
+                    if (mounted) {
+                      setState(() => _isSaving = false);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to update comment: $e')),
+                      );
+                    }
+                  }
+                },
+          child: _isSaving
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Text(
+                  'Save',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+        ),
+      ],
+    );
   }
 }
