@@ -88,7 +88,8 @@ class _DownloadProgressDialogState extends State<_DownloadProgressDialog> {
 
       final result = await OpenFilex.open(filePath);
 
-      if (result.type != ResultType.done && context.mounted) {
+      if (!mounted) return;
+      if (result.type != ResultType.done) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(

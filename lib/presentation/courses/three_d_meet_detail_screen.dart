@@ -2494,14 +2494,14 @@ class _EditCommentDialogState extends State<EditCommentDialog> {
 
                   try {
                     await widget.onSave(newText);
-                    if (mounted) Navigator.pop(context);
+                    if (!context.mounted) return;
+                    Navigator.pop(context);
                   } catch (e) {
-                    if (mounted) {
-                      setState(() => _isSaving = false);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to update comment: $e')),
-                      );
-                    }
+                    if (!context.mounted) return;
+                    setState(() => _isSaving = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to update comment: $e')),
+                    );
                   }
                 },
           child: _isSaving
