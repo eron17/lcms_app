@@ -125,7 +125,7 @@ class GradingService {
         'is_pending': false,
         'grade_feedback': gradeFeedback,
         'rank': rank,
-        'graded_at': DateTime.now().toIso8601String(),
+        'graded_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', submissionId);
 
       // ── Step 6: Award per-class XP and update the per-class streak ───────
@@ -190,7 +190,7 @@ class GradingService {
         'student_id': studentId,
         'course_id': courseId,
         'total_xp': newTotalXp,
-        'updated_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'student_id, course_id');
     } catch (_) {
       // Leaderboard update is non-critical — don't let it fail grading

@@ -667,7 +667,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       await _supabase.from('enrollments').insert({
         'student_id': userId,
         'course_id': courseData['id'],
-        'enrolled_at': DateTime.now().toIso8601String(),
+        'enrolled_at': DateTime.now().toUtc().toIso8601String(),
       });
 
       // Refresh data

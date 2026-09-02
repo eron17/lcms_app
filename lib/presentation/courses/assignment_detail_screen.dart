@@ -956,7 +956,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
 
       if (_currentUserName == null) await _loadCurrentUser();
       final assessmentId = await _getOrCreateAssessmentId();
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
 
       if (_mySubmission == null) {
         final data = await _supabase
@@ -1080,7 +1080,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         'sender_id': userId,
         'sender_name': _currentUserName ?? 'Student',
         'text': text,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
       _myPrivateCommentController.clear();
       await _loadMySubmission();
@@ -1108,7 +1108,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         'sender_id': userId,
         'sender_name': _currentUserName ?? 'Instructor',
         'text': text,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
       _privateCommentController.clear();
       await _loadPrivateComments(studentId);
@@ -1119,7 +1119,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         'type': 'private_comment',
         'title': 'New private comment on ${widget.post['title']}',
         'body': text,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
     } catch (e) {
       debugPrint('Instructor comment: $e');
@@ -1180,7 +1180,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
             'score': score,
             'is_graded': true,
             'is_returned': true,
-            'returned_at': DateTime.now().toIso8601String(),
+            'returned_at': DateTime.now().toUtc().toIso8601String(),
           })
           .eq('id', submission!['id']);
 

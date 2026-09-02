@@ -144,7 +144,7 @@ class _ThreeDMeetDetailScreenState
     setState(() => _isPostingComment = true);
     try {
       final userId = _supabase.auth.currentUser?.id;
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
       final userName = _currentUser?['name'] as String? ?? 'User';
       await _supabase.from('comments').insert({
         'post_id': widget.post['id'],
@@ -245,7 +245,7 @@ class _ThreeDMeetDetailScreenState
         'score': score,
         'is_graded': true,
         'is_returned': true,
-        'returned_at': DateTime.now().toIso8601String(),
+        'returned_at': DateTime.now().toUtc().toIso8601String(),
       }).eq('id', sub['id']);
 
       // Notify student of score update
@@ -256,7 +256,7 @@ class _ThreeDMeetDetailScreenState
         'type': 'assignment_graded',
         'title': '${widget.post['title']} has been graded',
         'body': 'Your score: $score/100',
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
 
       if (mounted) {
@@ -319,7 +319,7 @@ class _ThreeDMeetDetailScreenState
         'sender_id': userId,
         'sender_name': _currentUser?['name'] ?? 'Instructor',
         'text': text,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
 
       await _supabase.from('notifications').insert({
@@ -329,7 +329,7 @@ class _ThreeDMeetDetailScreenState
         'type': 'private_comment',
         'title': 'Comment on ${widget.post['title']}',
         'body': text,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
 
       _privateCommentController.clear();

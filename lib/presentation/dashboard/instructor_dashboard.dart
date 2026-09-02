@@ -796,7 +796,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         'section': section,
         'is_published': true,
         'enrolled_count': 0,
-        'created_at': DateTime.now().toIso8601String(),
+        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
 
       await _loadCourses();

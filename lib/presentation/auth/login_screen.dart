@@ -210,7 +210,7 @@ class _LoginScreenState extends State<LoginScreen>
             'level': 1,
             'badges': [],
             'streak': 0,
-            'created_at': DateTime.now().toIso8601String(),
+            'created_at': DateTime.now().toUtc().toIso8601String(),
           });
 
           if (mounted) {
