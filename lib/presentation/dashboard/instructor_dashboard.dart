@@ -1239,16 +1239,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Logo
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(20, 32, 20, 24),
-                  child: Text(
-                    'Code Lab 3D',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.primary,
-                    ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 32, 20, 24),
+                  child: Image.asset(
+                    'assets/images/app_name.png',
+                    height: 28,
+                    fit: BoxFit.contain,
                   ),
                 ),
                 // Nav items
