@@ -857,7 +857,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               ),
               const Spacer(),
               Text(
-                _formatDate(post['created_at']),
+                post['updated_at'] != null
+                    ? 'Posted ${_formatDate(post['created_at'])} '
+                          '(Edited ${_formatDate(post['updated_at'])})'
+                    : _formatDate(post['created_at']),
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 12,

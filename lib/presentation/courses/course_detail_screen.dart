@@ -584,6 +584,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                             'instructions':
                                                 instructionsController.text
                                                     .trim(),
+                                            'updated_at': DateTime.now()
+                                                .toIso8601String(),
                                           })
                                           .eq('id', existing['id']);
                                       targetPostId = existing['id'];
@@ -1616,6 +1618,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                                       ?.toUtc()
                                                       .toIso8601String()
                                                 : null,
+                                            'updated_at': DateTime.now()
+                                                .toIso8601String(),
                                           })
                                           .eq('id', existing['id']);
 
@@ -3601,7 +3605,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                 ),
                                 const Spacer(),
                                 Text(
-                                  _formatDate(post['created_at']),
+                                  post['updated_at'] != null
+                                      ? 'Posted ${_formatDate(post['created_at'])} '
+                                            '(Edited ${_formatDate(post['updated_at'])})'
+                                      : _formatDate(post['created_at']),
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 10,
@@ -3946,7 +3953,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           child: Row(
             children: [
               Text(
-                'Posted ${_formatDate(post['created_at'])}',
+                post['updated_at'] != null
+                    ? 'Posted ${_formatDate(post['created_at'])} '
+                          '(Edited ${_formatDate(post['updated_at'])})'
+                    : 'Posted ${_formatDate(post['created_at'])}',
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 11,
