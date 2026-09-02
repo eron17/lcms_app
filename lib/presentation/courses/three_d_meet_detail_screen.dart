@@ -146,24 +146,26 @@ class _ThreeDMeetDetailScreenState
       final userId = _supabase.auth.currentUser?.id;
       final now = DateTime.now().toUtc().toIso8601String();
       final userName = _currentUser?['name'] as String? ?? 'User';
-      await _supabase.from('comments').insert({
-        'post_id': widget.post['id'],
-        'user_id': userId,
-        'user_name': userName,
-        'text': text,
-        'created_at': now,
-      });
+      final inserted = await _supabase
+          .from('comments')
+          .insert({
+            'post_id': widget.post['id'],
+            'user_id': userId,
+            'user_name': userName,
+            'text': text,
+            'created_at': now,
+          })
+          .select()
+          .single();
       _commentController.clear();
-      // Add to local state immediately for instant UI update
+      // Add to local state immediately for instant UI update — use the
+      // server-returned row (with its real id) so this comment can be
+      // edited/deleted right away, without needing a reload first.
       if (mounted) {
         setState(() {
           _comments.add({
-            'post_id': widget.post['id'],
-            'user_id': userId,
-            'user_name': _currentUser?['name'] ?? 'You',
+            ...inserted,
             'avatar_url': _currentUser?['avatar_url'],
-            'text': text,
-            'created_at': now,
           });
         });
       }
