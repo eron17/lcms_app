@@ -35,7 +35,6 @@ class LCMSApp extends ConsumerStatefulWidget {
 
 class _LCMSAppState extends ConsumerState<LCMSApp>
     with TickerProviderStateMixin {
-  Offset _rippleOrigin = Offset.zero;
   OverlayEntry? _rippleEntry;
   AnimationController? _rippleController;
 

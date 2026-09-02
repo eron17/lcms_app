@@ -674,7 +674,8 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     return Container(
       key: _featuresKey,
       color: const Color(0xFF080e20),
-      padding: const EdgeInsets.fromLTRB(60, 60, 60, 60),
+      // Reduced horizontal padding on mobile for better side spacing
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 60),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -700,16 +701,76 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
           LayoutBuilder(
             builder: (ctx, constraints) {
               final w = constraints.maxWidth;
-              final cols = w > 900
-                  ? 3
-                  : w > 600
-                  ? 2
-                  : 1;
-              final ratio = w > 900
-                  ? 1.6
-                  : w > 600
-                  ? 1.8
-                  : 3.5;
+              final isMobile = w < 600;
+
+              // ─── 1. MOBILE RESPONSIVE LAYOUT (Dynamic Height Column) ───
+              if (isMobile) {
+                return Column(
+                  children: List.generate(_features.length, (i) {
+                    final f = _features[i];
+                    final isExpanded = _expandedFeature == i;
+                    final color = f['color'] as Color;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: GestureDetector(
+                        onTap: () => setState(
+                          () => _expandedFeature = isExpanded ? -1 : i,
+                        ),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.all(18),
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: isExpanded
+                                ? color.withValues(alpha: 0.1)
+                                : const Color(0xFF111d33),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isExpanded
+                                  ? color.withValues(alpha: 0.4)
+                                  : Colors.white.withValues(alpha: 0.07),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min, // Auto-size height based on content
+                            children: [
+                              Icon(f['icon'] as IconData, color: color, size: 22),
+                              const SizedBox(height: 10),
+                              Text(
+                                f['title'] as String,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: isExpanded ? color : Colors.white,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                isExpanded
+                                    ? f['detail'] as String
+                                    : f['summary'] as String,
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 11,
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                  height: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                );
+              }
+
+              // ─── 2. DESKTOP/TABLET LAYOUT (GridView) ───
+              final cols = w > 900 ? 3 : 2;
+              final ratio = w > 900 ? 1.6 : 1.8;
               return GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -788,153 +849,149 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     return Container(
       key: _aboutKey,
       color: const Color(0xFF060d1f),
-      padding: const EdgeInsets.fromLTRB(60, 60, 60, 80),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'About Code Lab 3D',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
+      // Adjusted padding slightly for a better fit on mobile screens
+      padding: const EdgeInsets.fromLTRB(40, 60, 40, 80),
+      child: LayoutBuilder(
+        builder: (ctx, constraints) {
+          final isNarrow = constraints.maxWidth < 750;
+
+          // 1. Separate the About C++ content
+          final aboutContent = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'About Code Lab 3D',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
                 ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Code Lab 3D is an immersive learning management '
-                  'system built for Pampanga State University. Students '
-                  'write real C++ code inside a Unity 3D classroom, get '
-                  'auto-graded in real time, and compete on live '
-                  'per-class leaderboards.',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 13,
-                    color: Color(0x80FFFFFF),
-                    height: 1.7,
-                  ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Code Lab 3D is an immersive learning management '
+                'system built for Pampanga State University. Students '
+                'write real C++ code inside a Unity 3D classroom, get '
+                'auto-graded in real time, and compete on live '
+                'per-class leaderboards.',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 13,
+                  color: Color(0x80FFFFFF),
+                  height: 1.7,
                 ),
-                const SizedBox(height: 28),
-                const Text(
-                  'BUILT WITH',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 11,
-                    color: Color(0x55FFFFFF),
-                    letterSpacing: 1.0,
-                  ),
+              ),
+              const SizedBox(height: 28),
+              const Text(
+                'BUILT WITH',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 11,
+                  color: Color(0x55FFFFFF),
+                  letterSpacing: 1.0,
                 ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children:
-                      [
-                        'Flutter',
-                        'Unity 6',
-                        'Supabase',
-                        'JDoodle API',
-                        'Vercel',
-                        'Photon Fusion 2',
-                      ].map((tech) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF3B9EFF,
-                            ).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: const Color(
-                                0xFF3B9EFF,
-                              ).withValues(alpha: 0.2),
-                            ),
-                          ),
-                          child: Text(
-                            tech,
-                            style: const TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 12,
-                              color: Color(0xFF3B9EFF),
-                            ),
-                          ),
-                        );
-                      }).toList(),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  'Flutter',
+                  'Unity 6',
+                  'Supabase',
+                  'JDoodle API',
+                  'Vercel',
+                  'Photon Fusion 2',
+                ].map((tech) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B9EFF).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFF3B9EFF).withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Text(
+                      tech,
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 12,
+                        color: Color(0xFF3B9EFF),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          );
+
+          // 2. Separate the Dev Team content
+          final teamContent = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'DEVELOPMENT TEAM',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 11,
+                  color: Color(0x55FFFFFF),
+                  letterSpacing: 1.0,
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 48),
-          SizedBox(
-            width: 300,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'DEVELOPMENT TEAM',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 11,
-                    color: Color(0x55FFFFFF),
-                    letterSpacing: 1.0,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                ...[
-                  {
-                    'name': 'Beltran, Joshua Alexandre P.',
-                    'initials': 'JB',
-                    'color': const Color(0xFF7B2FBE),
-                  },
-                  {
-                    'name': 'Bernal, Lynix Ivy D.',
-                    'initials': 'LB',
-                    'color': const Color(0xFF3B9EFF),
-                  },
-                  {
-                    'name': 'Guintu, John Dexter M.',
-                    'initials': 'JG',
-                    'color': const Color(0xFF4CAF50),
-                  },
-                  {
-                    'name': 'Hermano, Aaron L.',
-                    'initials': 'AH',
-                    'color': const Color(0xFFFF9800),
-                  },
-                  {
-                    'name': 'Rodriguez, Chrys-Enjie R.',
-                    'initials': 'CR',
-                    'color': const Color(0xFFFF5252),
-                  },
-                ].map((member) {
-                  final color = member['color'] as Color;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 18,
-                          backgroundColor: color.withValues(alpha: 0.2),
-                          child: Text(
-                            member['initials'] as String,
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: color,
-                            ),
+              ),
+              const SizedBox(height: 14),
+              ...[
+                {
+                  'name': 'Beltran, Joshua Alexandre P.',
+                  'initials': 'JB',
+                  'color': const Color(0xFF7B2FBE),
+                },
+                {
+                  'name': 'Bernal, Lynix Ivy D.',
+                  'initials': 'LB',
+                  'color': const Color(0xFF3B9EFF),
+                },
+                {
+                  'name': 'Guintu, John Dexter M.',
+                  'initials': 'JG',
+                  'color': const Color(0xFF4CAF50),
+                },
+                {
+                  'name': 'Hermano, Aaron L.',
+                  'initials': 'AH',
+                  'color': const Color(0xFFFF9800),
+                },
+                {
+                  'name': 'Rodriguez, Chrys-Enjie R.',
+                  'initials': 'CR',
+                  'color': const Color(0xFFFF5252),
+                },
+              ].map((member) {
+                final color = member['color'] as Color;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: color.withValues(alpha: 0.2),
+                        child: Text(
+                          member['initials'] as String,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: color,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Text(
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded( // Added Expanded so long names wrap on small screens
+                        child: Text(
                           member['name'] as String,
                           style: const TextStyle(
                             fontFamily: 'Poppins',
@@ -942,14 +999,36 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                             color: Colors.white,
                           ),
                         ),
-                      ],
-                    ),
-                  );
-                }),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          );
+
+          // 3. Dynamically switch layout based on screen width
+          if (isNarrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                aboutContent,
+                const SizedBox(height: 48), // Padding space between sections on mobile
+                teamContent,
               ],
-            ),
-          ),
-        ],
+            );
+          }
+
+          // Desktop Row View
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: aboutContent),
+              const SizedBox(width: 48),
+              SizedBox(width: 300, child: teamContent),
+            ],
+          );
+        },
       ),
     );
   }

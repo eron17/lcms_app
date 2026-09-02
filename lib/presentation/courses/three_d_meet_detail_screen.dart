@@ -1348,7 +1348,9 @@ class _ThreeDMeetDetailScreenState
 
     if (newText == null ||
         newText.isEmpty ||
-        newText == comment['text']) return;
+        newText == comment['text']) {
+      return;
+    }
 
     try {
       await _supabase
