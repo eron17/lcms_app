@@ -484,38 +484,49 @@ class _LoginScreenState extends State<LoginScreen>
 
     if (kIsWeb) {
       return Scaffold(
-        backgroundColor: const Color(0xFF060d1f),
-        body: Column(
-          children: [
-            Container(
-              height: 56,
-              color: const Color(0xFF080e20),
-              padding: const EdgeInsets.symmetric(horizontal: 40),
-              child: Row(
-                children: [
-                  Image.asset('assets/images/logo.png', height: 32),
-                  const SizedBox(width: 10),
-                  Image.asset('assets/images/app_name.png', height: 22),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 28,
-                    vertical: 48,
+        body: Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF060d1f) : null,
+            gradient: isDark
+                ? null
+                : const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFFF0F4FF), Color(0xFFE8EEFF)],
                   ),
-                  child: SingleChildScrollView(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      child: _buildLoginForm(),
+          ),
+          child: Column(
+            children: [
+              Container(
+                height: 56,
+                color: isDark ? const Color(0xFF080e20) : Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 40),
+                child: Row(
+                  children: [
+                    Image.asset('assets/images/logo.png', height: 32),
+                    const SizedBox(width: 10),
+                    Image.asset('assets/images/app_name.png', height: 22),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 28,
+                      vertical: 48,
+                    ),
+                    child: SingleChildScrollView(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: _buildLoginForm(),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }

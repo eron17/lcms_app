@@ -1408,6 +1408,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       [const Color(0xFF7B2FBE), const Color(0xFF2196F3)],
     ];
     final c = colors[index % colors.length];
+    final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return GestureDetector(
       onTap: () => context.push(
@@ -1416,9 +1417,13 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       ),
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF111d33),
+          color: context.isDark ? const Color(0xFF111d33) : Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+          border: Border.all(
+            color: context.isDark
+                ? Colors.white.withValues(alpha: 0.07)
+                : const Color(0xFFDDE3F0),
+          ),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -1462,11 +1467,11 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                 children: [
                   Text(
                     course['title'] ?? '',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white,
+                      color: textColor,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -1478,7 +1483,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                     style: TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 11,
-                      color: Colors.white.withValues(alpha: 0.45),
+                      color: textColor.withValues(alpha: 0.45),
                     ),
                   ),
                 ],

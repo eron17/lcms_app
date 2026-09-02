@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/router/app_router.dart';
 import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_colors.dart';
+import '../../providers/theme_provider.dart';
 import '../../shared/widgets/pressable_scale.dart';
 
 class OpeningScreen extends ConsumerStatefulWidget {
@@ -182,7 +183,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
 
     if (kIsWeb) {
       return Scaffold(
-        backgroundColor: const Color(0xFF060d1f),
+        backgroundColor: context.isDark ? const Color(0xFF060d1f) : Colors.white,
         body: Column(
           children: [
             _buildNavbar(),
@@ -429,9 +430,10 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   // ── Web landing page (kIsWeb) ─────────────────────────────
 
   Widget _buildNavbar() {
+    final isDark = context.isDark;
     return Container(
       height: 56,
-      color: const Color(0xFF080e20),
+      color: isDark ? const Color(0xFF080e20) : Colors.white,
       padding: const EdgeInsets.symmetric(horizontal: 40),
       child: LayoutBuilder(
         builder: (ctx, constraints) {
@@ -448,7 +450,9 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                 _navLink('Features', () => _scrollTo(_featuresKey)),
                 const SizedBox(width: 28),
                 _navLink('About', () => _scrollTo(_aboutKey)),
+                const SizedBox(width: 20),
               ],
+              _buildThemeToggle(),
             ],
           );
         },
@@ -457,14 +461,38 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   }
 
   Widget _navLink(String label, VoidCallback onTap) {
+    final isDark = context.isDark;
     return GestureDetector(
       onTap: onTap,
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'Poppins',
           fontSize: 13,
-          color: Color(0x8CFFFFFF),
+          color: isDark ? const Color(0x8CFFFFFF) : const Color(0x8C0B1220),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeToggle() {
+    final isDark = context.isDark;
+    return GestureDetector(
+      onTap: () => ref.read(themeProvider.notifier).toggleTheme(),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFF0B1220).withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+          size: 18,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.85)
+              : const Color(0xFF0B1220),
         ),
       ),
     );
@@ -473,7 +501,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   Widget _buildHeroSection() {
     return Container(
       key: _heroKey,
-      color: const Color(0xFF060d1f),
+      color: context.isDark ? const Color(0xFF060d1f) : Colors.white,
       child: LayoutBuilder(
         builder: (ctx, constraints) {
           final isNarrow = constraints.maxWidth < 700;
@@ -499,6 +527,8 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   }
 
   Widget _buildHeroLeft(BuildContext context) {
+    final isDark = context.isDark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0B1220);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -522,15 +552,15 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
         ),
         const SizedBox(height: 20),
         RichText(
-          text: const TextSpan(
+          text: TextSpan(
             style: TextStyle(
               fontFamily: 'Poppins',
               fontSize: 38,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: textColor,
               height: 1.15,
             ),
-            children: [
+            children: const [
               TextSpan(text: 'Learn to code in\na '),
               TextSpan(
                 text: '3D classroom',
@@ -540,14 +570,14 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
           ),
         ),
         const SizedBox(height: 14),
-        const Text(
+        Text(
           'An immersive learning management system where '
           'students write real C++ code, get auto-graded in '
           'real time, and compete on live leaderboards.',
           style: TextStyle(
             fontFamily: 'Poppins',
             fontSize: 14,
-            color: Color(0x80FFFFFF),
+            color: textColor.withValues(alpha: 0.5),
             height: 1.6,
           ),
         ),
@@ -581,30 +611,34 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
             OutlinedButton(
               onPressed: () => context.go(AppRoutes.login),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white.withValues(alpha: 0.8),
+                foregroundColor: textColor.withValues(alpha: 0.8),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 24,
                   vertical: 14,
                 ),
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                side: BorderSide(color: textColor.withValues(alpha: 0.15)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              child: const Text(
+              child: Text(
                 'Sign in',
-                style: TextStyle(fontFamily: 'Poppins', fontSize: 14),
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  color: textColor,
+                ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 32),
-        const Text(
+        Text(
           'ALSO AVAILABLE ON',
           style: TextStyle(
             fontFamily: 'Poppins',
             fontSize: 11,
-            color: Color(0x55FFFFFF),
+            color: textColor.withValues(alpha: 0.33),
             letterSpacing: 1.0,
           ),
         ),
@@ -627,9 +661,15 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               vertical: 12,
             ),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : const Color(0xFFF7F9FC),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : const Color(0xFFE2E8F0),
+              ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -643,13 +683,13 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Download for Android',
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        color: textColor,
                       ),
                     ),
                     Text(
@@ -657,7 +697,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 10,
-                        color: Colors.white.withValues(alpha: 0.45),
+                        color: textColor.withValues(alpha: 0.45),
                       ),
                     ),
                   ],
@@ -671,30 +711,32 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   }
 
   Widget _buildFeaturesSection() {
+    final isDark = context.isDark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0B1220);
     return Container(
       key: _featuresKey,
-      color: const Color(0xFF080e20),
+      color: isDark ? const Color(0xFF080e20) : const Color(0xFFF7F9FC),
       // Reduced horizontal padding on mobile for better side spacing
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 60),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Features',
             style: TextStyle(
               fontFamily: 'Poppins',
               fontSize: 28,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: textColor,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'Everything you need for immersive coding education',
             style: TextStyle(
               fontFamily: 'Poppins',
               fontSize: 14,
-              color: Color(0x80FFFFFF),
+              color: textColor.withValues(alpha: 0.5),
             ),
           ),
           const SizedBox(height: 32),
@@ -724,12 +766,16 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                           decoration: BoxDecoration(
                             color: isExpanded
                                 ? color.withValues(alpha: 0.1)
-                                : const Color(0xFF111d33),
+                                : (isDark
+                                      ? const Color(0xFF111d33)
+                                      : Colors.white),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                               color: isExpanded
                                   ? color.withValues(alpha: 0.4)
-                                  : Colors.white.withValues(alpha: 0.07),
+                                  : (isDark
+                                        ? Colors.white.withValues(alpha: 0.07)
+                                        : const Color(0xFFE2E8F0)),
                             ),
                           ),
                           child: Column(
@@ -744,7 +790,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                                   fontFamily: 'Poppins',
                                   fontSize: 14,
                                   fontWeight: FontWeight.w600,
-                                  color: isExpanded ? color : Colors.white,
+                                  color: isExpanded ? color : textColor,
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -755,7 +801,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                                 style: TextStyle(
                                   fontFamily: 'Poppins',
                                   fontSize: 11,
-                                  color: Colors.white.withValues(alpha: 0.5),
+                                  color: textColor.withValues(alpha: 0.5),
                                   height: 1.5,
                                 ),
                               ),
@@ -796,12 +842,14 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                       decoration: BoxDecoration(
                         color: isExpanded
                             ? color.withValues(alpha: 0.1)
-                            : const Color(0xFF111d33),
+                            : (isDark ? const Color(0xFF111d33) : Colors.white),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: isExpanded
                               ? color.withValues(alpha: 0.4)
-                              : Colors.white.withValues(alpha: 0.07),
+                              : (isDark
+                                    ? Colors.white.withValues(alpha: 0.07)
+                                    : const Color(0xFFE2E8F0)),
                         ),
                       ),
                       child: Column(
@@ -815,7 +863,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                               fontFamily: 'Poppins',
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: isExpanded ? color : Colors.white,
+                              color: isExpanded ? color : textColor,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -826,7 +874,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                             style: TextStyle(
                               fontFamily: 'Poppins',
                               fontSize: 11,
-                              color: Colors.white.withValues(alpha: 0.5),
+                              color: textColor.withValues(alpha: 0.5),
                               height: 1.5,
                             ),
                             maxLines: isExpanded ? 6 : 2,
@@ -846,9 +894,11 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   }
 
   Widget _buildAboutSection() {
+    final isDark = context.isDark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0B1220);
     return Container(
       key: _aboutKey,
-      color: const Color(0xFF060d1f),
+      color: isDark ? const Color(0xFF060d1f) : Colors.white,
       // Adjusted padding slightly for a better fit on mobile screens
       padding: const EdgeInsets.fromLTRB(40, 60, 40, 80),
       child: LayoutBuilder(
@@ -859,17 +909,17 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
           final aboutContent = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'About Code Lab 3D',
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: textColor,
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Code Lab 3D is an immersive learning management '
                 'system built for Pampanga State University. Students '
                 'write real C++ code inside a Unity 3D classroom, get '
@@ -878,17 +928,17 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 13,
-                  color: Color(0x80FFFFFF),
+                  color: textColor.withValues(alpha: 0.5),
                   height: 1.7,
                 ),
               ),
               const SizedBox(height: 28),
-              const Text(
+              Text(
                 'BUILT WITH',
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 11,
-                  color: Color(0x55FFFFFF),
+                  color: textColor.withValues(alpha: 0.33),
                   letterSpacing: 1.0,
                 ),
               ),
@@ -934,12 +984,12 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
           final teamContent = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'DEVELOPMENT TEAM',
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 11,
-                  color: Color(0x55FFFFFF),
+                  color: textColor.withValues(alpha: 0.33),
                   letterSpacing: 1.0,
                 ),
               ),
@@ -993,10 +1043,10 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                       Expanded( // Added Expanded so long names wrap on small screens
                         child: Text(
                           member['name'] as String,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontFamily: 'Poppins',
                             fontSize: 13,
-                            color: Colors.white,
+                            color: textColor,
                           ),
                         ),
                       ),
