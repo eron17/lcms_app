@@ -85,6 +85,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
   void initState() {
     super.initState();
     _initNotificationListener();
+    _checkUnreadNotifications();
     _glowController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
@@ -498,6 +499,24 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     )
     .subscribe();
 }
+
+  Future<void> _checkUnreadNotifications() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    try {
+      final data = await _supabase
+          .from('notifications')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('is_read', false)
+          .limit(1);
+      if (mounted) {
+        setState(() => _hasUnreadNotifications = (data as List).isNotEmpty);
+      }
+    } catch (e) {
+      debugPrint('Check unread notifications: $e');
+    }
+  }
 
   // ─── Actions ─────────────────────────────────────────────
 
@@ -1300,17 +1319,44 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 Padding(
                   padding: const EdgeInsets.all(20),
                   child: GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const NotificationsScreen(isInstructor: true),
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.notifications_outlined,
-                      color: context.textSecondary,
-                      size: 22,
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const NotificationsScreen(isInstructor: true),
+                        ),
+                      );
+                      await _checkUnreadNotifications();
+                    },
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(
+                          Icons.notifications_outlined,
+                          color: context.textSecondary,
+                          size: 22,
+                        ),
+                        if (_hasUnreadNotifications)
+                          Positioned(
+                            top: -1,
+                            right: -1,
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: context.isDark
+                                      ? const Color(0xFF0A1128)
+                                      : Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -1358,11 +1404,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 context,
                 MaterialPageRoute(
                   // Pass 'true' directly since this is the Instructor Dashboard
-                  builder: (_) => const NotificationsScreen(isInstructor: true), 
+                  builder: (_) => const NotificationsScreen(isInstructor: true),
                 ),
               );
-              // Clear badge when returning
-              if (mounted) setState(() => _hasUnreadNotifications = false);
+              // Re-check real unread state rather than blindly clearing —
+              // the user may not have read everything in that screen.
+              await _checkUnreadNotifications();
             },
             scaleFactor: 0.94, 
             opacityFactor: 0.6, 

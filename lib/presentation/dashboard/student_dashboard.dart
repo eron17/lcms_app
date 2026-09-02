@@ -9,7 +9,6 @@ import '../../data/models/user_model.dart';
 import '../../providers/theme_provider.dart';
 import '../../core/theme/theme_extensions.dart';
 import '../../core/constants/app_colors.dart';
-import '../courses/offline_files_screen.dart';
 import '../courses/archived_classes_screen.dart';
 import '../profile/edit_profile_screen.dart';
 import '../notifications/notifications_screen.dart';
@@ -63,6 +62,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   void initState() {
     super.initState();
     _initNotificationListener();
+    _checkUnreadNotifications();
     _fabController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -418,6 +418,24 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           },
         )
         .subscribe();
+  }
+
+  Future<void> _checkUnreadNotifications() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return;
+    try {
+      final data = await _supabase
+          .from('notifications')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('is_read', false)
+          .limit(1);
+      if (mounted) {
+        setState(() => _hasUnreadNotifications = (data as List).isNotEmpty);
+      }
+    } catch (e) {
+      debugPrint('Check unread notifications: $e');
+    }
   }
 
   void _showJoinClassDialog() {
@@ -1081,17 +1099,44 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                 Padding(
                   padding: const EdgeInsets.all(20),
                   child: GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const NotificationsScreen(isInstructor: false),
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.notifications_outlined,
-                      color: context.textSecondary,
-                      size: 22,
+                    onTap: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              const NotificationsScreen(isInstructor: false),
+                        ),
+                      );
+                      await _checkUnreadNotifications();
+                    },
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(
+                          Icons.notifications_outlined,
+                          color: context.textSecondary,
+                          size: 22,
+                        ),
+                        if (_hasUnreadNotifications)
+                          Positioned(
+                            top: -1,
+                            right: -1,
+                            child: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: context.isDark
+                                      ? const Color(0xFF0A1128)
+                                      : Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -1132,8 +1177,9 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                       const NotificationsScreen(isInstructor: false),
                 ),
               );
-              // Clear badge when returning
-              if (mounted) setState(() => _hasUnreadNotifications = false);
+              // Re-check real unread state rather than blindly clearing —
+              // the user may not have read everything in that screen.
+              await _checkUnreadNotifications();
             },
             scaleFactor: 0.94,
             opacityFactor: 0.6,
@@ -1441,23 +1487,28 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                   end: Alignment.centerRight,
                 ),
               ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 2,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  course['course_code'] ?? '',
-                  style: const TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 10,
-                    color: Colors.white,
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      course['course_code'] ?? '',
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        color: Colors.white,
+                      ),
+                    ),
                   ),
-                ),
+                  const Spacer(),
+                ],
               ),
             ),
             Padding(
@@ -2971,16 +3022,6 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                   isInstructor: false,
                 ),
               ),
-            ),
-          ),
-          _buildPremiumDivider(),
-          // Offline Content (Now with Dimming)
-          _buildPremiumSettingsItem(
-            Icons.cloud_download_outlined,
-            'Offline Content',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const OfflineFilesScreen()),
             ),
           ),
           _buildPremiumDivider(),
