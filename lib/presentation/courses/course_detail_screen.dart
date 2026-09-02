@@ -576,18 +576,31 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                     String? targetPostId;
 
                                     if (existing != null) {
-                                      await _supabase
-                                          .from('posts')
-                                          .update({
-                                            'title': titleController.text
-                                                .trim(),
-                                            'instructions':
-                                                instructionsController.text
-                                                    .trim(),
-                                            'updated_at': DateTime.now()
-                                                .toIso8601String(),
-                                          })
-                                          .eq('id', existing['id']);
+                                      final editData = {
+                                        'title': titleController.text.trim(),
+                                        'instructions': instructionsController
+                                            .text
+                                            .trim(),
+                                      };
+                                      try {
+                                        await _supabase
+                                            .from('posts')
+                                            .update({
+                                              ...editData,
+                                              'updated_at': DateTime.now()
+                                                  .toIso8601String(),
+                                            })
+                                            .eq('id', existing['id']);
+                                      } on PostgrestException catch (e) {
+                                        // posts.updated_at doesn't exist on
+                                        // this Supabase project yet — fall
+                                        // back so editing still works.
+                                        if (e.code != 'PGRST204') rethrow;
+                                        await _supabase
+                                            .from('posts')
+                                            .update(editData)
+                                            .eq('id', existing['id']);
+                                      }
                                       targetPostId = existing['id'];
                                     } else {
                                       // Return newly created announcement post to get its ID
@@ -1575,53 +1588,64 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                     // ─── FIX: Check if we are UPDATING or INSERTING ───
                                     if (existing != null) {
                                       // If 'existing' is not null, we UPDATE the current post
-                                      await _supabase
-                                          .from('posts')
-                                          .update({
-                                            'title': title,
-                                            'instructions': desc,
-                                            'topic_id': selectedTopicId,
-                                            'material_url': materialUrl,
-                                            'material_name': materialName,
-                                            'assessment_url': assessmentUrl,
-                                            'assessment_name': assessmentName,
-                                            'scheduled_time': finalScheduledTime
-                                                ?.toUtc()
-                                                .toIso8601String(),
-                                            'expected_output':
-                                                postType == '3d_meet'
-                                                ? expectedOutput
-                                                : null,
-                                            'stdin_input':
-                                                stdinController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? null
-                                                : stdinController.text.trim(),
-                                            'required_keywords':
-                                                postType == '3d_meet'
-                                                ? requiredKeywords
-                                                : null,
-                                            'forbidden_patterns':
-                                                postType == '3d_meet'
-                                                ? forbiddenPatterns
-                                                : null,
-                                            'duration_minutes':
-                                                postType == '3d_meet'
-                                                ? durationMinutes
-                                                : null,
-                                            'points': postType == 'assignment'
-                                                ? assignmentPoints
-                                                : null,
-                                            'due_date': postType == 'assignment'
-                                                ? finalAssignmentDueDate
-                                                      ?.toUtc()
-                                                      .toIso8601String()
-                                                : null,
-                                            'updated_at': DateTime.now()
-                                                .toIso8601String(),
-                                          })
-                                          .eq('id', existing['id']);
+                                      final editData = {
+                                        'title': title,
+                                        'instructions': desc,
+                                        'topic_id': selectedTopicId,
+                                        'material_url': materialUrl,
+                                        'material_name': materialName,
+                                        'assessment_url': assessmentUrl,
+                                        'assessment_name': assessmentName,
+                                        'scheduled_time': finalScheduledTime
+                                            ?.toUtc()
+                                            .toIso8601String(),
+                                        'expected_output': postType == '3d_meet'
+                                            ? expectedOutput
+                                            : null,
+                                        'stdin_input':
+                                            stdinController.text.trim().isEmpty
+                                            ? null
+                                            : stdinController.text.trim(),
+                                        'required_keywords':
+                                            postType == '3d_meet'
+                                            ? requiredKeywords
+                                            : null,
+                                        'forbidden_patterns':
+                                            postType == '3d_meet'
+                                            ? forbiddenPatterns
+                                            : null,
+                                        'duration_minutes':
+                                            postType == '3d_meet'
+                                            ? durationMinutes
+                                            : null,
+                                        'points': postType == 'assignment'
+                                            ? assignmentPoints
+                                            : null,
+                                        'due_date': postType == 'assignment'
+                                            ? finalAssignmentDueDate
+                                                  ?.toUtc()
+                                                  .toIso8601String()
+                                            : null,
+                                      };
+                                      try {
+                                        await _supabase
+                                            .from('posts')
+                                            .update({
+                                              ...editData,
+                                              'updated_at': DateTime.now()
+                                                  .toIso8601String(),
+                                            })
+                                            .eq('id', existing['id']);
+                                      } on PostgrestException catch (e) {
+                                        // posts.updated_at doesn't exist on
+                                        // this Supabase project yet — fall
+                                        // back so editing still works.
+                                        if (e.code != 'PGRST204') rethrow;
+                                        await _supabase
+                                            .from('posts')
+                                            .update(editData)
+                                            .eq('id', existing['id']);
+                                      }
 
                                       await _createOrUpdateAssessmentForPost(
                                         postData: existing,
