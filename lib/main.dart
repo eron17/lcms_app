@@ -18,6 +18,7 @@ void main() async {
     // ─── PKCE flow needed for deep link password reset ────
     authOptions: const FlutterAuthClientOptions(
       authFlowType: AuthFlowType.pkce,
+      autoRefreshToken: true,
     ),
   );
   GradingService.initialize();

@@ -4,14 +4,11 @@ import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:dio/dio.dart';
 import 'package:open_filex/open_filex.dart';
-import 'package:path_provider/path_provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
+import '../../core/utils/file_downloader.dart';
 import 'dart:io';
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../../shared/widgets/pressable_scale.dart';
 
 class FileViewerScreen extends StatefulWidget {
@@ -48,10 +45,6 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   WebViewController? _officeController;
   bool _officeLoading = true;
   bool _officeError = false;
-
-  // ─── Download State ───────────────────────────────────────
-  bool _isDownloading = false;
-  double _downloadProgress = 0;
 
   // ─── File Type ────────────────────────────────────────────
   late String _fileType;
@@ -180,93 +173,6 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       ..loadRequest(Uri.parse(viewerUrl));
   }
 
-  Future<void> _downloadFile() async {
-    setState(() {
-      _isDownloading = true;
-      _downloadProgress = 0;
-    });
-    try {
-      // Same directory _saveFilesOffline() (post_detail_screen.dart) uses,
-      // so both save paths land in one place for the Offline Files screen.
-      final dir = await getApplicationDocumentsDirectory();
-      final fileName =
-          '${DateTime.now().millisecondsSinceEpoch}_${widget.fileName}';
-      final savePath = '${dir.path}/$fileName';
-
-      final dio = Dio();
-      await dio.download(
-        widget.url,
-        savePath,
-        onReceiveProgress: (received, total) {
-          if (total != -1 && mounted) {
-            setState(() => _downloadProgress = received / total);
-          }
-        },
-      );
-
-      // Register with the Offline Files screen — same SharedPreferences
-      // key and field names (source_url, saved_at) that
-      // _saveFilesOffline() already writes, so entries from either path
-      // are picked up consistently and dedup checks keep working.
-      final prefs = await SharedPreferences.getInstance();
-      final filesJson = prefs.getStringList('offline_files') ?? [];
-      final alreadySaved = filesJson.any((f) {
-        try {
-          return (jsonDecode(f) as Map)['source_url'] == widget.url;
-        } catch (_) {
-          return false;
-        }
-      });
-      if (!alreadySaved) {
-        filesJson.add(
-          jsonEncode({
-            'name': widget.fileName,
-            'path': savePath,
-            'source_url': widget.url,
-            'saved_at': DateTime.now().toIso8601String(),
-          }),
-        );
-        await prefs.setStringList('offline_files', filesJson);
-      }
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${widget.fileName} saved for offline access',
-              style: const TextStyle(fontFamily: 'Poppins'),
-            ),
-            backgroundColor: AppColors.success,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Download failed: $e',
-              style: const TextStyle(fontFamily: 'Poppins'),
-            ),
-            backgroundColor: AppColors.error,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isDownloading = false;
-          _downloadProgress = 0;
-        });
-      }
-    }
-  }
-
   Future<void> _initVideoPlayer() async {
     try {
       _videoController = VideoPlayerController.networkUrl(
@@ -386,31 +292,18 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
           ],
           // Download
           if (!widget.isLocal && widget.isStudent)
-            _isDownloading
-                ? Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        value: _downloadProgress > 0
-                            ? _downloadProgress
-                            : null,
-                        strokeWidth: 2,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  )
-                : IconButton(
-                    icon: Icon(
-                      Icons.download_rounded,
-                      color: _fileType == 'video'
-                          ? Colors.white
-                          : AppColors.primary,
-                    ),
-                    tooltip: 'Download',
-                    onPressed: _downloadFile,
-                  ),
+            IconButton(
+              icon: Icon(
+                Icons.download_rounded,
+                color: _fileType == 'video' ? Colors.white : AppColors.primary,
+              ),
+              tooltip: 'Download',
+              onPressed: () => FileDownloader.downloadAndOpen(
+                context: context,
+                url: widget.url,
+                fileName: widget.fileName,
+              ),
+            ),
         ],
       ),
       body: _buildBody(),
@@ -584,7 +477,11 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                     if (widget.isStudent) ...[
                       const SizedBox(height: 12),
                       TextButton.icon(
-                        onPressed: _downloadFile,
+                        onPressed: () => FileDownloader.downloadAndOpen(
+                          context: context,
+                          url: widget.url,
+                          fileName: widget.fileName,
+                        ),
                         icon: const Icon(
                           Icons.download_rounded,
                           size: 18,
