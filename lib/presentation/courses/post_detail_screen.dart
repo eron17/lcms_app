@@ -453,10 +453,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   String _formatDate(String dateStr) {
     final date = DateTime.parse(dateStr).toLocal();
     final now = DateTime.now();
-    final diff = now.difference(date);
-    if (diff.inDays == 0) return 'Today';
-    if (diff.inDays == 1) return 'Yesterday';
-    if (diff.inDays < 7) return '${diff.inDays} days ago';
+    final isToday =
+        date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day;
+    if (isToday) {
+      final hour = date.hour > 12
+          ? date.hour - 12
+          : (date.hour == 0 ? 12 : date.hour);
+      final ampm = date.hour >= 12 ? 'PM' : 'AM';
+      final minute = date.minute.toString().padLeft(2, '0');
+      return '$hour:$minute $ampm';
+    }
     final months = [
       'Jan',
       'Feb',
