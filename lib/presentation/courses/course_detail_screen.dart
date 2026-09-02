@@ -588,6 +588,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                             .update({
                                               ...editData,
                                               'updated_at': DateTime.now()
+                                                  .toUtc()
                                                   .toIso8601String(),
                                             })
                                             .eq('id', existing['id']);
@@ -616,6 +617,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                                 instructionsController.text
                                                     .trim(),
                                             'created_at': DateTime.now()
+                                                .toUtc()
                                                 .toIso8601String(),
                                           })
                                           .select()
@@ -1633,6 +1635,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                             .update({
                                               ...editData,
                                               'updated_at': DateTime.now()
+                                                  .toUtc()
                                                   .toIso8601String(),
                                             })
                                             .eq('id', existing['id']);
@@ -1702,6 +1705,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                                       .toIso8601String()
                                                 : null,
                                             'created_at': DateTime.now()
+                                                .toUtc()
                                                 .toIso8601String(),
                                           })
                                           .select()
@@ -1936,6 +1940,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                     'title': titleController.text.trim(),
                                     'order_index': _topics.length,
                                     'created_at': DateTime.now()
+                                        .toUtc()
                                         .toIso8601String(),
                                   });
                                   if (!context.mounted) return;
