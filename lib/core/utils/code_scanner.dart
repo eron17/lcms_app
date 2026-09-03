@@ -3,7 +3,16 @@
 ///
 /// Pure Dart, regex-based heuristics only — no external packages.
 class CodeScanner {
-  CodeScanner(this.sourceCode);
+  // Circuit breaker against a pathologically large submission causing
+  // excessive regex work on whichever client happens to process grading
+  // (GradingService runs on every signed-in client, not a trusted
+  // server-only process) — far beyond any realistic C++ assignment.
+  static const int _maxSourceLength = 200000;
+
+  CodeScanner(String sourceCode)
+      : sourceCode = sourceCode.length > _maxSourceLength
+            ? sourceCode.substring(0, _maxSourceLength)
+            : sourceCode;
 
   final String sourceCode;
 
@@ -141,11 +150,26 @@ class CodeScanner {
   bool _matchesPattern(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return false;
+    // Match against code with comments and string-literal bodies removed,
+    // so a required keyword or forbidden pattern can't be satisfied just
+    // by mentioning it in a comment or a dummy string instead of actually
+    // using it in real code.
+    final codeOnly = _codeWithoutCommentsAndStrings;
     if (RegExp(r'^\w+$').hasMatch(trimmed)) {
-      return RegExp('\\b${RegExp.escape(trimmed)}\\b').hasMatch(sourceCode);
+      return RegExp('\\b${RegExp.escape(trimmed)}\\b').hasMatch(codeOnly);
     }
-    return sourceCode.contains(trimmed);
+    return codeOnly.contains(trimmed);
   }
+
+  static final RegExp _commentOrStringLiteral = RegExp(
+    r'//[^\n]*'
+    r'|/\*[\s\S]*?\*/'
+    r'|"(?:\\.|[^"\\])*"'
+    r"|'(?:\\.|[^'\\])*'",
+  );
+
+  String get _codeWithoutCommentsAndStrings =>
+      sourceCode.replaceAll(_commentOrStringLiteral, ' ');
 
   bool anyForbiddenFound(List<String> patterns) {
     if (patterns.isEmpty) return false;
