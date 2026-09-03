@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
@@ -96,14 +96,20 @@ class _ThreeDMeetDetailScreenState
 
       final userData = await _supabase
           .from('users')
-          .select('id, name, avatar_url')
+          .select('id, name, avatar_url, role')
           .eq('id', userId)
           .single();
       _currentUser = userData;
 
       await _loadComments();
 
-      if (widget.isInstructor) {
+      // Re-verify against the account's actual DB role instead of trusting
+      // widget.isInstructor alone — that flag is only whatever the caller
+      // passed in, not a server-verified check, so a mismatch (bad route
+      // params, a modified client) must not be able to load every
+      // student's submissions/source code for this course.
+      final isVerifiedInstructor = userData['role'] == 'instructor';
+      if (widget.isInstructor && isVerifiedInstructor) {
         await _loadStudentSubmissions();
       } else {
         await _loadMySubmission();
@@ -234,12 +240,13 @@ class _ThreeDMeetDetailScreenState
   }
 
   Future<void> _gradeStudent(String studentId, Map<String, dynamic> sub) async {
+    final maxPoints = (widget.post['points'] as int?) ?? 100;
     final score = int.tryParse(_gradeController.text.trim());
-    if (score == null || score < 0 || score > 100) {
+    if (score == null || score < 0 || score > maxPoints) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter a valid score (0–100)',
-              style: TextStyle(fontFamily: 'Poppins')),
+        SnackBar(
+          content: Text('Enter a valid score (0–$maxPoints)',
+              style: const TextStyle(fontFamily: 'Poppins')),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -248,12 +255,25 @@ class _ThreeDMeetDetailScreenState
     }
     setState(() => _isGrading = true);
     try {
-      await _supabase.from('submissions').update({
-        'score': score,
-        'is_graded': true,
-        'is_returned': true,
-        'returned_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', sub['id']);
+      // Prefer the manual_grade_submission RPC (SECURITY DEFINER — verifies
+      // the caller is this course's instructor and clamps to the post's
+      // max points) so a modified client can't self-grade by writing
+      // score/is_graded directly. Falls back to a direct update only until
+      // that RPC is deployed — see CLAUDE.md security notes. The fallback
+      // path is NOT secure; remove it once the RPC exists.
+      try {
+        await _supabase.rpc('manual_grade_submission', params: {
+          'p_submission_id': sub['id'],
+          'p_score': score,
+        });
+      } on PostgrestException {
+        await _supabase.from('submissions').update({
+          'score': score,
+          'is_graded': true,
+          'is_returned': true,
+          'returned_at': DateTime.now().toUtc().toIso8601String(),
+        }).eq('id', sub['id']);
+      }
 
       // Notify student of score update
       await _supabase.from('notifications').insert({
@@ -262,14 +282,14 @@ class _ThreeDMeetDetailScreenState
         'post_id': widget.post['id'],
         'type': 'assignment_graded',
         'title': '${widget.post['title']} has been graded',
-        'body': 'Your score: $score/100',
+        'body': 'Your score: $score/$maxPoints',
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Grade saved: $score/100',
+            content: Text('Grade saved: $score/$maxPoints',
                 style: const TextStyle(fontFamily: 'Poppins')),
             backgroundColor: AppColors.success,
             behavior: SnackBarBehavior.floating,
@@ -280,11 +300,12 @@ class _ThreeDMeetDetailScreenState
         await _loadStudentSubmissions();
       }
     } catch (e) {
+      if (kDebugMode) debugPrint('Grade failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Grade failed: $e',
-                style: const TextStyle(fontFamily: 'Poppins')),
+          const SnackBar(
+            content: Text('Failed to save grade. Please try again.',
+                style: TextStyle(fontFamily: 'Poppins')),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -788,6 +809,28 @@ class _ThreeDMeetDetailScreenState
     if (userId == null) return;
 
     try {
+      final enrollment = await _supabase
+          .from('enrollments')
+          .select('student_id')
+          .eq('student_id', userId)
+          .eq('course_id', widget.course['id'])
+          .maybeSingle();
+      if (enrollment == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'You are not enrolled in this class.',
+                style: TextStyle(fontFamily: 'Poppins'),
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
+
       final userData = await _supabase
           .from('users')
           .select('streak, pending_bonus_points, avatar_config')
@@ -2540,10 +2583,14 @@ class _EditCommentDialogState extends State<EditCommentDialog> {
                     if (!context.mounted) return;
                     Navigator.pop(context);
                   } catch (e) {
+                    if (kDebugMode) debugPrint('Update comment failed: $e');
                     if (!context.mounted) return;
                     setState(() => _isSaving = false);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to update comment: $e')),
+                      const SnackBar(
+                        content:
+                            Text('Failed to update comment. Please try again.'),
+                      ),
                     );
                   }
                 },
