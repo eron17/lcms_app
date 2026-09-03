@@ -1595,7 +1595,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
               width: double.infinity,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF7B2FBE), Color(0xFF2196F3)],
+                  colors: [AppColors.accent, AppColors.studentColor],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 ),
@@ -1672,14 +1672,14 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF7B2FBE), Color(0xFF1565C0)],
+                  colors: [AppColors.accent, AppColors.primaryDark],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF7B2FBE).withValues(alpha: 0.3),
+                    color: AppColors.accent.withValues(alpha: 0.3),
                     blurRadius: 20,
                     offset: const Offset(0, 8),
                   ),
@@ -1971,11 +1971,13 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     final c = colors[index % colors.length];
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
-    return GestureDetector(
-      onTap: () => context.push(
+    return PressableScale(
+      onPressed: () => context.push(
         AppRoutes.courseDetail,
         extra: {'course': course, 'isInstructor': true},
       ),
+      scaleFactor: 0.98,
+      opacityFactor: 0.9,
       child: Container(
         decoration: BoxDecoration(
           color: context.isDark ? const Color(0xFF111d33) : Colors.white,
@@ -3787,14 +3789,14 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             width: double.infinity,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF7B2FBE), Color(0xFF1565C0)],
+                colors: [AppColors.accent, AppColors.primaryDark],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(28),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF7B2FBE).withValues(alpha: 0.3),
+                  color: AppColors.accent.withValues(alpha: 0.3),
                   blurRadius: 20,
                   offset: const Offset(0, 8),
                 ),
@@ -3803,7 +3805,9 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             child: Column(
               children: [
                 PressableScale(
-                  onPressed: () async {
+                  onPressed: _currentUser == null
+                      ? null
+                      : () async {
                     final updated = await Navigator.push(
                       context,
                       MaterialPageRoute(
