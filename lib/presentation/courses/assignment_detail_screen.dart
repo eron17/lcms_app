@@ -1,6 +1,6 @@
 // lib/presentation/courses/assignment_detail_screen.dart
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
@@ -38,6 +38,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   String? _currentUserName;
   String? _currentUserId;
   String? _currentUserAvatarUrl;
+  String? _currentUserRole;
 
   // Instructor
   List<Map<String, dynamic>> _students = [];
@@ -81,11 +82,19 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     _subscribeToComments();
     _acceptSubmissions = widget.post['accept_submissions'] ?? true;
     _subscribeToPostChanges();
-    _loadCurrentUser();
-    if (widget.isInstructor) {
-      _loadStudentsAndSubmissions();
+    _initRoleGatedData();
+  }
+
+  // Re-verifies widget.isInstructor against the account's actual DB role
+  // before deciding which data to load — that flag is only whatever the
+  // caller passed in, not a server-verified check, so a mismatch must not
+  // be able to load every student's submissions/file URLs/scores.
+  Future<void> _initRoleGatedData() async {
+    await _loadCurrentUser();
+    if (widget.isInstructor && _currentUserRole == 'instructor') {
+      await _loadStudentsAndSubmissions();
     } else {
-      _loadMySubmission();
+      await _loadMySubmission();
     }
   }
 
@@ -112,9 +121,10 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       _currentUserId = userId;
       final data = await _supabase
           .from('users')
-          .select('name, avatar_url')
+          .select('name, avatar_url, role')
           .eq('id', userId)
           .single();
+      _currentUserRole = data['role'] as String?;
       if (mounted) {
         setState(() {
           _currentUserName = data['name'];
@@ -717,6 +727,20 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       return;
     }
 
+    const maxFileSizeBytes = 25 * 1024 * 1024; // 25MB per file
+    final oversizedFile = result.files
+        .where((f) => f.size > maxFileSizeBytes)
+        .firstOrNull;
+    if (oversizedFile != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"${oversizedFile.name}" exceeds the 25MB file size limit.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) {
@@ -809,10 +833,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       }
 
     } catch (e) {
+      if (kDebugMode) debugPrint('Upload failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Upload failed: $e'),
+          const SnackBar(
+            content: Text('Upload failed. Please try again.'),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -919,10 +944,13 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         );
       }
     } catch (e) {
-      debugPrint('Unsubmit error: $e');
+      if (kDebugMode) debugPrint('Unsubmit error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text('Failed to unsubmit. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -1054,11 +1082,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         );
       }
     } catch (e) {
-      debugPrint('Turn in error: $e');
+      if (kDebugMode) debugPrint('Turn in error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
+          const SnackBar(
+            content: Text('Failed to turn in your work. Please try again.'),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -1174,22 +1202,12 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         }
         return;
       }
-      await _supabase
-          .from('submissions')
-          .update({
-            'score': score,
-            'is_graded': true,
-            'is_returned': true,
-            'returned_at': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', submission!['id']);
-
       // ─── Assignment XP: score × 0.20, +streak bonus on a perfect score ───
       // Assignment grading does NOT change the streak — only 3D Meet does.
       // Note: this formula assumes a 0-100 scale; an assignment whose
       // _maxPoints isn't 100 will get disproportionate XP and can never
       // trigger the streak bonus (which requires score == 100 exactly).
-      final oldXpAwarded = (submission['xp_awarded'] as int?) ?? 0;
+      final oldXpAwarded = (submission!['xp_awarded'] as int?) ?? 0;
 
       final baseXp = (score * 0.20).round();
       int xpAwarded = baseXp;
@@ -1205,10 +1223,34 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         xpAwarded = baseXp + (currentStreak * 10);
       }
 
-      await _supabase
-          .from('submissions')
-          .update({'xp_awarded': xpAwarded})
-          .eq('id', submission['id']);
+      // Prefer the grade_assignment_submission RPC (SECURITY DEFINER —
+      // verifies the caller is this course's instructor and clamps to the
+      // post's max points) so a modified client can't self-grade by
+      // writing score/is_graded/xp_awarded directly. Falls back to the
+      // original two direct updates only until that RPC is deployed —
+      // see CLAUDE.md security notes. The fallback path is NOT secure;
+      // remove it once the RPC exists.
+      try {
+        await _supabase.rpc('grade_assignment_submission', params: {
+          'p_submission_id': submission['id'],
+          'p_score': score,
+          'p_xp_awarded': xpAwarded,
+        });
+      } on PostgrestException {
+        await _supabase
+            .from('submissions')
+            .update({
+              'score': score,
+              'is_graded': true,
+              'is_returned': true,
+              'returned_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('id', submission['id']);
+        await _supabase
+            .from('submissions')
+            .update({'xp_awarded': xpAwarded})
+            .eq('id', submission['id']);
+      }
 
       // RLS blocks instructors from updating a student's xp column
       // directly, so this goes through a SECURITY DEFINER RPC instead.
@@ -1253,10 +1295,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         );
       }
     } catch (e) {
+      if (kDebugMode) debugPrint('Grade submission failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
+          const SnackBar(
+            content: Text('Failed to save grade. Please try again.'),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
           ),
@@ -1270,10 +1313,21 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   Future<void> _toggleAcceptSubmissions() async {
     try {
       final newValue = !_acceptSubmissions;
-      await _supabase
-          .from('posts')
-          .update({'accept_submissions': newValue})
-          .eq('id', widget.post['id']);
+      // Prefer the set_post_accept_submissions RPC (SECURITY DEFINER —
+      // verifies the caller is this course's instructor) so a student
+      // can't open/close submissions with a direct Supabase call. Falls
+      // back to the direct update only until that RPC is deployed.
+      try {
+        await _supabase.rpc('set_post_accept_submissions', params: {
+          'p_post_id': widget.post['id'],
+          'p_accept_submissions': newValue,
+        });
+      } on PostgrestException {
+        await _supabase
+            .from('posts')
+            .update({'accept_submissions': newValue})
+            .eq('id', widget.post['id']);
+      }
       if (mounted) setState(() => _acceptSubmissions = newValue);
     } catch (e) {
       debugPrint('Toggle: $e');
@@ -2191,6 +2245,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                       Expanded(
                         child: TextField(
                           controller: _myPrivateCommentController,
+                          maxLength: 500,
                           style: TextStyle(
                             fontFamily: 'Poppins',
                             fontSize: 13,
@@ -3286,6 +3341,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                       Expanded(
                         child: TextField(
                           controller: _privateCommentController,
+                          maxLength: 500,
                           style: TextStyle(
                             fontFamily: 'Poppins',
                             fontSize: 13,
