@@ -134,6 +134,11 @@ class CourseDetailScreen extends ConsumerStatefulWidget {
 
 class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     with TickerProviderStateMixin {
+  // "Live" accent — deliberately distinct from AppColors.success, matches
+  // the same constant already used in three_d_meet_detail_screen.dart and
+  // post_detail_screen.dart.
+  static const Color _liveGreen = Color(0xFF22C55E);
+
   // ─── State ───────────────────────────────────────────────
   late int _currentTab;
   final _supabase = Supabase.instance.client;
@@ -141,6 +146,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   Map<String, dynamic>? _localCourse;
   Map<String, dynamic> get courseData => _localCourse ?? widget.course;
+  // True when the class is archived — either flagged on the course data
+  // itself or passed in directly — and write actions should be disabled.
+  bool get _isInteractionDisabled =>
+      widget.course['is_archived'] == true || widget.isArchived;
   // Stream data
   List<Map<String, dynamic>> _streamPosts = [];
   bool _isLoadingStream = true;
@@ -781,7 +790,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       '3d_meet': {
         'label': '3D Meet Coding',
         'icon': Icons.view_in_ar_outlined,
-        'color': const Color(0xFF22C55E),
+        'color': _liveGreen,
       },
       'material': {
         'label': 'Lesson Material',
@@ -791,7 +800,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       'assignment': {
         'label': 'Assignment',
         'icon': Icons.assignment_outlined,
-        'color': const Color(0xFFFF6B35),
+        'color': AppColors.warning,
       },
     };
     final config = typeConfig[postType]!;
@@ -939,7 +948,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                           icon: assessmentName != null
                               ? Icons.check_circle
                               : Icons.assignment_outlined,
-                          color: const Color(0xFFFF6B35),
+                          color: AppColors.warning,
                           isUploading: isUploadingAssessment,
                           onTap: () async {
                             final result = await FilePicker.platform.pickFiles(
@@ -982,14 +991,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFFFF6B35,
-                            ).withValues(alpha: 0.08),
+                            color: AppColors.warning.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: const Color(
-                                0xFFFF6B35,
-                              ).withValues(alpha: 0.25),
+                              color: AppColors.warning.withValues(alpha: 0.25),
                             ),
                           ),
                           child: Column(
@@ -999,7 +1004,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                 children: [
                                   const Icon(
                                     Icons.settings_suggest_outlined,
-                                    color: Color(0xFFFF6B35),
+                                    color: AppColors.warning,
                                     size: 20,
                                   ),
                                   const SizedBox(width: 10),
@@ -1125,14 +1130,10 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                         Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: const Color(
-                              0xFF22C55E,
-                            ).withValues(alpha: 0.08),
+                            color: _liveGreen.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: const Color(
-                                0xFF22C55E,
-                              ).withValues(alpha: 0.25),
+                              color: _liveGreen.withValues(alpha: 0.25),
                             ),
                           ),
                           child: Column(
@@ -1142,7 +1143,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                 children: [
                                   const Icon(
                                     Icons.calendar_month_outlined,
-                                    color: Color(0xFF22C55E),
+                                    color: _liveGreen,
                                     size: 20,
                                   ),
                                   const SizedBox(width: 10),
@@ -1219,14 +1220,14 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                         ),
                                         decoration: BoxDecoration(
                                           color: isSelected
-                                              ? const Color(0xFF22C55E)
+                                              ? _liveGreen
                                               : context.cardColor,
                                           borderRadius: BorderRadius.circular(
                                             10,
                                           ),
                                           border: Border.all(
                                             color: isSelected
-                                                ? const Color(0xFF22C55E)
+                                                ? _liveGreen
                                                 : context.borderColor,
                                           ),
                                         ),
@@ -2616,11 +2617,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   Color _getPostColor(String type) {
     switch (type) {
       case '3d_meet':
-        return const Color(0xFF22C55E);
+        return _liveGreen;
       case 'material':
         return AppColors.primary;
       case 'assignment':
-        return const Color(0xFFFF6B35);
+        return AppColors.warning;
       case 'announcement':
         return AppColors.accent;
       default:
@@ -2811,7 +2812,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isArchived = widget.course['is_archived'] == true || widget.isArchived;
+    final isArchived = _isInteractionDisabled;
     final pages = [
       _buildStreamTab(),
       _buildCourseworkTab(),
@@ -3294,7 +3295,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       {
         'label': '3D Meet Coding',
         'icon': Icons.view_in_ar_outlined,
-        'color': const Color(0xFF22C55E),
+        'color': _liveGreen,
         'type': '3d_meet',
       },
       {
@@ -3306,7 +3307,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       {
         'label': 'Assignment',
         'icon': Icons.assignment_outlined,
-        'color': const Color(0xFFFF6B35),
+        'color': AppColors.warning,
         'type': 'assignment',
       },
       {
@@ -3329,8 +3330,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
             ...fabItems.map(
               (item) => Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: GestureDetector(
-                  onTap: () {
+                child: PressableScale(
+                  onPressed: () {
                     setState(() => _fabExpanded = false);
                     if (item['type'] == 'topic') {
                       _showCreateTopicDialog();
@@ -3401,8 +3402,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           ],
 
           // Main FAB
-          GestureDetector(
-            onTap: () => setState(() => _fabExpanded = !_fabExpanded),
+          PressableScale(
+            onPressed: () => setState(() => _fabExpanded = !_fabExpanded),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               width: 56,
@@ -3442,7 +3443,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       );
     }
 
-    final isArchived = widget.course['is_archived'] == true || widget.isArchived;
+    final isArchived = _isInteractionDisabled;
 
     return RefreshIndicator(
       color: AppColors.primary,
@@ -3702,14 +3703,14 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                       fontFamily: 'Poppins',
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
-                                      color: Color(0xFFFF6B35),
+                                      color: AppColors.warning,
                                     ),
                                   ),
                                 if (type == '3d_meet')
                                   const Icon(
                                     Icons.videogame_asset_outlined,
                                     size: 14,
-                                    color: Color(0xFF22C55E),
+                                    color: _liveGreen,
                                   ),
                               ],
                             ),
@@ -3836,8 +3837,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       ),
       child: Column(
         children: [
-          GestureDetector(
-            onTap: () =>
+          PressableScale(
+            onPressed: () =>
                 setState(() => _expandedTopics[topicKey] = !isExpanded),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -4005,7 +4006,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                   decoration: BoxDecoration(
                     color:
                         (scheduleStatus == 'live'
-                                ? const Color(0xFF22C55E)
+                                ? _liveGreen
                                 : context.textHint)
                             .withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
@@ -4021,7 +4022,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                             : Icons.check_circle_rounded,
                         size: 10,
                         color: scheduleStatus == 'live'
-                            ? const Color(0xFF22C55E)
+                            ? _liveGreen
                             : context.textHint,
                       ),
                       const SizedBox(width: 4),
@@ -4036,7 +4037,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                           color: scheduleStatus == 'live'
-                              ? const Color(0xFF22C55E)
+                              ? _liveGreen
                               : context.textHint,
                         ),
                       ),
@@ -4237,8 +4238,8 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           // Only show the 3-dot menu if the current user IS the instructor
           // and we are NOT looking at the instructor tile itself.
           if (widget.isInstructor && !isInstructorTile)
-            GestureDetector(
-              onTap: () => _showRemoveStudentDialog(user),
+            PressableScale(
+              onPressed: () => _showRemoveStudentDialog(user),
               child: Icon(
                 Icons.more_vert,
                 color: context.textSecondary,
@@ -4290,7 +4291,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 14,
-                color: textColor.withValues(alpha: 0.5),
+                color: context.textHint,
                 height: 1.5,
               ),
             ),
