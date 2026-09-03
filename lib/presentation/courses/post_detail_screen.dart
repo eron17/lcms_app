@@ -298,6 +298,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           content: TextField(
             controller: controller,
             autofocus: true,
+            maxLength: 500,
             style: TextStyle(color: context.textPrimary, fontFamily: 'Poppins'),
             decoration: InputDecoration(
               hintText: 'Edit your message...',
@@ -328,11 +329,23 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       setDialogState(() => isSaving = true);
 
                       try {
-                        // 1. Await the database update
-                        await _supabase
-                            .from('comments')
-                            .update({'text': newText})
-                            .eq('id', comment['id']);
+                        // Prefer the update_own_comment RPC (SECURITY
+                        // DEFINER — verifies the caller owns this comment)
+                        // so a modified client can't edit another user's
+                        // comment with a direct Supabase call. Falls back
+                        // to the direct update only until that RPC is
+                        // deployed — see CLAUDE.md security notes.
+                        try {
+                          await _supabase.rpc('update_own_comment', params: {
+                            'p_comment_id': comment['id'],
+                            'p_text': newText,
+                          });
+                        } on PostgrestException {
+                          await _supabase
+                              .from('comments')
+                              .update({'text': newText})
+                              .eq('id', comment['id']);
+                        }
 
                         if (!context.mounted) return;
                         Navigator.pop(context); // Close dialog
@@ -346,8 +359,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                         if (!context.mounted) return;
                         setDialogState(() => isSaving = false);
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Update failed: $e'),
+                          const SnackBar(
+                            content: Text('Failed to update comment. Please try again.'),
                             backgroundColor: Colors.red,
                           ),
                         );
@@ -379,7 +392,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   Future<void> _deleteComment(String commentId) async {
     try {
-      await _supabase.from('comments').delete().eq('id', commentId);
+      // Prefer the delete_own_comment RPC (SECURITY DEFINER — verifies the
+      // caller owns this comment or is the course instructor) so a
+      // modified client can't delete another user's comment with a direct
+      // Supabase call. Falls back to the direct delete only until that
+      // RPC is deployed — see CLAUDE.md security notes.
+      try {
+        await _supabase.rpc('delete_own_comment', params: {
+          'p_comment_id': commentId,
+        });
+      } on PostgrestException {
+        await _supabase.from('comments').delete().eq('id', commentId);
+      }
       await _loadComments();
     } catch (e) {
       debugPrint('Delete comment: $e');
@@ -787,6 +811,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           Expanded(
             child: TextField(
               controller: _commentController,
+              maxLength: 500,
               style: TextStyle(
                 fontFamily: 'Poppins',
                 fontSize: 14,
