@@ -520,10 +520,13 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
 
   // ─── Actions ─────────────────────────────────────────────
 
-  String _generateClassCode() => List.generate(
-    6,
-    (_) => 'abcdefghijklmnopqrstuvwxyz0123456789'[Random().nextInt(36)],
-  ).join();
+  String _generateClassCode() {
+    final random = Random.secure();
+    return List.generate(
+      6,
+      (_) => 'abcdefghijklmnopqrstuvwxyz0123456789'[random.nextInt(36)],
+    ).join();
+  }
 
   void _showCreateCourseDialog() {
     final titleController = TextEditingController();
@@ -1016,10 +1019,13 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 Colors.green,
                 () async {
                   Navigator.pop(context);
+                  final userId = _supabase.auth.currentUser?.id;
+                  if (userId == null) return;
                   await _supabase
                       .from('courses')
                       .update({'is_archived': false, 'is_published': true})
-                      .eq('id', course['id']);
+                      .eq('id', course['id'])
+                      .eq('instructor_id', userId);
                   await _loadCourses();
                 },
               )
@@ -1070,10 +1076,13 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
 
   Future<void> _archiveCourse(String courseId) async {
     try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
       await _supabase
           .from('courses')
           .update({'is_published': false, 'is_archived': true})
-          .eq('id', courseId);
+          .eq('id', courseId)
+          .eq('instructor_id', userId);
       await _loadCourses();
     } catch (e) {
       debugPrint('Archive error: $e');
@@ -1123,7 +1132,13 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
 
   Future<void> _deleteCourse(String courseId) async {
     try {
-      await _supabase.from('courses').delete().eq('id', courseId);
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+      await _supabase
+          .from('courses')
+          .delete()
+          .eq('id', courseId)
+          .eq('instructor_id', userId);
       await _loadCourses();
     } catch (e) {
       debugPrint('Delete error: $e');
@@ -1173,6 +1188,11 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     );
     if (confirmed != true) return;
     try {
+      // Clear any biometric-login credentials too — signing out should not
+      // leave a fingerprint-unlockable password sitting in secure storage
+      // for whoever uses this device next.
+      await _storage.delete(key: 'user_email');
+      await _storage.delete(key: 'user_password');
       await _supabase.auth.signOut();
       if (mounted) context.go(AppRoutes.opening);
     } catch (e) {
