@@ -23,6 +23,10 @@ class AutoGrader {
     bool isThreeDMeet = false,
     int correctSubmissionRank = 1,
   }) {
+    // Defensive: totalPoints should always be a positive value set on the
+    // post, but clamp it so a bad/missing value can't crash the final
+    // score.clamp(0, totalPoints) call below with a RangeError.
+    totalPoints = totalPoints < 0 ? 0 : totalPoints;
     final scanner = CodeScanner(sourceCode);
     final feedback = <String>[];
     int score = 0;
@@ -63,7 +67,7 @@ class AutoGrader {
     if (requiredKeywords.isEmpty) {
       keywordScore = (totalPoints * _keywordWeight).round();
       feedback.add('No required keywords set — keyword check skipped');
-    } else if (foundCount == requiredKeywords.length) {
+    } else if (passedKeywords) {
       // All keywords found → full 10%
       keywordScore = (totalPoints * _keywordWeight).round();
       feedback.add('All required keywords used');
