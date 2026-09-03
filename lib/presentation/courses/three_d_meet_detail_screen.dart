@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
+import '../../shared/widgets/pressable_scale.dart';
 import 'code_viewer_screen.dart';
 import 'file_viewer_screen.dart';
 
@@ -30,6 +31,10 @@ class _ThreeDMeetDetailScreenState
     with SingleTickerProviderStateMixin {
   final _supabase = Supabase.instance.client;
   late TabController _tabController;
+
+  // "Live" accent — deliberately distinct from AppColors.success, used
+  // consistently for the 3D MEET badge / live session card / join button.
+  static const Color _liveGreen = Color(0xFF22C55E);
 
   // ── Shared ────────────────────────────────────────────────────
   bool _isLoading = true;
@@ -476,7 +481,7 @@ class _ThreeDMeetDetailScreenState
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF22C55E).withValues(alpha: 0.15),
+                  color: _liveGreen.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
@@ -485,7 +490,7 @@ class _ThreeDMeetDetailScreenState
                     fontFamily: 'Poppins',
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF22C55E),
+                    color: _liveGreen,
                   ),
                 ),
               ),
@@ -883,7 +888,7 @@ class _ThreeDMeetDetailScreenState
     String cardSub;
 
     if (isLive) {
-      cardColor = const Color(0xFF22C55E);
+      cardColor = _liveGreen;
       cardIcon = Icons.cast_connected_rounded;
       cardTitle = 'Session is live now';
       cardSub = timeInfo.isNotEmpty
@@ -956,7 +961,7 @@ class _ThreeDMeetDetailScreenState
     IconData btnIcon;
 
     if (isLive) {
-      btnColor = const Color(0xFF22C55E);
+      btnColor = _liveGreen;
       btnLabel = 'Join 3D Classroom';
       btnSub = 'Session is live now';
       btnIcon = Icons.videogame_asset_rounded;
@@ -973,8 +978,8 @@ class _ThreeDMeetDetailScreenState
       btnIcon = Icons.videogame_asset_off_outlined;
     }
 
-    return GestureDetector(
-      onTap: isLive ? () => _launchUnity(widget.post) : null,
+    return PressableScale(
+      onPressed: isLive ? () => _launchUnity(widget.post) : null,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1487,8 +1492,10 @@ class _ThreeDMeetDetailScreenState
       statusLabel = 'Not submitted';
     }
 
-    return GestureDetector(
-      onTap: () {
+    return PressableScale(
+      scaleFactor: 1.0,
+      opacityFactor: 0.5,
+      onPressed: () {
         setState(() => _selectedStudent = student);
         if (student['submission'] != null) {
           _loadPrivateComments(student['id']);
@@ -1721,6 +1728,36 @@ class _ThreeDMeetDetailScreenState
                           color: AppColors.primary,
                           size: 18),
                       dense: true,
+                      onTap: () async {
+                        final fileLabel = i < fileNames.length
+                            ? fileNames[i]
+                            : 'File ${i + 1}';
+                        final url = fileUrls[i];
+                        if (kIsWeb) {
+                          final cleanUrl = url.split('?').first;
+                          final viewerUrl =
+                              'https://docs.google.com/viewer'
+                              '?url=${Uri.encodeComponent(cleanUrl)}'
+                              '&embedded=false';
+                          final uri = Uri.parse(viewerUrl);
+                          if (await canLaunchUrl(uri)) {
+                            await launchUrl(uri,
+                                mode: LaunchMode.externalApplication);
+                          }
+                        } else {
+                          if (!context.mounted) return;
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => FileViewerScreen(
+                                url: url,
+                                fileName: fileLabel,
+                                isStudent: !widget.isInstructor,
+                              ),
+                            ),
+                          );
+                        }
+                      },
                     ),
                   );
                 }),
