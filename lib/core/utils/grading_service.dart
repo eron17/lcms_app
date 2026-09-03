@@ -129,24 +129,27 @@ class GradingService {
       }).eq('id', submissionId);
 
       // ── Step 6: Award per-class XP and update the per-class streak ───────
-      if (xpAwarded != 0) {
-        await _supabase.rpc(
-          'increment_student_xp',
+      // Independent writes — run concurrently instead of sequentially to
+      // shave latency off the grading round-trip Unity is polling for.
+      await Future.wait([
+        if (xpAwarded != 0)
+          _supabase.rpc(
+            'increment_student_xp',
+            params: {
+              'p_student_id': studentId,
+              'p_course_id': courseId,
+              'p_xp': xpAwarded,
+            },
+          ),
+        _supabase.rpc(
+          'update_class_streak',
           params: {
             'p_student_id': studentId,
             'p_course_id': courseId,
-            'p_xp': xpAwarded,
+            'p_activate': isGenuineHundred,
           },
-        );
-      }
-      await _supabase.rpc(
-        'update_class_streak',
-        params: {
-          'p_student_id': studentId,
-          'p_course_id': courseId,
-          'p_activate': isGenuineHundred,
-        },
-      );
+        ),
+      ]);
 
       // ── Step 7: Update leaderboard (if you have one) ────────────────────
       final updatedUser = await _supabase
