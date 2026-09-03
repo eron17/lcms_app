@@ -36,6 +36,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   String? _selectedLeaderboardCourseId; // null = All Classes
   RealtimeChannel? _xpChannel;
   RealtimeChannel? _enrollmentChannel;
+  RealtimeChannel? _notificationChannel;
   final _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
@@ -134,7 +135,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     } else {
       await _storage.delete(key: 'user_email');
       await _storage.delete(key: 'user_password');
-      setState(() => _biometricsEnabled = false);
+      if (mounted) setState(() => _biometricsEnabled = false);
     }
   }
 
@@ -238,6 +239,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
   void dispose() {
     _xpChannel?.unsubscribe();
     _enrollmentChannel?.unsubscribe();
+    _notificationChannel?.unsubscribe();
     _fabController.dispose();
     _glowController.dispose();
     super.dispose();
@@ -404,7 +406,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     if (userId == null) return;
 
     // Real-time listener for the notifications table
-    _supabase
+    _notificationChannel = _supabase
         .channel('public:notifications')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
@@ -516,6 +518,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                     decoration: InputDecoration(
                       hintText: 'e.g. kfs1fy',
                       hintStyle: TextStyle(
+                        fontFamily: 'Poppins',
                         color: context.textHint,
                         letterSpacing: 1,
                       ),
@@ -839,9 +842,11 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           .eq('course_id', courseId);
 
       // Refresh UI
-      setState(() {
-        _enrolledCourses.removeWhere((course) => course['id'] == courseId);
-      });
+      if (mounted) {
+        setState(() {
+          _enrolledCourses.removeWhere((course) => course['id'] == courseId);
+        });
+      }
       await _loadEnrolledCourses();
 
       if (mounted) {
@@ -1050,7 +1055,13 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                 ...List.generate(navItems.length, (i) {
                   final isActive = _currentIndex == i;
                   return GestureDetector(
-                    onTap: () => setState(() => _currentIndex = i),
+                    onTap: () {
+                      setState(() => _currentIndex = i);
+                      // Safety net: refresh per-class XP/streak when Profile
+                      // tab opens, in case the realtime update was missed —
+                      // matches the mobile bottom nav's same guard.
+                      if (i == 2) _loadEnrolledCourses();
+                    },
                     child: Container(
                       margin: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -1579,6 +1590,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           Text(
             _currentUser?.name.split(' ').first ?? 'Student',
             style: const TextStyle(
+              fontFamily: 'Poppins',
               fontSize: 26,
               fontWeight: FontWeight.w800,
               color: Colors.white,
@@ -1697,6 +1709,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                       child: Text(
                         course['course_code'] ?? 'CODE',
                         style: const TextStyle(
+                          fontFamily: 'Poppins',
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
                           fontSize: 10,
@@ -1731,6 +1744,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                   Text(
                     course['title'] ?? '',
                     style: TextStyle(
+                      fontFamily: 'Poppins',
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
                       color: textColor,
@@ -1753,6 +1767,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                       Text(
                         course['instructor_name'] ?? 'Instructor',
                         style: TextStyle(
+                          fontFamily: 'Poppins',
                           color: textColor.withValues(alpha: 0.6),
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
@@ -2279,6 +2294,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
             Text(
               '${user['xp'] ?? 0} XP',
               style: TextStyle(
+                fontFamily: 'Poppins',
                 fontSize: 10,
                 color: medalColors[rank],
                 fontWeight: FontWeight.w900,
@@ -2326,6 +2342,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                 child: Text(
                   '#$rank',
                   style: TextStyle(
+                    fontFamily: 'Poppins',
                     fontWeight: FontWeight.w800,
                     color: rowColor.withValues(alpha: 0.4),
                     fontSize: 13,
@@ -2350,6 +2367,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                     child: Text(
                       name[0].toUpperCase(),
                       style: TextStyle(
+                        fontFamily: 'Poppins',
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                         color: rowColor,
@@ -2396,6 +2414,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                   Text(
                     '${user['xp']} XP',
                     style: const TextStyle(
+                      fontFamily: 'Poppins',
                       fontWeight: FontWeight.w900,
                       color: AppColors.gold,
                       fontSize: 14,
@@ -2574,10 +2593,12 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                       user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty
                       ? NetworkImage(user.avatarUrl!)
                       : null,
+                  onBackgroundImageError: (_, __) {},
                   child: user?.avatarUrl == null || user!.avatarUrl!.isEmpty
                       ? Text(
                           (user?.name ?? 'S')[0].toUpperCase(),
                           style: const TextStyle(
+                            fontFamily: 'Poppins',
                             fontSize: 32,
                             fontWeight: FontWeight.w800,
                             color: Colors.white,
@@ -2608,6 +2629,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           Text(
             user?.name ?? 'Student',
             style: const TextStyle(
+              fontFamily: 'Poppins',
               fontSize: 22,
               fontWeight: FontWeight.w800,
               color: Colors.white,
@@ -2617,6 +2639,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           Text(
             user?.email ?? '',
             style: TextStyle(
+              fontFamily: 'Poppins',
               fontSize: 13,
               color: Colors.white.withValues(alpha: 0.6),
               fontWeight: FontWeight.w500,
@@ -2963,6 +2986,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           Text(
             title,
             style: TextStyle(
+              fontFamily: 'Poppins',
               fontSize: 11,
               fontWeight: FontWeight.w900,
               color: textColor.withValues(alpha: 0.4),
