@@ -1458,9 +1458,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     final post = widget.post;
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
     final dueDate = post['due_date'];
-    final isPastDue =
-        dueDate != null &&
-        DateTime.parse(dueDate).toLocal().isBefore(DateTime.now());
+    final isPastDue = _isPastDue;
 
     return Column(
       children: [
@@ -1505,7 +1503,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                         style: const TextStyle(
                           fontFamily: 'Poppins',
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFFFF6B35),
+                          color: AppColors.warning,
                           fontSize: 14,
                         ),
                       ),
@@ -1729,14 +1727,14 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFF6B35).withValues(alpha: 0.05),
+                        color: AppColors.warning.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
                         children: [
                           const Icon(
                             Icons.lock_rounded,
-                            color: Color(0xFFFF6B35),
+                            color: AppColors.warning,
                             size: 16,
                           ),
                           const SizedBox(width: 10),
@@ -1747,14 +1745,14 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                             style: const TextStyle(
                               fontFamily: 'Poppins',
                               fontSize: 13,
-                              color: Color(0xFFFF6B35),
+                              color: AppColors.warning,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                           const Spacer(),
                           const Icon(
                             Icons.chevron_right_rounded,
-                            color: Color(0xFFFF6B35),
+                            color: AppColors.warning,
                             size: 18,
                           ),
                         ],
@@ -2068,7 +2066,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     children: [
                       const Icon(
                         Icons.lock_outline,
-                        color: Color(0xFFFF6B35),
+                        color: AppColors.warning,
                         size: 18,
                       ),
                       const SizedBox(width: 8),
@@ -2113,9 +2111,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                                   if (!isOwn) ...[
                                     CircleAvatar(
                                       radius: 14,
-                                      backgroundColor: const Color(
-                                        0xFFFF6B35,
-                                      ).withValues(alpha: 0.15),
+                                      backgroundColor:
+                                          AppColors.warning.withValues(alpha: 0.15),
                                       child: Text(
                                         (c['sender_name'] as String)
                                             .substring(0, 1)
@@ -2124,7 +2121,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                                           fontFamily: 'Poppins',
                                           fontSize: 10,
                                           fontWeight: FontWeight.w700,
-                                          color: Color(0xFFFF6B35),
+                                          color: AppColors.warning,
                                         ),
                                       ),
                                     ),
@@ -2228,7 +2225,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(24),
                               borderSide: const BorderSide(
-                                color: Color(0xFFFF6B35),
+                                color: AppColors.warning,
                                 width: 1.5,
                               ),
                             ),
@@ -2245,13 +2242,13 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                                         height: 16,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          color: Color(0xFFFF6B35),
+                                          color: AppColors.warning,
                                         ),
                                       ),
                                     )
                                   : const Icon(
                                       Icons.send_rounded,
-                                      color: Color(0xFFFF6B35),
+                                      color: AppColors.warning,
                                       size: 20,
                                     ),
                             ),
@@ -2277,9 +2274,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
     final post = widget.post;
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
     final dueDate = post['due_date'];
-    final isPastDue =
-        dueDate != null &&
-        DateTime.parse(dueDate).toLocal().isBefore(DateTime.now());
+    final isPastDue = _isPastDue;
 
     return Column(
       children: [
@@ -2305,14 +2300,14 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFFF6B35).withValues(alpha: 0.1),
+                              color: AppColors.warning.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Text(
                               'ASSIGNMENT',
                               style: TextStyle(
                                 fontFamily: 'Poppins',
-                                color: Color(0xFFFF6B35),
+                                color: AppColors.warning,
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 1,
@@ -2351,7 +2346,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                         style: const TextStyle(
                           fontFamily: 'Poppins',
                           fontWeight: FontWeight.w600,
-                          color: Color(0xFFFF6B35),
+                          color: AppColors.warning,
                           fontSize: 14,
                         ),
                       ),
@@ -2828,9 +2823,9 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               color: isGradedS
                   ? AppColors.primary
                   : hasTurnedIn
-                  ? Colors.green
+                  ? AppColors.success
                   : hasFile
-                  ? const Color(0xFFFF6B35)
+                  ? AppColors.warning
                   : context.textSecondary,
             ),
           ),
@@ -2919,9 +2914,9 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                               fontFamily: 'Poppins',
                               fontSize: 12,
                               color: hasTurnedIn
-                                  ? Colors.green
+                                  ? AppColors.success
                                   : hasFile
-                                  ? const Color(0xFFFF6B35)
+                                  ? AppColors.warning
                                   : context.textHint,
                             ),
                           ),
@@ -3134,7 +3129,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               color: context.cardColor,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(
-                color: const Color(0xFFFF6B35).withValues(alpha: 0.3),
+                color: AppColors.warning.withValues(alpha: 0.3),
               ),
             ),
             child: Column(
@@ -3146,7 +3141,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     children: [
                       const Icon(
                         Icons.lock_outline,
-                        color: Color(0xFFFF6B35),
+                        color: AppColors.warning,
                         size: 16,
                       ),
                       const SizedBox(width: 8),
@@ -3200,9 +3195,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                           if (!isOwn) ...[
                             CircleAvatar(
                               radius: 14,
-                              backgroundColor: const Color(
-                                0xFFFF6B35,
-                              ).withValues(alpha: 0.15),
+                              backgroundColor:
+                                  AppColors.warning.withValues(alpha: 0.15),
                               child: Text(
                                 (c['sender_name'] as String)
                                     .substring(0, 1)
@@ -3211,7 +3205,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                                   fontFamily: 'Poppins',
                                   fontSize: 10,
                                   fontWeight: FontWeight.w700,
-                                  color: Color(0xFFFF6B35),
+                                  color: AppColors.warning,
                                 ),
                               ),
                             ),
@@ -3274,9 +3268,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                     children: [
                       CircleAvatar(
                         radius: 14,
-                        backgroundColor: const Color(
-                          0xFFFF6B35,
-                        ).withValues(alpha: 0.15),
+                        backgroundColor:
+                            AppColors.warning.withValues(alpha: 0.15),
                         child: Text(
                           (_currentUserName ?? 'I')
                               .substring(0, 1)
@@ -3285,7 +3278,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                             fontFamily: 'Poppins',
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFFFF6B35),
+                            color: AppColors.warning,
                           ),
                         ),
                       ),
@@ -3326,7 +3319,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(20),
                               borderSide: const BorderSide(
-                                color: Color(0xFFFF6B35),
+                                color: AppColors.warning,
                                 width: 1.5,
                               ),
                             ),
@@ -3340,13 +3333,13 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                                         height: 16,
                                         child: CircularProgressIndicator(
                                           strokeWidth: 2,
-                                          color: Color(0xFFFF6B35),
+                                          color: AppColors.warning,
                                         ),
                                       ),
                                     )
                                   : const Icon(
                                       Icons.send_rounded,
-                                      color: Color(0xFFFF6B35),
+                                      color: AppColors.warning,
                                       size: 20,
                                     ),
                             ),
@@ -3741,12 +3734,12 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: _hasTurnedIn
-            ? Colors.green.withValues(alpha: 0.1)
+            ? AppColors.success.withValues(alpha: 0.1)
             : context.bgColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _hasTurnedIn
-              ? Colors.green.withValues(alpha: 0.4)
+              ? AppColors.success.withValues(alpha: 0.4)
               : context.borderColor,
         ),
       ),
@@ -3767,7 +3760,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           color: _isGraded
               ? AppColors.primary
               : _hasTurnedIn
-              ? Colors.green
+              ? AppColors.success
               : isMissing
               ? AppColors.error
               : _hasAttachedFile
@@ -3814,8 +3807,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                 ),
               ),
               if (!_hasTurnedIn && canSubmit && !_isGraded)
-                GestureDetector(
-                  onTap: () => _removeWorkAtIndex(index),
+                PressableScale(
+                  onPressed: () => _removeWorkAtIndex(index),
                   child: Icon(
                     Icons.close_rounded,
                     color: context.textHint,
@@ -3823,8 +3816,8 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                   ),
                 )
               else
-                GestureDetector(
-                  onTap: () async {
+                PressableScale(
+                  onPressed: () async {
                     if (kIsWeb) {
                       // Use Google Docs Viewer so file is displayed in
                       // browser not downloaded. Works for PDF, Word,
