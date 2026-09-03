@@ -355,8 +355,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           .select()
           .eq('assessment_id', assessmentId)
           .eq('student_id', studentId)
-          .order('submitted_at', ascending: false, nullsFirst: false)
-          .order('created_at', ascending: false, nullsFirst: false);
+          .order('submitted_at', ascending: false, nullsFirst: false);
 
       Map<String, dynamic>? bestSubmission;
       for (final item in submissionsData) {
@@ -470,7 +469,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           style: TextStyle(color: context.textPrimary, fontFamily: 'Poppins'),
           decoration: InputDecoration(
             hintText: 'Edit message...',
-            hintStyle: TextStyle(color: context.textHint),
+            hintStyle: TextStyle(fontFamily: 'Poppins', color: context.textHint),
           ),
         ),
         actions: [
@@ -841,6 +840,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           })
           .eq('id', _mySubmission!['id']);
 
+      if (!mounted) return;
       setState(() {
         _myWorkFileUrls = newUrls;
         _myWorkFileNames = newNames;
@@ -1321,7 +1321,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
   DateTime? get _dueDate {
     final value = widget.post['due_date'];
     if (value == null) return null;
-    return DateTime.tryParse(value.toString());
+    return DateTime.tryParse(value.toString())?.toLocal();
   }
 
   bool get _isPastDue {
@@ -1956,20 +1956,21 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                             if (url != null && url.isNotEmpty) {
                               return CircleAvatar(
                                 radius: 16,
-                                backgroundColor: const Color(0xFFD6EBFF),
+                                backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                                 backgroundImage: NetworkImage(url),
                                 onBackgroundImageError: (_, __) {},
                               );
                             }
                             return CircleAvatar(
                               radius: 16,
-                              backgroundColor: const Color(0xFFD6EBFF),
+                              backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                               child: Text(
                                 name[0].toUpperCase(),
                                 style: const TextStyle(
+                                  fontFamily: 'Poppins',
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF007BFF),
+                                  color: AppColors.primary,
                                 ),
                               ),
                             );
@@ -1979,11 +1980,16 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                         Expanded(
                           child: TextField(
                             controller: _classCommentController,
-                            style: TextStyle(color: textColor, fontSize: 14),
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              color: textColor,
+                              fontSize: 14,
+                            ),
                             autofocus: false,
                             decoration: InputDecoration(
                               hintText: 'Add class comment...',
                               hintStyle: TextStyle(
+                                fontFamily: 'Poppins',
                                 color: context.textHint,
                                 fontSize: 14,
                               ),
@@ -2305,6 +2311,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                             child: const Text(
                               'ASSIGNMENT',
                               style: TextStyle(
+                                fontFamily: 'Poppins',
                                 color: Color(0xFFFF6B35),
                                 fontSize: 10,
                                 fontWeight: FontWeight.w800,
@@ -2532,6 +2539,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         Text(
           count,
           style: TextStyle(
+            fontFamily: 'Poppins',
             fontSize: 24,
             fontWeight: FontWeight.bold,
             color: context.textPrimary,
@@ -2539,7 +2547,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         ),
         Text(
           label,
-          style: TextStyle(fontSize: 12, color: context.textSecondary),
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 12,
+            color: context.textSecondary,
+          ),
         ),
       ],
     );
@@ -2551,6 +2563,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       child: Text(
         title,
         style: TextStyle(
+          fontFamily: 'Poppins',
           fontSize: 11,
           fontWeight: FontWeight.bold,
           color: context.textSecondary,
@@ -2670,20 +2683,21 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                 if (url != null && url.isNotEmpty) {
                   return CircleAvatar(
                     radius: 16,
-                    backgroundColor: const Color(0xFFD6EBFF),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                     backgroundImage: NetworkImage(url),
                     onBackgroundImageError: (_, __) {},
                   );
                 }
                 return CircleAvatar(
                   radius: 16,
-                  backgroundColor: const Color(0xFFD6EBFF),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                   child: Text(
                     name[0].toUpperCase(),
                     style: const TextStyle(
+                      fontFamily: 'Poppins',
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF007BFF),
+                      color: AppColors.primary,
                     ),
                   ),
                 );
@@ -2699,6 +2713,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                       Text(
                         c['user_name'] ?? 'User',
                         style: TextStyle(
+                          fontFamily: 'Poppins',
                           fontWeight: FontWeight.w700,
                           fontSize: 13,
                           color: textColor,
@@ -2707,7 +2722,11 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                       const SizedBox(width: 8),
                       Text(
                         'Today',
-                        style: TextStyle(fontSize: 11, color: context.textHint),
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 11,
+                          color: context.textHint,
+                        ),
                       ),
                     ],
                   ),
@@ -2715,6 +2734,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                   Text(
                     c['text'] ?? '',
                     style: TextStyle(
+                      fontFamily: 'Poppins',
                       fontSize: 14,
                       color: textColor.withValues(alpha: 0.9),
                       height: 1.4,
@@ -3383,6 +3403,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
       child: Text(
         '${_classComments.length}',
         style: TextStyle(
+          fontFamily: 'Poppins',
           fontSize: 10,
           fontWeight: FontWeight.bold,
           color: textColor,
@@ -3427,20 +3448,21 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
               if (url != null && url.isNotEmpty) {
                 return CircleAvatar(
                   radius: 16,
-                  backgroundColor: const Color(0xFFD6EBFF),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                   backgroundImage: NetworkImage(url),
                   onBackgroundImageError: (_, __) {},
                 );
               }
               return CircleAvatar(
                 radius: 16,
-                backgroundColor: const Color(0xFFD6EBFF),
+                backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                 child: Text(
                   name[0].toUpperCase(),
                   style: const TextStyle(
+                    fontFamily: 'Poppins',
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF007BFF),
+                    color: AppColors.primary,
                   ),
                 ),
               );
@@ -3450,10 +3472,14 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           Expanded(
             child: TextField(
               controller: _classCommentController,
-              style: TextStyle(color: textColor, fontSize: 14),
+              style: TextStyle(fontFamily: 'Poppins', color: textColor, fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'Add class comment...',
-                hintStyle: TextStyle(color: context.textHint, fontSize: 14),
+                hintStyle: TextStyle(
+                  fontFamily: 'Poppins',
+                  color: context.textHint,
+                  fontSize: 14,
+                ),
                 filled: true,
                 fillColor: context.isDark
                     ? context.bgColor
