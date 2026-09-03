@@ -36,7 +36,9 @@ lib/
 │   │   ├── app_security_manager.dart
 │   │   ├── auto_grader.dart
 │   │   ├── code_scanner.dart
+│   │   ├── file_downloader.dart
 │   │   ├── grading_service.dart
+│   │   ├── snack_bar_helper.dart
 │   │   └── string_utils.dart
 │   └── theme/
 │       ├── app_theme.dart
@@ -65,8 +67,10 @@ lib/
 │   │   └── student_dashboard.dart
 │   ├── notifications/
 │   │   └── notifications_screen.dart
-│   └── profile/
-│       └── edit_profile_screen.dart
+│   ├── profile/
+│   │   └── edit_profile_screen.dart
+│   └── shared/
+│       └── theme_ripple_overlay.dart
 ├── providers/
 │   └── theme_provider.dart
 ├── shared/
