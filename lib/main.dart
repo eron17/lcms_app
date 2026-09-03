@@ -1,4 +1,5 @@
 // lib/main.dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,7 +16,9 @@ void main() async {
   try {
     await _initializeApp();
   } catch (e, stackTrace) {
-    debugPrint('App initialization failed: $e\n$stackTrace');
+    if (kDebugMode) {
+      debugPrint('App initialization failed: $e\n$stackTrace');
+    }
     rethrow;
   }
   runApp(const ProviderScope(child: LCMSApp()));
