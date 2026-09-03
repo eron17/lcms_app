@@ -1425,7 +1425,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       width: double.infinity,
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF7B2FBE), Color(0xFF2196F3)],
+          colors: [AppColors.accent, AppColors.studentColor],
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
@@ -1467,11 +1467,13 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
     final c = colors[index % colors.length];
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
 
-    return GestureDetector(
-      onTap: () => context.push(
+    return PressableScale(
+      onPressed: () => context.push(
         AppRoutes.courseDetail,
         extra: {'course': course, 'isInstructor': false},
       ),
+      scaleFactor: 0.98,
+      opacityFactor: 0.9,
       child: Container(
         decoration: BoxDecoration(
           color: context.isDark ? const Color(0xFF111d33) : Colors.white,
@@ -1563,7 +1565,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF7B2FBE), Color(0xFF1E90FF)],
+          colors: [AppColors.accent, AppColors.primary],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -2557,7 +2559,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF7B2FBE), Color(0xFF1E90FF)],
+          colors: [AppColors.accent, AppColors.primary],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -2574,11 +2576,13 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
         children: [
           // Avatar with Scale Interaction
           PressableScale(
-            onPressed: () async {
+            onPressed: user == null
+                ? null
+                : () async {
               final updated = await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => EditProfileScreen(user: user!),
+                  builder: (_) => EditProfileScreen(user: user),
                 ),
               );
               if (updated == true) _loadUser();
