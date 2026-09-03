@@ -35,7 +35,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _comments = [];
   final _commentController = TextEditingController();
-  bool _isSubmittingComment = false;
+  // ValueNotifier instead of a plain bool + setState so toggling the send
+  // button's spinner only rebuilds that icon, not the entire screen.
+  final _isSubmittingComment = ValueNotifier<bool>(false);
   bool _materialSaved = false;
   bool _assessmentSaved = false;
   String? _currentUserName;
@@ -60,6 +62,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   void dispose() {
     _refreshTimer?.cancel();
     _commentController.dispose();
+    _isSubmittingComment.dispose();
     _commentChannel?.unsubscribe();
     super.dispose();
   }
@@ -109,7 +112,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Future<void> _submitComment() async {
     if (_commentController.text.trim().isEmpty) return;
     final text = _commentController.text.trim();
-    setState(() => _isSubmittingComment = true);
+    _isSubmittingComment.value = true;
 
     try {
       final userId = _supabase.auth.currentUser?.id;
@@ -177,7 +180,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     } catch (e) {
       debugPrint('Comment submit error: $e');
     } finally {
-      if (mounted) setState(() => _isSubmittingComment = false);
+      if (mounted) _isSubmittingComment.value = false;
     }
   }
 
@@ -808,22 +811,25 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   borderRadius: BorderRadius.circular(24),
                   borderSide: BorderSide.none,
                 ),
-                suffixIcon: IconButton(
-                  onPressed: _submitComment,
-                  icon: _isSubmittingComment
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
+                suffixIcon: ValueListenableBuilder<bool>(
+                  valueListenable: _isSubmittingComment,
+                  builder: (context, isSubmitting, _) => IconButton(
+                    onPressed: _submitComment,
+                    icon: isSubmitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.primary,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.send_rounded,
                             color: AppColors.primary,
+                            size: 20,
                           ),
-                        )
-                      : const Icon(
-                          Icons.send_rounded,
-                          color: AppColors.primary,
-                          size: 20,
-                        ),
+                  ),
                 ),
               ),
             ),
@@ -1050,8 +1056,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       btnSub = _formatScheduleTime(scheduledTime);
     }
 
-    return GestureDetector(
-      onTap: isLive
+    return PressableScale(
+      onPressed: isLive
           ? () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
