@@ -2442,11 +2442,11 @@ class _EditCommentDialogState extends State<EditCommentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.isDark;
     final textColor = isDark ? Colors.white : const Color(0xFF0D1B4B);
 
     return AlertDialog(
-      backgroundColor: Theme.of(context).cardColor,
+      backgroundColor: context.cardColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
@@ -2468,7 +2468,11 @@ class _EditCommentDialogState extends State<EditCommentDialog> {
         ),
         decoration: InputDecoration(
           hintText: 'Edit your message...',
-          hintStyle: TextStyle(color: Theme.of(context).hintColor, fontSize: 14),
+          hintStyle: TextStyle(
+            fontFamily: 'Poppins',
+            color: context.textHint,
+            fontSize: 14,
+          ),
         ),
       ),
       actions: [
@@ -2518,6 +2522,7 @@ class _EditCommentDialogState extends State<EditCommentDialog> {
               : const Text(
                   'Save',
                   style: TextStyle(
+                    fontFamily: 'Poppins',
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
