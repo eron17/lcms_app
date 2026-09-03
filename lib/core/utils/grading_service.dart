@@ -118,15 +118,30 @@ class GradingService {
       final rank = result['rank'] as int;
 
       // ── Step 5: Save result to submissions table ─────────────────────────
-      await _supabase.from('submissions').update({
-        'score': score,
-        'xp_awarded': xpAwarded,
-        'is_graded': true,
-        'is_pending': false,
-        'grade_feedback': gradeFeedback,
-        'rank': rank,
-        'graded_at': DateTime.now().toUtc().toIso8601String(),
-      }).eq('id', submissionId);
+      // Prefer the grade_submission RPC (SECURITY DEFINER) so a modified
+      // client can't self-grade by writing score/xp_awarded/rank directly.
+      // Falls back to a direct update only until that RPC + tightened RLS
+      // are deployed — see CLAUDE.md security notes. The fallback path is
+      // NOT secure; remove it once the RPC exists.
+      try {
+        await _supabase.rpc('grade_submission', params: {
+          'p_submission_id': submissionId,
+          'p_score': score,
+          'p_xp_awarded': xpAwarded,
+          'p_grade_feedback': gradeFeedback,
+          'p_rank': rank,
+        });
+      } on PostgrestException {
+        await _supabase.from('submissions').update({
+          'score': score,
+          'xp_awarded': xpAwarded,
+          'is_graded': true,
+          'is_pending': false,
+          'grade_feedback': gradeFeedback,
+          'rank': rank,
+          'graded_at': DateTime.now().toUtc().toIso8601String(),
+        }).eq('id', submissionId);
+      }
 
       // ── Step 6: Award per-class XP and update the per-class streak ───────
       // Independent writes — run concurrently instead of sequentially to
