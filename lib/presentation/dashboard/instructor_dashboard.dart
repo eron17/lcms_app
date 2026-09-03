@@ -124,7 +124,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
     } else {
       await _storage.delete(key: 'user_email');
       await _storage.delete(key: 'user_password');
-      setState(() => _biometricsEnabled = false);
+      if (mounted) setState(() => _biometricsEnabled = false);
     }
   }
 
@@ -989,6 +989,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             Text(
               course['title'] ?? '',
               style: TextStyle(
+                fontFamily: 'Poppins',
                 fontWeight: FontWeight.w700,
                 color: context.textPrimary,
               ),
@@ -1058,7 +1059,11 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
       leading: Icon(icon, color: color),
       title: Text(
         label,
-        style: TextStyle(color: color, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          fontFamily: 'Poppins',
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }
@@ -1083,20 +1088,21 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         title: Text(
           'Delete Class?',
           style: TextStyle(
+            fontFamily: 'Poppins',
             color: context.textPrimary,
             fontWeight: FontWeight.bold,
           ),
         ),
         content: Text(
           'Are you sure you want to delete this class? All data will be lost permanently.',
-          style: TextStyle(color: context.textSecondary),
+          style: TextStyle(fontFamily: 'Poppins', color: context.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
               'CANCEL',
-              style: TextStyle(color: context.textSecondary),
+              style: TextStyle(fontFamily: 'Poppins', color: context.textSecondary),
             ),
           ),
           ElevatedButton(
@@ -1107,7 +1113,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             },
             child: const Text(
               'YES, DELETE',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(fontFamily: 'Poppins', color: Colors.white),
             ),
           ),
         ],
@@ -2169,6 +2175,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                           child: Text(
                             course['course_code'] ?? 'CODE',
                             style: const TextStyle(
+                              fontFamily: 'Poppins',
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
                               fontSize: 10,
@@ -2180,6 +2187,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                         Text(
                           isPublished ? 'PUBLISHED' : 'DRAFT',
                           style: TextStyle(
+                            fontFamily: 'Poppins',
                             color: isPublished
                                 ? Colors.greenAccent
                                 : Colors.orangeAccent,
@@ -2217,6 +2225,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                         Text(
                           course['title'] ?? '',
                           style: TextStyle(
+                            fontFamily: 'Poppins',
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
                             color: textColor,
@@ -2227,6 +2236,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                         Text(
                           '${course['enrolled_count'] ?? 0} students enrolled',
                           style: TextStyle(
+                            fontFamily: 'Poppins',
                             color: textColor.withValues(alpha: 0.5),
                             fontSize: 12,
                           ),
@@ -2246,6 +2256,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                     child: Text(
                       course['class_code'] ?? '---',
                       style: const TextStyle(
+                        fontFamily: 'Poppins',
                         color: AppColors.primary,
                         fontWeight: FontWeight.w800,
                         fontSize: 12,
@@ -3500,6 +3511,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             Text(
               '${user['xp'] ?? 0} XP',
               style: TextStyle(
+                fontFamily: 'Poppins',
                 fontSize: 10,
                 color: medalColors[rank],
                 fontWeight: FontWeight.w900,
@@ -3547,6 +3559,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 child: Text(
                   '#$rank',
                   style: TextStyle(
+                    fontFamily: 'Poppins',
                     fontWeight: FontWeight.w800,
                     color: rowColor.withValues(alpha: 0.4),
                     fontSize: 13,
@@ -3571,6 +3584,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                     child: Text(
                       name[0].toUpperCase(),
                       style: TextStyle(
+                        fontFamily: 'Poppins',
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                         color: rowColor,
@@ -3617,6 +3631,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                   Text(
                     '${user['xp']} XP',
                     style: const TextStyle(
+                      fontFamily: 'Poppins',
                       fontWeight: FontWeight.w900,
                       color: AppColors.gold,
                       fontSize: 14,
@@ -3806,10 +3821,12 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                         backgroundImage: _currentUser?.avatarUrl != null
                             ? NetworkImage(_currentUser!.avatarUrl!)
                             : null,
+                        onBackgroundImageError: (_, __) {},
                         child: _currentUser?.avatarUrl == null
                             ? Text(
                                 (_currentUser?.name ?? 'I')[0].toUpperCase(),
                                 style: const TextStyle(
+                                  fontFamily: 'Poppins',
                                   fontSize: 32,
                                   fontWeight: FontWeight.w800,
                                   color: Colors.white,
@@ -3836,6 +3853,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 Text(
                   _currentUser?.name ?? 'Instructor',
                   style: const TextStyle(
+                    fontFamily: 'Poppins',
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
@@ -3844,6 +3862,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 Text(
                   _currentUser?.email ?? '',
                   style: TextStyle(
+                    fontFamily: 'Poppins',
                     fontSize: 13,
                     color: Colors.white.withValues(alpha: 0.6),
                   ),
@@ -3861,6 +3880,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                   child: const Text(
                     'FACULTY INSTRUCTOR',
                     style: TextStyle(
+                      fontFamily: 'Poppins',
                       fontSize: 10,
                       fontWeight: FontWeight.w900,
                       color: Colors.white,
@@ -3886,6 +3906,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 Text(
                   'ACCOUNT SECURITY & PREFERENCES',
                   style: TextStyle(
+                    fontFamily: 'Poppins',
                     fontSize: 11,
                     fontWeight: FontWeight.w900,
                     color: textColor.withValues(alpha: 0.4),
