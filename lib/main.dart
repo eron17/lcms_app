@@ -1,5 +1,6 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
@@ -11,10 +12,11 @@ import 'presentation/shared/theme_ripple_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: '.env');
 
   await Supabase.initialize(
-    url: 'https://vzbkcakuvckfkcbkvwul.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ6YmtjYWt1dmNrZmtjYmt2d3VsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxNzY1NDUsImV4cCI6MjA5Mzc1MjU0NX0.pDub4i72u5_H7RNDEcZm8Yiqdo--2abMs1LSmG61UBU',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
     // ─── PKCE flow needed for deep link password reset ────
     authOptions: const FlutterAuthClientOptions(
       authFlowType: AuthFlowType.pkce,
