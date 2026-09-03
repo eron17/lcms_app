@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'dart:io';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
@@ -899,14 +898,14 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                 'ppt', 'pptx',
                                 'xls', 'xlsx',
                               ],
+                              withData: true,
                             );
                             if (result == null) return;
                             setSheet(() => isUploadingMaterial = true);
                             try {
                               final file = result.files.first;
-                              final bytes = kIsWeb
-                                  ? file.bytes!
-                                  : await File(file.path!).readAsBytes();
+                              final bytes = file.bytes ??
+                                  await File(file.path!).readAsBytes();
                               final fileName =
                                   '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
                               await _supabase.storage
@@ -950,14 +949,14 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                 'ppt', 'pptx',
                                 'xls', 'xlsx',
                               ],
+                              withData: true,
                             );
                             if (result == null) return;
                             setSheet(() => isUploadingAssessment = true);
                             try {
                               final file = result.files.first;
-                              final bytes = kIsWeb
-                                  ? file.bytes!
-                                  : await File(file.path!).readAsBytes();
+                              final bytes = file.bytes ??
+                                  await File(file.path!).readAsBytes();
                               final fileName =
                                   '${DateTime.now().millisecondsSinceEpoch}_${file.name}';
                               await _supabase.storage
@@ -1867,7 +1866,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                   ),
                   decoration: InputDecoration(
                     hintText: 'e.g. Chapter 1, Week 1...',
-                    hintStyle: TextStyle(color: context.textHint),
+                    hintStyle: TextStyle(fontFamily: 'Poppins', color: context.textHint),
                     filled: true,
                     fillColor: context.cardColor,
                     contentPadding: const EdgeInsets.symmetric(
@@ -3572,28 +3571,31 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         // to align perfectly with the top Course Card.
         padding: const EdgeInsets.only(bottom: 12),
         child: PressableScale(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => type == 'assignment'
-                  ? AssignmentDetailScreen(
-                      post: post,
-                      course: widget.course,
-                      isInstructor: widget.isInstructor,
-                    )
-                  : type == '3d_meet'
-                  ? ThreeDMeetDetailScreen(
-                      post: post,
-                      course: widget.course,
-                      isInstructor: widget.isInstructor,
-                    )
-                  : PostDetailScreen(
-                      post: post,
-                      course: widget.course,
-                      isInstructor: widget.isInstructor,
-                    ),
-            ),
-          ).then((_) => _loadStream()),
+          onPressed: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => type == 'assignment'
+                    ? AssignmentDetailScreen(
+                        post: post,
+                        course: widget.course,
+                        isInstructor: widget.isInstructor,
+                      )
+                    : type == '3d_meet'
+                    ? ThreeDMeetDetailScreen(
+                        post: post,
+                        course: widget.course,
+                        isInstructor: widget.isInstructor,
+                      )
+                    : PostDetailScreen(
+                        post: post,
+                        course: widget.course,
+                        isInstructor: widget.isInstructor,
+                      ),
+              ),
+            );
+            _loadStream();
+          },
           scaleFactor: 0.98,
           child: Container(
             decoration: BoxDecoration(
@@ -3736,6 +3738,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
       child: Text(
         label,
         style: TextStyle(
+          fontFamily: 'Poppins',
           color: color,
           fontSize: 9,
           fontWeight: FontWeight.w900,
@@ -4061,31 +4064,32 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               ),
 
         // ─── RESTORED NAVIGATION LOGIC ───
-        onTap: () =>
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => post['type'] == 'assignment'
-                    ? AssignmentDetailScreen(
-                        post: post,
-                        course: widget.course,
-                        isInstructor: widget.isInstructor,
-                      )
-                    : post['type'] == '3d_meet'
-                    ? ThreeDMeetDetailScreen(
-                        post: post,
-                        course: widget.course,
-                        isInstructor: widget.isInstructor,
-                      )
-                    : PostDetailScreen(
-                        post: post,
-                        course: widget.course,
-                        isInstructor: widget.isInstructor,
-                      ),
-              ),
-            ).then(
-              (_) => _loadCoursework(),
-            ), // Reloads data when returning from the detail screen
+        onTap: () async {
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => post['type'] == 'assignment'
+                  ? AssignmentDetailScreen(
+                      post: post,
+                      course: widget.course,
+                      isInstructor: widget.isInstructor,
+                    )
+                  : post['type'] == '3d_meet'
+                  ? ThreeDMeetDetailScreen(
+                      post: post,
+                      course: widget.course,
+                      isInstructor: widget.isInstructor,
+                    )
+                  : PostDetailScreen(
+                      post: post,
+                      course: widget.course,
+                      isInstructor: widget.isInstructor,
+                    ),
+            ),
+          );
+          // Reloads data when returning from the detail screen
+          _loadCoursework();
+        },
       ),
     );
   }
@@ -4463,6 +4467,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                     decoration: InputDecoration(
                       hintText: '$hint ${idx + 1}',
                       hintStyle: TextStyle(
+                        fontFamily: 'Poppins',
                         color: context.textHint,
                         fontSize: 13,
                       ),
