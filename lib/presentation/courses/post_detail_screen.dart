@@ -28,6 +28,10 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
+  // "Live" accent — deliberately distinct from AppColors.success, matches
+  // the same constant already used in three_d_meet_detail_screen.dart.
+  static const Color _liveGreen = Color(0xFF22C55E);
+
   final _supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _comments = [];
   final _commentController = TextEditingController();
@@ -294,7 +298,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             style: TextStyle(color: context.textPrimary, fontFamily: 'Poppins'),
             decoration: InputDecoration(
               hintText: 'Edit your message...',
-              hintStyle: TextStyle(color: context.textHint),
+              hintStyle: TextStyle(fontFamily: 'Poppins', color: context.textHint),
             ),
           ),
           actions: [
@@ -334,10 +338,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                           const SnackBar(content: Text('Comment updated')),
                         );
                       } catch (e) {
-                        setDialogState(() => isSaving = false);
                         debugPrint('Edit Error: $e');
                         // This will show you exactly why it failed (usually RLS)
                         if (!context.mounted) return;
+                        setDialogState(() => isSaving = false);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text('Update failed: $e'),
@@ -358,6 +362,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   : const Text(
                       'Save',
                       style: TextStyle(
+                        fontFamily: 'Poppins',
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),
@@ -485,11 +490,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Color _getPostColor(String type) {
     switch (type) {
       case '3d_meet':
-        return const Color(0xFF22C55E);
+        return _liveGreen;
       case 'material':
         return AppColors.primary;
       case 'assignment':
-        return const Color(0xFFFF6B35);
+        return AppColors.warning;
       case 'announcement':
         return AppColors.accent;
       default:
@@ -628,20 +633,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 if (url != null && url.isNotEmpty) {
                   return CircleAvatar(
                     radius: 16,
-                    backgroundColor: const Color(0xFFD6EBFF),
+                    backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                     backgroundImage: NetworkImage(url),
                     onBackgroundImageError: (_, __) {},
                   );
                 }
                 return CircleAvatar(
                   radius: 16,
-                  backgroundColor: const Color(0xFFD6EBFF),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                   child: Text(
                     name[0].toUpperCase(),
                     style: const TextStyle(
+                      fontFamily: 'Poppins',
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF007BFF),
+                      color: AppColors.primary,
                     ),
                   ),
                 );
@@ -754,20 +760,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               if (url != null && url.isNotEmpty) {
                 return CircleAvatar(
                   radius: 16,
-                  backgroundColor: const Color(0xFFD6EBFF),
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.15),
                   backgroundImage: NetworkImage(url),
                   onBackgroundImageError: (_, __) {},
                 );
               }
               return CircleAvatar(
                 radius: 16,
-                backgroundColor: const Color(0xFFD6EBFF), // Matches Assignment design
+                backgroundColor: AppColors.primary.withValues(alpha: 0.15), // Matches Assignment design
                 child: Text(
                   name[0].toUpperCase(),
                   style: const TextStyle(
+                    fontFamily: 'Poppins',
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF007BFF), // Matches Assignment design
+                    color: AppColors.primary, // Matches Assignment design
                   ),
                 ),
               );
@@ -784,7 +791,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               ),
               decoration: InputDecoration(
                 hintText: 'Add class comment...',
-                hintStyle: TextStyle(fontSize: 14, color: context.textHint),
+                hintStyle: TextStyle(
+                  fontFamily: 'Poppins',
+                  fontSize: 14,
+                  color: context.textHint,
+                ),
                 filled: true,
                 fillColor: context.isDark
                     ? Colors.white.withValues(alpha: 0.05)
@@ -848,6 +859,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 child: Text(
                   _getPostTypeLabel(type).toUpperCase(),
                   style: TextStyle(
+                    fontFamily: 'Poppins',
                     color: color,
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
@@ -888,7 +900,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               style: const TextStyle(
                 fontFamily: 'Poppins',
                 fontWeight: FontWeight.w600,
-                color: Color(0xFFFF6B35),
+                color: AppColors.warning,
               ),
             ),
           ],
@@ -999,6 +1011,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             child: Text(
               '${_comments.length}',
               style: TextStyle(
+                fontFamily: 'Poppins',
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
                 color: textColor,
@@ -1021,7 +1034,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     String btnSub;
 
     if (isLive) {
-      btnColor = const Color(0xFF22C55E);
+      btnColor = _liveGreen;
       btnIcon = Icons.videogame_asset_rounded;
       btnLabel = 'Join 3D Classroom';
       btnSub = 'Session is live now';
@@ -1225,9 +1238,20 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         ),
       ),
       subtitle: isSaved
-          ? const Text(
-              '✓ Saved offline',
-              style: TextStyle(fontSize: 11, color: Colors.green),
+          ? const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check_circle, size: 12, color: AppColors.success),
+                SizedBox(width: 4),
+                Text(
+                  'Saved offline',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 11,
+                    color: AppColors.success,
+                  ),
+                ),
+              ],
             )
           : null,
       trailing: Icon(Icons.chevron_right, color: context.textHint, size: 20),
