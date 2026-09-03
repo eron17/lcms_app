@@ -12,8 +12,17 @@ import 'presentation/shared/theme_ripple_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: '.env');
+  try {
+    await _initializeApp();
+  } catch (e, stackTrace) {
+    debugPrint('App initialization failed: $e\n$stackTrace');
+    rethrow;
+  }
+  runApp(const ProviderScope(child: LCMSApp()));
+}
 
+Future<void> _initializeApp() async {
+  await dotenv.load(fileName: '.env');
   await Supabase.initialize(
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
@@ -24,10 +33,7 @@ void main() async {
     ),
   );
   GradingService.initialize();
-  runApp(const ProviderScope(child: LCMSApp()));
 }
-
-final supabase = Supabase.instance.client;
 
 class LCMSApp extends ConsumerStatefulWidget {
   const LCMSApp({super.key});
