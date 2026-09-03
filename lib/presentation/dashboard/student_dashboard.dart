@@ -901,6 +901,11 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       ),
     );
     if (confirmed != true) return;
+    // Clear any biometric-login credentials too — signing out should not
+    // leave a fingerprint-unlockable password sitting in secure storage
+    // for whoever uses this device next.
+    await _storage.delete(key: 'user_email');
+    await _storage.delete(key: 'user_password');
     await _supabase.auth.signOut();
     if (mounted) context.go(AppRoutes.opening);
   }
