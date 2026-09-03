@@ -31,7 +31,7 @@ class CodeScanner {
     if (hasClass) {
       final classNames = RegExp(r'\bclass\s+(\w+)')
           .allMatches(sourceCode)
-          .map((m) => m.group(1)!);
+          .map((m) => m.group(1) ?? '');
       for (final className in classNames) {
         final declared = RegExp('\\b$className\\s+\\w+\\s*[;(]');
         if (declared.hasMatch(sourceCode)) return true;
@@ -130,20 +130,16 @@ class CodeScanner {
   // Generic keyword / forbidden-pattern lookups
   // ---------------------------------------------------------------------
 
-  bool hasKeyword(String keyword) {
-    final trimmed = keyword.trim();
-    if (trimmed.isEmpty) return false;
-    if (RegExp(r'^\w+$').hasMatch(trimmed)) {
-      return RegExp('\\b${RegExp.escape(trimmed)}\\b').hasMatch(sourceCode);
-    }
-    return sourceCode.contains(trimmed);
-  }
+  bool hasKeyword(String keyword) => _matchesPattern(keyword);
 
-  // NOTE: hasForbiddenPattern intentionally mirrors hasKeyword for now.
-  // If forbidden patterns ever need stricter matching (e.g. no partial
-  // matches even for symbols), separate the logic here.
-  bool hasForbiddenPattern(String pattern) {
-    final trimmed = pattern.trim();
+  // NOTE: hasForbiddenPattern intentionally mirrors hasKeyword for now —
+  // both delegate to the same matcher below. If forbidden patterns ever
+  // need stricter matching (e.g. no partial matches even for symbols),
+  // give this its own implementation instead of delegating.
+  bool hasForbiddenPattern(String pattern) => _matchesPattern(pattern);
+
+  bool _matchesPattern(String value) {
+    final trimmed = value.trim();
     if (trimmed.isEmpty) return false;
     if (RegExp(r'^\w+$').hasMatch(trimmed)) {
       return RegExp('\\b${RegExp.escape(trimmed)}\\b').hasMatch(sourceCode);
@@ -198,7 +194,7 @@ class CodeScanner {
     final results = <_FunctionInfo>[];
     final header = RegExp(r'(\w[\w:<>,\s\*&]*?)\s+(\w+)\s*\(([^;{}]*)\)\s*\{');
     for (final match in header.allMatches(sourceCode)) {
-      final name = match.group(2)!;
+      final name = match.group(2) ?? '';
       final braceStart = match.end - 1;
       var depth = 0;
       var i = braceStart;
