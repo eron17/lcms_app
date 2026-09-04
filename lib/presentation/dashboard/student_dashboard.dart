@@ -902,11 +902,10 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
       ),
     );
     if (confirmed != true) return;
-    // Clear any biometric-login credentials too — signing out should not
-    // leave a fingerprint-unlockable password sitting in secure storage
-    // for whoever uses this device next.
-    await _storage.delete(key: 'user_email');
-    await _storage.delete(key: 'user_password');
+    // Logging out only ends the session — saved biometric credentials are
+    // intentionally left in place so fingerprint sign-in keeps working next
+    // time. They're only cleared by the 2-min background timeout / killed-
+    // while-backgrounded security paths in app_security_manager.dart.
     await _supabase.auth.signOut();
     if (mounted) context.go(AppRoutes.opening);
   }
