@@ -20,6 +20,10 @@ class OtpVerificationScreen extends StatefulWidget {
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     with TickerProviderStateMixin {
+  // Matches the same success-green constant used elsewhere in the app
+  // (post_detail_screen.dart, three_d_meet_detail_screen.dart, etc.).
+  static const Color _successGreen = Color(0xFF22C55E);
+
   final _supabase = Supabase.instance.client;
   final _pinController = TextEditingController();
 
@@ -149,41 +153,6 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     final textColor = isDark ? Colors.white : const Color(0xFF0D1B4B);
     final isExpired = _secondsRemaining == 0;
 
-    if (_isVerified) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF22C55E),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: const BoxDecoration(
-                  color: Colors.white24,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check_circle_outline_rounded,
-                  size: 80,
-                  color: Colors.white,
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Verified successfully',
-                style: TextStyle(
-                  fontFamily: 'Poppins',
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       backgroundColor: context.bgColor,
       body: Stack(
@@ -277,8 +246,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
                               border: Border.all(
                                 color: _isError
                                     ? Colors.redAccent
-                                    : context.borderColor,
-                                width: _isError ? 1.5 : 1,
+                                    : _isVerified
+                                        ? _successGreen
+                                        : context.borderColor,
+                                width: (_isError || _isVerified) ? 1.5 : 1,
                               ),
                             ),
                           ),
@@ -319,31 +290,35 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
                   const SizedBox(height: 40),
 
                   PressableScale(
-                    onPressed: _isLoading || isExpired ? null : _verifyOtp,
+                    onPressed: _isLoading || isExpired || _isVerified ? null : _verifyOtp,
                     child: Container(
                       width: double.infinity,
                       height: 56,
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
-                          colors: [
-                            AppColors.primaryDark,
-                            isExpired ? Colors.grey : AppColors.primary,
-                          ],
+                          colors: _isVerified
+                              ? [_successGreen, _successGreen]
+                              : [
+                                  AppColors.primaryDark,
+                                  isExpired ? Colors.grey : AppColors.primary,
+                                ],
                         ),
                         borderRadius: BorderRadius.circular(32),
                       ),
                       child: Center(
                         child: _isLoading
                             ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)
-                            : const Text(
-                                'Confirm',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
+                            : _isVerified
+                                ? const Icon(Icons.check_rounded, color: Colors.white, size: 28)
+                                : const Text(
+                                    'Confirm',
+                                    style: TextStyle(
+                                      fontFamily: 'Poppins',
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                       ),
                     ),
                   ),

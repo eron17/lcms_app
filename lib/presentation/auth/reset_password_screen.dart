@@ -143,7 +143,15 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen>
 
   Widget _buildBackToSignIn() {
     return PressableScale(
-      onPressed: () => context.go(AppRoutes.login),
+      onPressed: () async {
+        // The OTP-recovery flow leaves an active Supabase session so the
+        // user can update their password — if they back out without
+        // changing it, that session is still valid and the router would
+        // otherwise route them straight to their dashboard instead of
+        // showing the login screen.
+        await _supabase.auth.signOut();
+        if (mounted) context.go(AppRoutes.login);
+      },
       scaleFactor: 1.0, // Text link does not move
       opacityFactor: 0.5, // Only dims
       child: const Padding(
