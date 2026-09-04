@@ -335,33 +335,47 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
                   ),
                   const SizedBox(height: 40),
 
-                  PressableScale(
-                    onPressed: _buttonState == ButtonState.loading || isExpired ? null : _verifyOtp,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOutCubic,
-                      width: _buttonState == ButtonState.normal ? double.infinity : 56.0,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(_buttonState == ButtonState.normal ? 32 : 28),
-                        gradient: _buttonState == ButtonState.normal
-                            ? LinearGradient(
-                                colors: [
-                                  AppColors.primaryDark,
-                                  isExpired ? Colors.grey : AppColors.primary,
-                                ],
-                              )
-                            : null,
-                        color: _buttonState == ButtonState.success
-                            ? _successGreen
-                            : _buttonState == ButtonState.error
-                                ? Colors.redAccent
-                                : _buttonState == ButtonState.loading
-                                    ? AppColors.primary
-                                    : null,
-                      ),
-                      child: Center(
-                        child: _buildButtonChild,
+                  Center( // Wrapped in Center so the button stays aligned as it
+                          // shrinks — it's a direct child of a Column with
+                          // crossAxisAlignment.start, so without this it would
+                          // snap to the left edge instead of shrinking in place.
+                    child: PressableScale(
+                      onPressed: _buttonState == ButtonState.loading || isExpired ? null : _verifyOtp,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutCubic,
+                        // Finite width (screen width minus the 28+28 horizontal
+                        // padding from the SingleChildScrollView above) instead
+                        // of double.infinity — AnimatedContainer can't
+                        // interpolate a width tween between infinity and a
+                        // finite value, which crashed with "Cannot interpolate
+                        // between finite and unbounded constraints" the moment
+                        // the button tried to shrink.
+                        width: _buttonState == ButtonState.normal
+                            ? MediaQuery.of(context).size.width - 56.0
+                            : 56.0,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(_buttonState == ButtonState.normal ? 32 : 28),
+                          gradient: _buttonState == ButtonState.normal
+                              ? LinearGradient(
+                                  colors: [
+                                    AppColors.primaryDark,
+                                    isExpired ? Colors.grey : AppColors.primary,
+                                  ],
+                                )
+                              : null,
+                          color: _buttonState == ButtonState.success
+                              ? _successGreen
+                              : _buttonState == ButtonState.error
+                                  ? Colors.redAccent
+                                  : _buttonState == ButtonState.loading
+                                      ? AppColors.primary
+                                      : null,
+                        ),
+                        child: Center(
+                          child: _buildButtonChild,
+                        ),
                       ),
                     ),
                   ),
