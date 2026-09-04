@@ -16,6 +16,7 @@ import '../notifications/notifications_screen.dart';
 import '../courses/assignment_detail_screen.dart';
 import 'package:flutter/services.dart';
 import '../../shared/widgets/pressable_scale.dart';
+import '../../shared/widgets/page_transitions.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
@@ -1348,7 +1349,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                     onTap: () async {
                       await Navigator.push(
                         context,
-                        MaterialPageRoute(
+                        FadeScaleRoute(
                           builder: (_) =>
                               const NotificationsScreen(isInstructor: true),
                         ),
@@ -1428,7 +1429,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
             onPressed: () async {
               await Navigator.push(
                 context,
-                MaterialPageRoute(
+                FadeScaleRoute(
                   // Pass 'true' directly since this is the Instructor Dashboard
                   builder: (_) => const NotificationsScreen(isInstructor: true),
                 ),
@@ -2907,7 +2908,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(
+          FadeScaleRoute(
             builder: (_) => AssignmentDetailScreen(
               post: _selectedPost!,
               course: _selectedCourse!,
@@ -3830,7 +3831,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                       : () async {
                     final updated = await Navigator.push(
                       context,
-                      MaterialPageRoute(
+                      FadeScaleRoute(
                         builder: (_) => EditProfileScreen(user: _currentUser!),
                       ),
                     );
@@ -3991,7 +3992,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                   onTap: () async {
                     final didRestore = await Navigator.push<bool>(
                       context,
-                      MaterialPageRoute(
+                      FadeScaleRoute(
                         builder: (_) => const ArchivedClassesScreen(
                           isInstructor: true,
                         ),

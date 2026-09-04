@@ -15,6 +15,7 @@ import 'assignment_detail_screen.dart';
 import 'class_settings_screen.dart';
 import 'dart:async';
 import '../../shared/widgets/pressable_scale.dart';
+import '../../shared/widgets/page_transitions.dart';
 
 const Map<String, List<String>> _cppKeywordCategories = {
   'Control Flow': [
@@ -3056,7 +3057,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
               onPressed: () async {
                 final bool? wasUpdated = await Navigator.push(
                   context,
-                  MaterialPageRoute(
+                  FadeScaleRoute(
                     builder: (_) => ClassSettingsScreen(
                       course: courseData,
                     ), // CHANGED: widget.course -> courseData
@@ -3602,7 +3603,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
           onPressed: () async {
             await Navigator.push(
               context,
-              MaterialPageRoute(
+              FadeScaleRoute(
                 builder: (_) => type == 'assignment'
                     ? AssignmentDetailScreen(
                         post: post,
@@ -4095,7 +4096,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         onTap: () async {
           await Navigator.push(
             context,
-            MaterialPageRoute(
+            FadeScaleRoute(
               builder: (_) => post['type'] == 'assignment'
                   ? AssignmentDetailScreen(
                       post: post,

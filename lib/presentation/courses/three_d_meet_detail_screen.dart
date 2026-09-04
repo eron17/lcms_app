@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import '../../shared/widgets/pressable_scale.dart';
+import '../../shared/widgets/page_transitions.dart';
 import 'code_viewer_screen.dart';
 import 'file_viewer_screen.dart';
 
@@ -744,7 +745,7 @@ class _ThreeDMeetDetailScreenState
             if (!context.mounted) return;
             Navigator.push(
               context,
-              MaterialPageRoute(
+              FadeScaleRoute(
                 builder: (_) => FileViewerScreen(
                   url: url,
                   fileName: label,
@@ -1793,7 +1794,7 @@ class _ThreeDMeetDetailScreenState
                           if (!context.mounted) return;
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
+                            FadeScaleRoute(
                               builder: (_) => FileViewerScreen(
                                 url: url,
                                 fileName: fileLabel,
@@ -1845,7 +1846,7 @@ class _ThreeDMeetDetailScreenState
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
+                            FadeScaleRoute(
                               builder: (_) => CodeViewerScreen(
                                 studentName: student['name'] ?? '',
                                 sourceCode: sourceCode,

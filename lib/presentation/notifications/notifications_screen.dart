@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import '../../shared/widgets/pressable_scale.dart'; // Using our shared widget
+import '../../shared/widgets/page_transitions.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/router/app_router.dart';
 import 'package:lcms_app/presentation/courses/assignment_detail_screen.dart';
@@ -136,7 +137,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         // Go to Assignment Details Screen
         Navigator.push(
           context,
-          MaterialPageRoute(
+          FadeScaleRoute(
             builder: (_) => AssignmentDetailScreen(
               post: postData,
               course: courseData,
@@ -147,7 +148,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       } else if (postData['type'] == '3d_meet') {
         Navigator.push(
           context,
-          MaterialPageRoute(
+          FadeScaleRoute(
             builder: (_) => ThreeDMeetDetailScreen(
               post: postData,
               course: courseData,
@@ -159,7 +160,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         // Go to Post Details Screen (Material, Announcement)
         Navigator.push(
           context,
-          MaterialPageRoute(
+          FadeScaleRoute(
             builder: (_) => PostDetailScreen(
               post: postData,
               course: courseData,

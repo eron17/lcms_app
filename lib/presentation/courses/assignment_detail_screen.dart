@@ -9,6 +9,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import 'file_viewer_screen.dart';
 import '../../shared/widgets/pressable_scale.dart';
+import '../../shared/widgets/page_transitions.dart';
 import 'dart:convert';
 
 class AssignmentDetailScreen extends StatefulWidget {
@@ -3644,7 +3645,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           if (!context.mounted) return;
           Navigator.push(
             context,
-            MaterialPageRoute(
+            FadeScaleRoute(
               builder: (_) => FileViewerScreen(
                 url: url,
                 fileName: name,
@@ -3898,7 +3899,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
                       if (!context.mounted) return;
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
+                        FadeScaleRoute(
                           builder: (_) => FileViewerScreen(
                             url: fileUrl,
                             fileName: fileName,

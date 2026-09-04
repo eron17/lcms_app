@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/theme/theme_extensions.dart';
 import 'course_detail_screen.dart';
+import '../../shared/widgets/page_transitions.dart';
 
 class ArchivedClassesScreen extends StatefulWidget {
   final bool isInstructor;
@@ -457,7 +458,7 @@ class _ArchivedClassesScreenState
                                 // for both instructor and student
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(
+                                  FadeScaleRoute(
                                     builder: (_) => CourseDetailScreen(
                                       course: course,
                                       isInstructor: widget.isInstructor,

@@ -13,6 +13,7 @@ import '../courses/archived_classes_screen.dart';
 import '../profile/edit_profile_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../../shared/widgets/pressable_scale.dart';
+import '../../shared/widgets/page_transitions.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
@@ -1118,7 +1119,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                     onTap: () async {
                       await Navigator.push(
                         context,
-                        MaterialPageRoute(
+                        FadeScaleRoute(
                           builder: (_) =>
                               const NotificationsScreen(isInstructor: false),
                         ),
@@ -1187,7 +1188,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
             onPressed: () async {
               await Navigator.push(
                 context,
-                MaterialPageRoute(
+                FadeScaleRoute(
                   // Pass 'true' directly since this is the Instructor Dashboard
                   builder: (_) =>
                       const NotificationsScreen(isInstructor: false),
@@ -2586,7 +2587,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                 : () async {
               final updated = await Navigator.push(
                 context,
-                MaterialPageRoute(
+                FadeScaleRoute(
                   builder: (_) => EditProfileScreen(user: user),
                 ),
               );
@@ -3053,7 +3054,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
             'Archived Classes',
             onTap: () => Navigator.push(
               context,
-              MaterialPageRoute(
+              FadeScaleRoute(
                 builder: (_) => const ArchivedClassesScreen(
                   isInstructor: false,
                 ),
