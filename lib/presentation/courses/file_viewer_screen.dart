@@ -207,8 +207,8 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 
   @override
   void dispose() {
-    _videoController?.dispose();
     _chewieController?.dispose();
+    _videoController?.dispose();
     _pdfController.dispose();
     super.dispose();
   }
@@ -611,7 +611,13 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                         });
                       },
                       icon: const Icon(Icons.refresh),
-                      label: const Text('Retry'),
+                      label: const Text(
+                        'Retry',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
