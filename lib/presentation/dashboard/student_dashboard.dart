@@ -2602,7 +2602,10 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
                       user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty
                       ? NetworkImage(user.avatarUrl!)
                       : null,
-                  onBackgroundImageError: (_, __) {},
+                  onBackgroundImageError:
+                      user?.avatarUrl != null && user!.avatarUrl!.isNotEmpty
+                      ? (_, __) {}
+                      : null,
                   child: user?.avatarUrl == null || user!.avatarUrl!.isEmpty
                       ? Text(
                           (user?.name ?? 'S')[0].toUpperCase(),

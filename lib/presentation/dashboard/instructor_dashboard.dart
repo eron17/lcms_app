@@ -3845,7 +3845,9 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                         backgroundImage: _currentUser?.avatarUrl != null
                             ? NetworkImage(_currentUser!.avatarUrl!)
                             : null,
-                        onBackgroundImageError: (_, __) {},
+                        onBackgroundImageError: _currentUser?.avatarUrl != null
+                            ? (_, __) {}
+                            : null,
                         child: _currentUser?.avatarUrl == null
                             ? Text(
                                 (_currentUser?.name ?? 'I')[0].toUpperCase(),
