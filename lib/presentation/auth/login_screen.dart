@@ -79,7 +79,12 @@ class _LoginScreenState extends State<LoginScreen>
     if (!_isSignIn) return;
     final savedEmail = await _storage.read(key: 'user_email');
     final savedPassword = await _storage.read(key: 'user_password');
-    if (savedEmail == null || savedPassword == null) return;
+    if (savedEmail == null ||
+        savedPassword == null ||
+        savedEmail.isEmpty ||
+        savedPassword.isEmpty) {
+      return;
+    }
     if (!mounted) return;
     await _checkBiometrics();
     if (!mounted || !_biometricsAvailable) return;
@@ -100,6 +105,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   // ─── Biometrics ──────────────────────────────────────────
   Future<void> _checkBiometrics() async {
+    if (kIsWeb) return;
     try {
       final canCheck = await _localAuth.canCheckBiometrics;
       final isSupported = await _localAuth.isDeviceSupported();
@@ -119,7 +125,11 @@ class _LoginScreenState extends State<LoginScreen>
       final savedEmail = await _storage.read(key: 'user_email');
       final savedPassword = await _storage.read(key: 'user_password');
 
-      if (savedEmail == null || savedPassword == null) {
+      if (!mounted) return;
+      if (savedEmail == null ||
+          savedPassword == null ||
+          savedEmail.isEmpty ||
+          savedPassword.isEmpty) {
         _showError(
           'Please sign in with email and password first to enable biometrics.',
         );
@@ -276,18 +286,22 @@ class _LoginScreenState extends State<LoginScreen>
         .select('role')
         .eq('id', userId)
         .single();
-    if (mounted) {
-      context.go(
-        userData['role'] == 'instructor'
-            ? AppRoutes.instructorDashboard
-            : AppRoutes.studentDashboard,
-      );
+    if (!mounted) return;
+    final role = userData['role'];
+    if (role == 'instructor') {
+      context.go(AppRoutes.instructorDashboard);
+    } else if (role == 'student') {
+      context.go(AppRoutes.studentDashboard);
+    } else {
+      await _supabase.auth.signOut();
+      if (!mounted) return;
+      _showError('Your account role is invalid. Please contact support.');
     }
   }
 
   // ─── Forgot Password (2-step: Email → OTP → ResetPasswordScreen) ───
   void _showForgotPasswordDialog() {
-    _forgotEmailController.clear();
+    _forgotEmailController.text = _emailController.text.trim();
     final otpController = TextEditingController();
     bool isSending = false;
     bool isVerifying = false;
@@ -737,7 +751,7 @@ class _LoginScreenState extends State<LoginScreen>
                                                     .shrinkWrap,
                                           ),
                                           Text(
-                                            '♂ Male', // REMOVED const
+                                            'Male',
                                             style: TextStyle(
                                               fontFamily: 'Poppins',
                                               fontSize: 14,
@@ -798,7 +812,7 @@ class _LoginScreenState extends State<LoginScreen>
                                                     .shrinkWrap,
                                           ),
                                           Text(
-                                            '♀ Female', // REMOVED const
+                                            'Female',
                                             style: TextStyle(
                                               fontFamily: 'Poppins',
                                               fontSize: 14,
