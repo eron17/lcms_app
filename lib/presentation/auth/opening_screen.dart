@@ -61,7 +61,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     },
     {
       'icon': Icons.shield_rounded,
-      'color': const Color(0xFF7B2FBE),
+      'color': AppColors.accent,
       'title': 'Rank Badges',
       'summary': '8 ranks from Script Kiddie to Compiler Whisperer',
       'detail':
@@ -71,7 +71,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     },
     {
       'icon': Icons.leaderboard_rounded,
-      'color': const Color(0xFFFFD700),
+      'color': AppColors.gold,
       'title': 'Live Leaderboard',
       'summary': 'Per-class XP and streak rankings in real time',
       'detail':
@@ -160,10 +160,13 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
 
   void _startAnimations() async {
     await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
     _logoController.forward();
     await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
     _textController.forward();
     await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
     _buttonController.forward();
   }
 
@@ -461,7 +464,6 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   }
 
   Widget _navLink(String label, VoidCallback onTap) {
-    final isDark = context.isDark;
     return GestureDetector(
       onTap: onTap,
       child: Text(
@@ -469,7 +471,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
         style: TextStyle(
           fontFamily: 'Poppins',
           fontSize: 13,
-          color: isDark ? const Color(0x8CFFFFFF) : const Color(0x8C0B1220),
+          color: context.textPrimary.withValues(alpha: 0.55),
         ),
       ),
     );
@@ -998,7 +1000,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                 {
                   'name': 'Beltran, Joshua Alexandre P.',
                   'initials': 'JB',
-                  'color': const Color(0xFF7B2FBE),
+                  'color': AppColors.accent,
                 },
                 {
                   'name': 'Bernal, Lynix Ivy D.',
@@ -1075,7 +1077,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
             children: [
               Expanded(child: aboutContent),
               const SizedBox(width: 48),
-              SizedBox(width: 300, child: teamContent),
+              Flexible(child: SizedBox(width: 300, child: teamContent)),
             ],
           );
         },
