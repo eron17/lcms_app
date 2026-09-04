@@ -101,6 +101,34 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     },
   ];
 
+  static const List<Map<String, dynamic>> _teamMembers = [
+    {
+      'name': 'Beltran, Joshua Alexandre P.',
+      'initials': 'JB',
+      'color': AppColors.accent,
+    },
+    {
+      'name': 'Bernal, Lynix Ivy D.',
+      'initials': 'LB',
+      'color': Color(0xFF3B9EFF),
+    },
+    {
+      'name': 'Guintu, John Dexter M.',
+      'initials': 'JG',
+      'color': Color(0xFF4CAF50),
+    },
+    {
+      'name': 'Hermano, Aaron L.',
+      'initials': 'AH',
+      'color': Color(0xFFFF9800),
+    },
+    {
+      'name': 'Rodriguez, Chrys-Enjie R.',
+      'initials': 'CR',
+      'color': Color(0xFFFF5252),
+    },
+  ];
+
   void _scrollTo(GlobalKey key) {
     final ctx = key.currentContext;
     if (ctx == null) return;
@@ -433,10 +461,9 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   // ── Web landing page (kIsWeb) ─────────────────────────────
 
   Widget _buildNavbar() {
-    final isDark = context.isDark;
     return Container(
       height: 56,
-      color: isDark ? const Color(0xFF080e20) : Colors.white,
+      color: context.topBarColor,
       padding: const EdgeInsets.symmetric(horizontal: 40),
       child: LayoutBuilder(
         builder: (ctx, constraints) {
@@ -464,14 +491,15 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   }
 
   Widget _navLink(String label, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
+    return PressableScale(
+      onPressed: onTap,
+      scaleFactor: 0.95,
       child: Text(
         label,
         style: TextStyle(
           fontFamily: 'Poppins',
           fontSize: 13,
-          color: context.textPrimary.withValues(alpha: 0.55),
+          color: context.textSecondary,
         ),
       ),
     );
@@ -537,10 +565,10 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           decoration: BoxDecoration(
-            color: const Color(0xFF3B9EFF).withValues(alpha: 0.12),
+            color: AppColors.primary.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: const Color(0xFF3B9EFF).withValues(alpha: 0.3),
+              color: AppColors.primary.withValues(alpha: 0.3),
             ),
           ),
           child: const Text(
@@ -548,7 +576,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
             style: TextStyle(
               fontFamily: 'Poppins',
               fontSize: 11,
-              color: Color(0xFF3B9EFF),
+              color: AppColors.primary,
             ),
           ),
         ),
@@ -645,8 +673,8 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
           ),
         ),
         const SizedBox(height: 10),
-        GestureDetector(
-          onTap: () {
+        PressableScale(
+          onPressed: () {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text(
@@ -657,15 +685,14 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               ),
             );
           },
+          scaleFactor: 0.97,
           child: Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 20,
               vertical: 12,
             ),
             decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : const Color(0xFFF7F9FC),
+              color: context.cardColor,
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isDark
@@ -718,7 +745,6 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     return Container(
       key: _featuresKey,
       color: isDark ? const Color(0xFF080e20) : const Color(0xFFF7F9FC),
-      // Reduced horizontal padding on mobile for better side spacing
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 60),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -747,72 +773,13 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               final w = constraints.maxWidth;
               final isMobile = w < 600;
 
-              // ─── 1. MOBILE RESPONSIVE LAYOUT (Dynamic Height Column) ───
+              // ─── 1. MOBILE RESPONSIVE LAYOUT ───
               if (isMobile) {
                 return Column(
-                  children: List.generate(_features.length, (i) {
-                    final f = _features[i];
-                    final isExpanded = _expandedFeature == i;
-                    final color = f['color'] as Color;
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: GestureDetector(
-                        onTap: () => setState(
-                          () => _expandedFeature = isExpanded ? -1 : i,
-                        ),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.all(18),
-                          width: double.infinity,
-                          decoration: BoxDecoration(
-                            color: isExpanded
-                                ? color.withValues(alpha: 0.1)
-                                : (isDark
-                                      ? const Color(0xFF111d33)
-                                      : Colors.white),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isExpanded
-                                  ? color.withValues(alpha: 0.4)
-                                  : (isDark
-                                        ? Colors.white.withValues(alpha: 0.07)
-                                        : const Color(0xFFE2E8F0)),
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min, // Auto-size height based on content
-                            children: [
-                              Icon(f['icon'] as IconData, color: color, size: 22),
-                              const SizedBox(height: 10),
-                              Text(
-                                f['title'] as String,
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: isExpanded ? color : textColor,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                isExpanded
-                                    ? f['detail'] as String
-                                    : f['summary'] as String,
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 11,
-                                  color: textColor.withValues(alpha: 0.5),
-                                  height: 1.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  }),
+                  children: List.generate(
+                    _features.length,
+                    (i) => _buildFeatureCard(i, isMobileList: true),
+                  ),
                 );
               }
 
@@ -829,66 +796,107 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                   childAspectRatio: ratio,
                 ),
                 itemCount: _features.length,
-                itemBuilder: (ctx, i) {
-                  final f = _features[i];
-                  final isExpanded = _expandedFeature == i;
-                  final color = f['color'] as Color;
-
-                  return GestureDetector(
-                    onTap: () => setState(
-                      () => _expandedFeature = isExpanded ? -1 : i,
-                    ),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: isExpanded
-                            ? color.withValues(alpha: 0.1)
-                            : (isDark ? const Color(0xFF111d33) : Colors.white),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isExpanded
-                              ? color.withValues(alpha: 0.4)
-                              : (isDark
-                                    ? Colors.white.withValues(alpha: 0.07)
-                                    : const Color(0xFFE2E8F0)),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(f['icon'] as IconData, color: color, size: 22),
-                          const SizedBox(height: 10),
-                          Text(
-                            f['title'] as String,
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: isExpanded ? color : textColor,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            isExpanded
-                                ? f['detail'] as String
-                                : f['summary'] as String,
-                            style: TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 11,
-                              color: textColor.withValues(alpha: 0.5),
-                              height: 1.5,
-                            ),
-                            maxLines: isExpanded ? 6 : 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+                itemBuilder: (ctx, i) =>
+                    _buildFeatureCard(i, isMobileList: false),
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureCard(int i, {required bool isMobileList}) {
+    final isDark = context.isDark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0B1220);
+    final f = _features[i];
+    final isExpanded = _expandedFeature == i;
+    final color = f['color'] as Color;
+
+    final card = PressableScale(
+      onPressed: () => setState(() => _expandedFeature = isExpanded ? -1 : i),
+      scaleFactor: 0.97,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(18),
+        width: isMobileList ? double.infinity : null,
+        decoration: BoxDecoration(
+          color: isExpanded ? color.withValues(alpha: 0.1) : context.cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isExpanded
+                ? color.withValues(alpha: 0.4)
+                : (isDark
+                      ? Colors.white.withValues(alpha: 0.07)
+                      : const Color(0xFFE2E8F0)),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: isMobileList ? MainAxisSize.min : MainAxisSize.max,
+          children: [
+            Icon(f['icon'] as IconData, color: color, size: 22),
+            const SizedBox(height: 10),
+            Text(
+              f['title'] as String,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: isExpanded ? color : textColor,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isExpanded ? f['detail'] as String : f['summary'] as String,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 11,
+                color: textColor.withValues(alpha: 0.5),
+                height: 1.5,
+              ),
+              maxLines: isMobileList ? null : (isExpanded ? 6 : 2),
+              overflow: isMobileList ? TextOverflow.clip : TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return isMobileList
+        ? Padding(padding: const EdgeInsets.only(bottom: 12), child: card)
+        : card;
+  }
+
+  Widget _buildTeamMember(Map<String, dynamic> member, Color textColor) {
+    final color = member['color'] as Color;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 18,
+            backgroundColor: color.withValues(alpha: 0.2),
+            child: Text(
+              member['initials'] as String,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              member['name'] as String,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 13,
+                color: textColor,
+              ),
+            ),
           ),
         ],
       ),
@@ -901,7 +909,6 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     return Container(
       key: _aboutKey,
       color: isDark ? const Color(0xFF060d1f) : Colors.white,
-      // Adjusted padding slightly for a better fit on mobile screens
       padding: const EdgeInsets.fromLTRB(40, 60, 40, 80),
       child: LayoutBuilder(
         builder: (ctx, constraints) {
@@ -962,10 +969,10 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF3B9EFF).withValues(alpha: 0.1),
+                      color: AppColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
-                        color: const Color(0xFF3B9EFF).withValues(alpha: 0.2),
+                        color: AppColors.primary.withValues(alpha: 0.2),
                       ),
                     ),
                     child: Text(
@@ -973,7 +980,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                       style: const TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 12,
-                        color: Color(0xFF3B9EFF),
+                        color: AppColors.primary,
                       ),
                     ),
                   );
@@ -996,66 +1003,9 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                 ),
               ),
               const SizedBox(height: 14),
-              ...[
-                {
-                  'name': 'Beltran, Joshua Alexandre P.',
-                  'initials': 'JB',
-                  'color': AppColors.accent,
-                },
-                {
-                  'name': 'Bernal, Lynix Ivy D.',
-                  'initials': 'LB',
-                  'color': const Color(0xFF3B9EFF),
-                },
-                {
-                  'name': 'Guintu, John Dexter M.',
-                  'initials': 'JG',
-                  'color': const Color(0xFF4CAF50),
-                },
-                {
-                  'name': 'Hermano, Aaron L.',
-                  'initials': 'AH',
-                  'color': const Color(0xFFFF9800),
-                },
-                {
-                  'name': 'Rodriguez, Chrys-Enjie R.',
-                  'initials': 'CR',
-                  'color': const Color(0xFFFF5252),
-                },
-              ].map((member) {
-                final color = member['color'] as Color;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundColor: color.withValues(alpha: 0.2),
-                        child: Text(
-                          member['initials'] as String,
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: color,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded( // Added Expanded so long names wrap on small screens
-                        child: Text(
-                          member['name'] as String,
-                          style: TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 13,
-                            color: textColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
+              ..._teamMembers.map(
+                (member) => _buildTeamMember(member, textColor),
+              ),
             ],
           );
 
@@ -1065,7 +1015,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 aboutContent,
-                const SizedBox(height: 48), // Padding space between sections on mobile
+                const SizedBox(height: 48),
                 teamContent,
               ],
             );
