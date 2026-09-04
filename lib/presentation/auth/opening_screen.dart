@@ -877,24 +877,24 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     final photo = member['photo'] as String;
     final initials = member['initials'] as String;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.only(bottom: 20),
       child: Row(
         children: [
           SizedBox(
-            width: 52,
-            height: 52,
+            width: 72,
+            height: 72,
             child: Stack(
               alignment: Alignment.center,
               children: [
                 // Initials layer — always rendered as the fallback.
                 CircleAvatar(
-                  radius: 26,
+                  radius: 36,
                   backgroundColor: color.withValues(alpha: 0.2),
                   child: Text(
                     initials,
                     style: TextStyle(
                       fontFamily: 'Poppins',
-                      fontSize: 13,
+                      fontSize: 16,
                       fontWeight: FontWeight.w600,
                       color: color,
                     ),
@@ -904,7 +904,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
                 // fails, onBackgroundImageError keeps this circle
                 // transparent so the initials layer shows through.
                 CircleAvatar(
-                  radius: 26,
+                  radius: 36,
                   backgroundColor: Colors.transparent,
                   backgroundImage: AssetImage(photo),
                   onBackgroundImageError: (_, __) {},
@@ -912,13 +912,13 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               ],
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: Text(
               member['name'] as String,
               style: TextStyle(
                 fontFamily: 'Poppins',
-                fontSize: 13,
+                fontSize: 14,
                 color: textColor,
               ),
             ),
