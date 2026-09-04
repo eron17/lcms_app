@@ -105,26 +105,31 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
       'name': 'Beltran, Joshua Alexandre P.',
       'initials': 'JB',
       'color': AppColors.accent,
+      'photo': 'assets/images/team/beltran_joshua.png',
     },
     {
       'name': 'Bernal, Lynix Ivy D.',
       'initials': 'LB',
       'color': Color(0xFF3B9EFF),
+      'photo': 'assets/images/team/bernal_lynix.png',
     },
     {
       'name': 'Guintu, John Dexter M.',
       'initials': 'JG',
       'color': Color(0xFF4CAF50),
+      'photo': 'assets/images/team/guintu_dexter.png',
     },
     {
       'name': 'Hermano, Aaron L.',
       'initials': 'AH',
       'color': Color(0xFFFF9800),
+      'photo': 'assets/images/team/hermano_aaron.png',
     },
     {
       'name': 'Rodriguez, Chrys-Enjie R.',
       'initials': 'CR',
       'color': Color(0xFFFF5252),
+      'photo': 'assets/images/team/rodriguez_chrys.png',
     },
   ];
 
@@ -869,24 +874,45 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
 
   Widget _buildTeamMember(Map<String, dynamic> member, Color textColor) {
     final color = member['color'] as Color;
+    final photo = member['photo'] as String;
+    final initials = member['initials'] as String;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: color.withValues(alpha: 0.2),
-            child: Text(
-              member['initials'] as String,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
+          SizedBox(
+            width: 52,
+            height: 52,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Initials layer — always rendered as the fallback.
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: color.withValues(alpha: 0.2),
+                  child: Text(
+                    initials,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: color,
+                    ),
+                  ),
+                ),
+                // Photo layer — covers the initials once it loads; if it
+                // fails, onBackgroundImageError keeps this circle
+                // transparent so the initials layer shows through.
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: Colors.transparent,
+                  backgroundImage: AssetImage(photo),
+                  onBackgroundImageError: (_, __) {},
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Text(
               member['name'] as String,
