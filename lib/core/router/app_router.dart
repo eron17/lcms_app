@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../presentation/auth/opening_screen.dart';
 import '../../presentation/auth/login_screen.dart';
 import '../../presentation/auth/reset_password_screen.dart';
+import '../../presentation/auth/otp_verification_screen.dart';
 import '../../presentation/dashboard/student_dashboard.dart';
 import '../../presentation/dashboard/instructor_dashboard.dart';
 import '../../presentation/courses/course_detail_screen.dart';
@@ -20,6 +21,7 @@ class AppRoutes {
   static const String instructorDashboard = '/instructor/dashboard';
   static const String courseDetail = '/course/detail';
   static const String resetPassword = '/reset-password';
+  static const String verifyOtp = '/verify-otp';
 }
 
 CustomTransitionPage<void> _fadeScalePage(Widget child, GoRouterState state) {
@@ -51,6 +53,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     AppRoutes.login,
     AppRoutes.register,
     AppRoutes.resetPassword,
+    AppRoutes.verifyOtp,
   };
 
   return GoRouter(
@@ -176,6 +179,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: 'resetPassword',
         pageBuilder: (context, state) =>
             _fadeScalePage(const ResetPasswordScreen(), state),
+      ),
+      GoRoute(
+        path: AppRoutes.verifyOtp,
+        name: 'verifyOtp',
+        pageBuilder: (context, state) {
+          final email = state.extra as String;
+          return _fadeScalePage(
+            OtpVerificationScreen(email: email),
+            state,
+          );
+        },
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

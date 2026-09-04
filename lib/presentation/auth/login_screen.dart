@@ -5,7 +5,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/router/app_router.dart';
-import 'package:pinput/pinput.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../shared/widgets/pressable_scale.dart';
 import '../../core/utils/string_utils.dart';
@@ -347,24 +346,20 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  // ─── Forgot Password (2-step: Email → OTP → ResetPasswordScreen) ───
-  void _showForgotPasswordDialog() async {
+  // ─── Forgot Password → OTP Verification Screen ─────────────
+  void _showForgotPasswordDialog() {
     _forgotEmailController.text = _emailController.text.trim();
-    final otpController = TextEditingController();
     bool isSending = false;
-    bool isVerifying = false;
-    int step = 1;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dialogBg = isDark ? const Color(0xFF0D1B4B) : Colors.white;
     final borderColor = isDark ? AppColors.darkBorder : const Color(0xFFDDE3F0);
-    final fillColor = isDark ? AppColors.darkCard : const Color(0xFFF5F7FF);
     final textColor = isDark ? Colors.white : const Color(0xFF0D1B4B);
     final subtitleColor = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF0D1B4B).withValues(alpha: 0.5);
     final cancelBg = isDark ? AppColors.darkCard : const Color(0xFFF0F4FF);
     final cancelTextColor = isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF0D1B4B).withValues(alpha: 0.7);
 
-    await showDialog(
+    showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
@@ -377,157 +372,82 @@ class _LoginScreenState extends State<LoginScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ─── Header ───
                 Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                      child: Icon(step == 1 ? Icons.lock_reset_outlined : Icons.pin_outlined, color: AppColors.primary, size: 22),
+                      child: const Icon(Icons.lock_reset_outlined, color: AppColors.primary, size: 22),
                     ),
                     const SizedBox(width: 12),
-                    Text(step == 1 ? 'Forgot Password' : 'Enter OTP',
+                    Text('Forgot Password',
                         style: TextStyle(fontFamily: 'Poppins', fontSize: 18, fontWeight: FontWeight.w700, color: textColor)),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  step == 1 ? 'Enter your email and we\'ll send you an OTP code.' : 'Enter the OTP sent to\n${_forgotEmailController.text.trim()}',
+                  'Enter your email and we\'ll send you an OTP code.',
                   style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: subtitleColor, height: 1.4),
                 ),
                 const SizedBox(height: 20),
 
-                // ─── Step 1: Email ───
-                if (step == 1) ...[
-                  _buildField(label: 'Email Address', controller: _forgotEmailController, icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: PressableScale(
-                          onPressed: () => Navigator.pop(context),
-                          scaleFactor: 0.98,
-                          child: Container(
-                            height: 48,
-                            decoration: BoxDecoration(color: cancelBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor)),
-                            child: Center(child: Text('Cancel', style: TextStyle(fontFamily: 'Poppins', color: cancelTextColor, fontWeight: FontWeight.w600))),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: PressableScale(
-                          onPressed: isSending ? null : () async {
-                            final email = _forgotEmailController.text.trim();
-                            if (email.isEmpty || !email.contains('@')) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid email.'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
-                              return;
-                            }
-                            setDialog(() => isSending = true);
-                            try {
-                              await _supabase.auth.resetPasswordForEmail(email, redirectTo: 'com.psulubao.it.lcms_app://reset-password');
-                              setDialog(() { isSending = false; step = 2; });
-                            } catch (e) {
-                              setDialog(() => isSending = false);
-                              if (kDebugMode) debugPrint('Reset password error: $e');
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Something went wrong. Please try again.'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
-                            }
-                          },
-                          child: Container(
-                            height: 48,
-                            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
-                            child: Center(
-                              child: isSending
-                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                  : const Text('Send OTP', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, color: Colors.white)),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-
-                // ─── Step 2: OTP Only ───
-                if (step == 2) ...[
-                  const SizedBox(height: 10),
-                  Center(child: Pinput(length: 6, controller: otpController, mainAxisAlignment: MainAxisAlignment.spaceBetween, defaultPinTheme: PinTheme(width: 45, height: 55, textStyle: TextStyle(fontFamily: 'Poppins', fontSize: 20, fontWeight: FontWeight.bold, color: textColor), decoration: BoxDecoration(color: fillColor, borderRadius: BorderRadius.circular(10), border: Border.all(color: borderColor))))),
-                  const SizedBox(height: 30),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: PressableScale(
-                          onPressed: () => setDialog(() => step = 1),
-                          scaleFactor: 0.98,
-                          child: Container(
-                            height: 48,
-                            decoration: BoxDecoration(color: cancelBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor)),
-                            child: Center(child: Text('Back', style: TextStyle(fontFamily: 'Poppins', color: cancelTextColor, fontWeight: FontWeight.w600))),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: PressableScale(
-                          onPressed: isVerifying ? null : () async {
-                            final otp = otpController.text.trim();
-                            if (otp.length < 6) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter the 6-digit code.'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
-                              return;
-                            }
-                            setDialog(() => isVerifying = true);
-                            try {
-                              await _supabase.auth.verifyOTP(email: _forgotEmailController.text.trim(), token: otp, type: OtpType.recovery);
-                              if (!context.mounted) return;
-                              Navigator.pop(context);
-                              context.push(AppRoutes.resetPassword);
-                            } catch (e) {
-                              setDialog(() => isVerifying = false);
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid or expired OTP.'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
-                            }
-                          },
-                          child: Container(
-                            height: 48,
-                            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
-                            child: Center(
-                              child: isVerifying
-                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                  : const Text('Verify', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, fontSize: 15, color: Colors.white)),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Center(
-                    child: PressableScale(
-                      onPressed: () async {
-                        try {
-                          await _supabase.auth.resetPasswordForEmail(_forgotEmailController.text.trim(), redirectTo: 'com.psulubao.it.lcms_app://reset-password');
-                        } catch (e) { debugPrint('Resend error: $e'); }
-                      },
-                      scaleFactor: 1.0, // No movement
-                      opacityFactor: 0.6,
-                      child: const Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: Text(
-                          'Didn\'t receive it? Resend OTP',
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+                _buildField(label: 'Email Address', controller: _forgotEmailController, icon: Icons.email_outlined, keyboardType: TextInputType.emailAddress),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: PressableScale(
+                        onPressed: () => Navigator.pop(context),
+                        scaleFactor: 0.98,
+                        child: Container(
+                          height: 48,
+                          decoration: BoxDecoration(color: cancelBg, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor)),
+                          child: Center(child: Text('Cancel', style: TextStyle(fontFamily: 'Poppins', color: cancelTextColor, fontWeight: FontWeight.w600))),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: PressableScale(
+                        onPressed: isSending ? null : () async {
+                          final email = _forgotEmailController.text.trim();
+                          if (email.isEmpty || !email.contains('@')) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid email.'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
+                            return;
+                          }
+                          setDialog(() => isSending = true);
+                          try {
+                            await _supabase.auth.resetPasswordForEmail(email, redirectTo: 'com.psulubao.it.lcms_app://reset-password');
+                            if (context.mounted) {
+                              Navigator.pop(context);
+                              context.push(AppRoutes.verifyOtp, extra: email);
+                            }
+                          } catch (e) {
+                            setDialog(() => isSending = false);
+                            if (kDebugMode) debugPrint('Reset password error: $e');
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Something went wrong. Please try again.'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
+                          }
+                        },
+                        child: Container(
+                          height: 48,
+                          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
+                          child: Center(
+                            child: isSending
+                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : const Text('Send OTP', style: TextStyle(fontFamily: 'Poppins', fontWeight: FontWeight.w700, color: Colors.white)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
         ),
       ),
     );
-    otpController.dispose();
   }
 
   void _showError(String msg) {
