@@ -25,7 +25,7 @@ class AppSecurityManager with WidgetsBindingObserver {
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
   );
 
-  VoidCallback? onLogoutRequired;
+  VoidCallback? _onLogoutRequired;
   bool _isResuming = false;
   bool _initialized = false;
   static int? _backgroundedAtMs;
@@ -33,7 +33,7 @@ class AppSecurityManager with WidgetsBindingObserver {
   void initialize({required VoidCallback onLogout}) {
     if (_initialized) return;
     _initialized = true;
-    onLogoutRequired = onLogout;
+    _onLogoutRequired = onLogout;
     WidgetsBinding.instance.addObserver(this);
     _clearBackgroundedAt();
   }
@@ -118,7 +118,7 @@ class AppSecurityManager with WidgetsBindingObserver {
     } catch (_) {}
     await _clearBackgroundedAt();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      onLogoutRequired?.call();
+      _onLogoutRequired?.call();
     });
   }
 
@@ -163,6 +163,10 @@ class AppSecurityManager with WidgetsBindingObserver {
           if (elapsed ~/ 1000 >= _backgroundLogoutSeconds) {
             await prefs.remove('app_was_killed');
             await prefs.remove(_backgroundedAtKey);
+            try {
+              await _secureStorage.delete(key: 'user_email');
+              await _secureStorage.delete(key: 'user_password');
+            } catch (_) {}
             return true;
           }
         }
