@@ -18,6 +18,8 @@ class OtpVerificationScreen extends StatefulWidget {
   State<OtpVerificationScreen> createState() => _OtpVerificationScreenState();
 }
 
+enum ButtonState { normal, loading, success, error }
+
 class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     with TickerProviderStateMixin {
   // Matches the same success-green constant used elsewhere in the app
@@ -32,9 +34,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
   int _secondsRemaining = 300; // 5 minutes
 
   // UI/Animation State
-  bool _isLoading = false;
-  bool _isVerified = false;
   bool _isError = false;
+  ButtonState _buttonState = ButtonState.normal;
 
   late AnimationController _shakeController;
   late Animation<double> _shakeAnimation;
@@ -106,13 +107,24 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
   Future<void> _verifyOtp() async {
     final otp = _pinController.text.trim();
     if (otp.length < 6) {
-      setState(() => _isError = true);
+      setState(() {
+        _isError = true;
+        _buttonState = ButtonState.error;
+      });
       _triggerShake();
+
+      await Future.delayed(const Duration(milliseconds: 1500));
+      if (mounted) {
+        setState(() {
+          _isError = false;
+          _buttonState = ButtonState.normal;
+        });
+      }
       return;
     }
 
     setState(() {
-      _isLoading = true;
+      _buttonState = ButtonState.loading;
       _isError = false;
     });
 
@@ -124,10 +136,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
       );
 
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _isVerified = true;
-        });
+        setState(() => _buttonState = ButtonState.success);
 
         await Future.delayed(const Duration(milliseconds: 1500));
         if (mounted) {
@@ -137,12 +146,49 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
     } catch (e) {
       if (mounted) {
         setState(() {
-          _isLoading = false;
           _isError = true;
           _pinController.clear();
+          _buttonState = ButtonState.error;
         });
         _triggerShake();
+
+        // Revert button back to normal after 1.5s
+        await Future.delayed(const Duration(milliseconds: 1500));
+        if (mounted) {
+          setState(() {
+            _isError = false;
+            _buttonState = ButtonState.normal;
+          });
+        }
       }
+    }
+  }
+
+  Widget get _buildButtonChild {
+    switch (_buttonState) {
+      case ButtonState.loading:
+        return const SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            color: Colors.white,
+            strokeWidth: 2.5,
+          ),
+        );
+      case ButtonState.success:
+        return const Icon(Icons.check_rounded, color: Colors.white, size: 28);
+      case ButtonState.error:
+        return const Icon(Icons.close_rounded, color: Colors.white, size: 28);
+      case ButtonState.normal:
+        return const Text(
+          'Confirm',
+          style: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        );
     }
   }
 
@@ -246,10 +292,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
                               border: Border.all(
                                 color: _isError
                                     ? Colors.redAccent
-                                    : _isVerified
+                                    : _buttonState == ButtonState.success
                                         ? _successGreen
                                         : context.borderColor,
-                                width: (_isError || _isVerified) ? 1.5 : 1,
+                                width: (_isError || _buttonState == ButtonState.success) ? 1.5 : 1,
                               ),
                             ),
                           ),
@@ -290,35 +336,32 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen>
                   const SizedBox(height: 40),
 
                   PressableScale(
-                    onPressed: _isLoading || isExpired || _isVerified ? null : _verifyOtp,
-                    child: Container(
-                      width: double.infinity,
+                    onPressed: _buttonState == ButtonState.loading || isExpired ? null : _verifyOtp,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      width: _buttonState == ButtonState.normal ? double.infinity : 56.0,
                       height: 56,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: _isVerified
-                              ? [_successGreen, _successGreen]
-                              : [
+                        borderRadius: BorderRadius.circular(_buttonState == ButtonState.normal ? 32 : 28),
+                        gradient: _buttonState == ButtonState.normal
+                            ? LinearGradient(
+                                colors: [
                                   AppColors.primaryDark,
                                   isExpired ? Colors.grey : AppColors.primary,
                                 ],
-                        ),
-                        borderRadius: BorderRadius.circular(32),
+                              )
+                            : null,
+                        color: _buttonState == ButtonState.success
+                            ? _successGreen
+                            : _buttonState == ButtonState.error
+                                ? Colors.redAccent
+                                : _buttonState == ButtonState.loading
+                                    ? AppColors.primary
+                                    : null,
                       ),
                       child: Center(
-                        child: _isLoading
-                            ? const CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)
-                            : _isVerified
-                                ? const Icon(Icons.check_rounded, color: Colors.white, size: 28)
-                                : const Text(
-                                    'Confirm',
-                                    style: TextStyle(
-                                      fontFamily: 'Poppins',
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                  ),
+                        child: _buildButtonChild,
                       ),
                     ),
                   ),

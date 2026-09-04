@@ -69,11 +69,15 @@ class _LCMSAppState extends ConsumerState<LCMSApp>
   void _handleAuthDeepLink() {
     // Listens for when user clicks the password reset link in email
     // Supabase automatically exchanges the token and fires this event
-    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
       final event = data.event;
       if (event == AuthChangeEvent.passwordRecovery) {
-        // Navigate to reset password screen
-        ref.read(appRouterProvider).go(AppRoutes.resetPassword);
+        // Wait 1.5s to let the green verify success animation play on screen
+        await Future.delayed(const Duration(milliseconds: 1500));
+
+        if (mounted) {
+          ref.read(appRouterProvider).go(AppRoutes.resetPassword);
+        }
       }
     });
   }
