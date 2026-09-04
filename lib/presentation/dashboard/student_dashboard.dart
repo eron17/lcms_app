@@ -684,6 +684,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard>
           'title': 'Class Enrollment',
           'body':
               '${_currentUser?.name ?? 'A student'} has joined ${courseData['title']}',
+          'is_read': false,
           'created_at': DateTime.now().toUtc().toIso8601String(),
         });
       } catch (notifErr) {

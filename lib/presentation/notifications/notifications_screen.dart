@@ -172,7 +172,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       if (mounted) {
         Navigator.pop(context); // Safety close spinner
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load post details: $e')),
+          const SnackBar(
+            content: Text(
+              'Could not open this notification. Please try again.',
+              style: TextStyle(fontFamily: 'Poppins'),
+            ),
+            backgroundColor: Color(0xFFFF5252),
+          ),
         );
       }
       debugPrint('Notification Navigation Error: $e');
@@ -230,12 +236,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return _notifications.where((n) {
       final type = n['type'] as String? ?? '';
       switch (_activeFilter) {
+        // Instructor filters
         case 'enrollment':
           return type == 'student_joined';
+        case 'submission':
+          return type == 'submission_received';
+        // Shared filter
         case 'comment':
           return type == 'class_comment' || type == 'private_comment';
-        case 'submission':
-          return type == 'submission_received' || type == 'assignment_graded';
+        // Student filters
+        case 'posts':
+          return type == 'assignment_posted';
+        case 'grades':
+          return type == 'assignment_graded';
         default:
           return true;
       }
@@ -302,11 +315,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     children: [
                       _buildFilterChip('all', 'All'),
                       const SizedBox(width: 8),
-                      _buildFilterChip('enrollment', 'Enrollment'),
-                      const SizedBox(width: 8),
-                      _buildFilterChip('comment', 'Comments'),
-                      const SizedBox(width: 8),
-                      _buildFilterChip('submission', 'Submissions'),
+                      if (widget.isInstructor) ...[
+                        _buildFilterChip('enrollment', 'Enrollment'),
+                        const SizedBox(width: 8),
+                        _buildFilterChip('comment', 'Comments'),
+                        const SizedBox(width: 8),
+                        _buildFilterChip('submission', 'Submissions'),
+                      ] else ...[
+                        _buildFilterChip('posts', 'Posts'),
+                        const SizedBox(width: 8),
+                        _buildFilterChip('comment', 'Comments'),
+                        const SizedBox(width: 8),
+                        _buildFilterChip('grades', 'Grades'),
+                      ],
                     ],
                   ),
                 ),
@@ -539,6 +560,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         return AppColors.primary; // Blue
       case 'milestone': // ─── ADD THIS ───
         return AppColors.gold;
+      case 'student_joined':
+        return const Color(0xFF4CAF50); // Green
+      case 'class_comment':
+        return const Color(0xFF2196F3); // Blue
+      case 'private_comment':
+        return const Color(0xFF7B2FBE); // Purple
       default:
         return AppColors.primary;
     }
@@ -552,6 +579,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     if (diff.inDays == 1) return 'Yesterday';
     return '${date.day}/${date.month}';
+  }
+
+  String _getEmptyStateMessage() {
+    switch (_activeFilter) {
+      case 'enrollment':
+        return 'No enrollment notifications yet';
+      case 'comment':
+        return 'No comment notifications yet';
+      case 'submission':
+        return 'No submission notifications yet';
+      case 'posts':
+        return 'No new posts from your instructor yet';
+      case 'grades':
+        return 'No grades received yet';
+      default:
+        return 'No new notifications at the moment.';
+    }
   }
 
   Widget _buildEmptyState(Color textColor) {
@@ -575,12 +619,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ),
           ),
           Text(
-            'No new notifications at the moment.',
+            _getEmptyStateMessage(),
             style: TextStyle(
               fontFamily: 'Poppins',
               fontSize: 14,
               color: textColor.withValues(alpha: 0.4),
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),

@@ -193,6 +193,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
             'type': 'class_comment',
             'title': 'Instructor commented',
             'body': '${widget.post['title']}: $text',
+            'is_read': false,
             'created_at': DateTime.now().toUtc().toIso8601String(),
           }).toList();
           await _supabase.from('notifications').insert(batchNotifs);
@@ -206,6 +207,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
           'type': 'class_comment',
           'title': 'New comment from $_currentUserName',
           'body': '${widget.post['title']}: $text',
+          'is_read': false,
           'created_at': DateTime.now().toUtc().toIso8601String(),
         });
       }
@@ -1147,6 +1149,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         'type': 'private_comment',
         'title': 'New private comment on ${widget.post['title']}',
         'body': text,
+        'is_read': false,
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
     } catch (e) {
@@ -1279,6 +1282,7 @@ class _AssignmentDetailScreenState extends State<AssignmentDetailScreen>
         'body':
             'You got $score/$_maxPoints on ${widget.post['title']}. '
             '+$xpAwarded XP earned!',
+        'is_read': false,
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
       await _loadStudentsAndSubmissions();

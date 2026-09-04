@@ -145,6 +145,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               'type': 'class_comment',
               'title': 'Instructor commented',
               'body': '${widget.post['title']}: $text',
+              'is_read': false,
               'created_at': DateTime.now().toUtc().toIso8601String(),
             }).toList();
             await _supabase.from('notifications').insert(notifs);
@@ -167,6 +168,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               'type': 'class_comment',
               'title': 'New comment from $_currentUserName',
               'body': '${widget.post['title']}: $text',
+              'is_read': false,
               'created_at': DateTime.now().toUtc().toIso8601String(),
             });
           }

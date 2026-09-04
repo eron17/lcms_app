@@ -670,6 +670,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                               'title': 'New Announcement',
                                               'body': titleController.text
                                                   .trim(),
+                                              'is_read': false,
                                               'created_at': DateTime.now()
                                                   .toUtc()
                                                   .toIso8601String(),
@@ -1769,6 +1770,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                                     'New ${postType.replaceAll('_', ' ')} Posted',
                                                 'body':
                                                     'Instructor posted: ${titleController.text.trim()}',
+                                                'is_read': false,
                                                 'created_at': DateTime.now()
                                                     .toUtc()
                                                     .toIso8601String(),

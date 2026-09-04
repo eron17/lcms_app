@@ -283,6 +283,7 @@ class _ThreeDMeetDetailScreenState
         'type': 'assignment_graded',
         'title': '${widget.post['title']} has been graded',
         'body': 'Your score: $score/$maxPoints',
+        'is_read': false,
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
 
@@ -357,6 +358,7 @@ class _ThreeDMeetDetailScreenState
         'type': 'private_comment',
         'title': 'Comment on ${widget.post['title']}',
         'body': text,
+        'is_read': false,
         'created_at': DateTime.now().toUtc().toIso8601String(),
       });
 
