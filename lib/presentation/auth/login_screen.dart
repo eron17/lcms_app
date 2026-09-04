@@ -264,32 +264,64 @@ class _LoginScreenState extends State<LoginScreen>
           }
         }
       }
-    } catch (e) {
-      if (mounted) {
-        String errorMessage = e.toString();
-        if (kDebugMode) debugPrint('Auth error: $e');
-
-        // Check if the error is about wrong credentials
-        if (errorMessage.contains('invalid_credentials') ||
-            errorMessage.toLowerCase().contains('invalid login credentials')) {
-          errorMessage =
-              'The email and password you entered did not match our records. Please try again.';
-        } else if (errorMessage.contains('network_error')) {
-          errorMessage =
-              'Connection error. Please check your internet and try again.';
-        } else if (errorMessage.contains('Invalid faculty secret code')) {
-          // Keep as-is — this is our own app-thrown message, not a raw
-          // backend error, so it's safe to show verbatim.
-        } else {
-          // Never show a raw backend error message here — it can leak
-          // account-enumeration signals (e.g. "already registered")
-          // or internal details the user shouldn't see.
-          errorMessage = _isSignIn
-              ? 'Unable to sign in. Please try again.'
-              : 'Unable to create your account. Please try again.';
+    } on AuthException catch (e) {
+      if (kDebugMode) debugPrint('Auth error: ${e.statusCode} ${e.message}');
+      if (!mounted) return;
+      String message;
+      if (_isSignIn) {
+        // Never say specifically whether the email or password was wrong —
+        // that would let an attacker enumerate registered emails.
+        switch (e.statusCode) {
+          case '400':
+            message = 'Invalid email or password.';
+            break;
+          case '422':
+            message = 'Email format is not valid.';
+            break;
+          case '429':
+            message = 'Too many attempts. Please wait and try again.';
+            break;
+          case '500':
+            message = 'Server error. Please try again later.';
+            break;
+          default:
+            message = 'Sign in failed. Please try again.';
         }
-
-        _showError(errorMessage);
+      } else {
+        switch (e.statusCode) {
+          case '400':
+            message =
+                'This email is already registered. Please sign in instead.';
+            break;
+          case '422':
+            message = 'Email format is not valid.';
+            break;
+          case '429':
+            message = 'Too many attempts. Please wait and try again.';
+            break;
+          case '500':
+            message = 'Server error. Please try again later.';
+            break;
+          default:
+            message = 'Sign up failed. Please try again.';
+        }
+      }
+      _showError(message);
+    } catch (e) {
+      if (kDebugMode) debugPrint('Auth error: $e');
+      if (!mounted) return;
+      // Never show a raw backend/exception message here — it can leak
+      // account-enumeration signals or internal details the user
+      // shouldn't see. The one exception is our own app-thrown secret
+      // code error, which is safe to show verbatim.
+      if (e.toString().contains('Invalid faculty secret code')) {
+        _showError('Invalid faculty secret code.');
+      } else {
+        _showError(
+          _isSignIn
+              ? 'Unable to sign in. Please try again.'
+              : 'Unable to create your account. Please try again.',
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -661,8 +693,14 @@ class _LoginScreenState extends State<LoginScreen>
                     controller: _nameController,
                     icon: Icons.person_outline,
                     validator: (v) {
-                      if (!_isSignIn && (v == null || v.trim().isEmpty)) {
-                        return 'Enter your full name';
+                      if (!_isSignIn) {
+                        final name = v?.trim() ?? '';
+                        if (name.isEmpty) {
+                          return 'Full name is required.';
+                        }
+                        if (name.length < 2) {
+                          return 'Enter your full name.';
+                        }
                       }
                       return null;
                     },
@@ -679,11 +717,16 @@ class _LoginScreenState extends State<LoginScreen>
                   icon: Icons.email_outlined,
                   keyboardType: TextInputType.emailAddress,
                   validator: (v) {
-                    if (v == null || v.isEmpty) {
-                      return 'Enter your email';
+                    if (v == null || v.trim().isEmpty) {
+                      return 'Email is required.';
                     }
-                    if (!v.contains('@') || !v.contains('.')) {
-                      return 'Enter a valid email';
+                    final emailRegex = RegExp(
+                      r'^[a-zA-Z0-9._%+\-]+@'
+                      r'[a-zA-Z0-9.\-]+\.'
+                      r'[a-zA-Z]{2,}$',
+                    );
+                    if (!emailRegex.hasMatch(v.trim())) {
+                      return 'Enter a valid email address.';
                     }
                     return null;
                   },
@@ -714,6 +757,9 @@ class _LoginScreenState extends State<LoginScreen>
                 // ─── Password ──────────────────────
                 _buildField(
                   label: 'Password',
+                  hintText: !_isSignIn
+                      ? 'Min 8 chars, 1 number, 1 special character'
+                      : null,
                   controller: _passwordController,
                   icon: Icons.lock_outline,
                   isPassword: true,
@@ -721,11 +767,33 @@ class _LoginScreenState extends State<LoginScreen>
                   onToggle: () =>
                       setState(() => _passwordVisible = !_passwordVisible),
                   validator: (v) {
-                    if (v == null || v.isEmpty) {
-                      return 'Enter your password';
+                    // Sign in never enforces complexity — existing accounts
+                    // created before these rules must still be able to log in.
+                    if (_isSignIn) {
+                      if (v == null || v.isEmpty) {
+                        return 'Password is required.';
+                      }
+                      return null;
                     }
-                    if (v.length < 6) {
-                      return 'At least 6 characters';
+                    if (v == null || v.isEmpty) {
+                      return 'Password is required.';
+                    }
+                    if (v.length < 8) {
+                      return 'Password must be at least 8 characters.';
+                    }
+                    if (v.length > 128) {
+                      return 'Password must not exceed 128 characters.';
+                    }
+                    if (!RegExp(r'[0-9]').hasMatch(v)) {
+                      return 'Password must contain at least one number.';
+                    }
+                    if (!RegExp(
+                      r'[!@#$%^&*()_+\-=\[\]{}|;:'
+                      r"'"
+                      r'",.<>?/\\`~]',
+                    ).hasMatch(v)) {
+                      return 'Password must contain at least one special '
+                          'character.';
                     }
                     return null;
                   },
@@ -974,6 +1042,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   Widget _buildField({
     required String label,
+    String? hintText,
     required TextEditingController controller,
     required IconData icon,
     bool isPassword = false,
@@ -1005,6 +1074,12 @@ class _LoginScreenState extends State<LoginScreen>
         style: TextStyle(fontFamily: 'Poppins', color: textColor, fontSize: 14),
         decoration: InputDecoration(
           labelText: label,
+          hintText: hintText,
+          hintStyle: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 12,
+            color: hintColor,
+          ),
           labelStyle: TextStyle(
             fontFamily: 'Poppins',
             fontSize: 13,
