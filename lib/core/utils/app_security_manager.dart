@@ -1,9 +1,18 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+// Logs the user out after the app has spent _backgroundLogoutSeconds
+// (2 minutes) in the background. A running Timer is deliberately NOT
+// used here — mobile OSes routinely suspend a backgrounded app's Dart
+// isolate, so a Timer scheduled before backgrounding is not guaranteed
+// to fire. Instead, the moment backgrounding begins is persisted as a
+// wall-clock timestamp; elapsed time is checked when the app resumes,
+// and — for the case where the app is killed entirely while
+// backgrounded — again on next launch via isBackgroundLockExpired().
 class AppSecurityManager with WidgetsBindingObserver {
   static final AppSecurityManager _instance =
       AppSecurityManager._internal();
@@ -53,7 +62,7 @@ class AppSecurityManager with WidgetsBindingObserver {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     _backgroundedAtMs = timestamp;
     _persistBackgroundedAt(timestamp);
-    debugPrint('AppSecurity: backgrounded at $timestamp');
+    if (kDebugMode) debugPrint('AppSecurity: backgrounded at $timestamp');
   }
 
   Future<void> _persistBackgroundedAt(int timestamp) async {
@@ -76,21 +85,23 @@ class AppSecurityManager with WidgetsBindingObserver {
     final elapsed = DateTime.now().millisecondsSinceEpoch - backgroundedAt;
     final elapsedSeconds = elapsed ~/ 1000;
 
-    debugPrint(
-      'AppSecurity: backgrounded ${elapsedSeconds}s ago '
-      '(logout threshold: ${_backgroundLogoutSeconds}s)',
-    );
+    if (kDebugMode) {
+      debugPrint(
+        'AppSecurity: backgrounded ${elapsedSeconds}s ago '
+        '(logout threshold: ${_backgroundLogoutSeconds}s)',
+      );
+    }
 
     if (elapsedSeconds >= _backgroundLogoutSeconds) {
-      debugPrint('AppSecurity: timeout → logging out');
+      if (kDebugMode) debugPrint('AppSecurity: timeout → logging out');
       await _performLogout();
     } else {
       // Under threshold — just refresh session
       try {
         await Supabase.instance.client.auth.refreshSession();
-        debugPrint('AppSecurity: session refreshed');
+        if (kDebugMode) debugPrint('AppSecurity: session refreshed');
       } catch (e) {
-        debugPrint('AppSecurity: session refresh failed → $e');
+        if (kDebugMode) debugPrint('AppSecurity: session refresh failed → $e');
         // If refresh fails, also logout
         await _performLogout();
       }
@@ -113,7 +124,7 @@ class AppSecurityManager with WidgetsBindingObserver {
 
   @override
   Future<void> didChangeAppLifecycleState(AppLifecycleState state) async {
-    debugPrint('AppSecurity: lifecycle → $state');
+    if (kDebugMode) debugPrint('AppSecurity: lifecycle → $state');
     switch (state) {
       case AppLifecycleState.inactive:
         if (!_isResuming) _saveBackgroundedAt();
