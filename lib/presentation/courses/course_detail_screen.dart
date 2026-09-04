@@ -1,5 +1,6 @@
 // lib/presentation/courses/course_detail_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -383,15 +384,23 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   }
 
   Future<void> _deletePost(String postId) async {
+    if (_isInteractionDisabled) return;
     try {
-      await _supabase.from('posts').delete().eq('id', postId);
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+      await _supabase
+          .from('posts')
+          .delete()
+          .eq('id', postId)
+          .eq('instructor_id', userId);
       await _loadStream();
       await _loadCoursework();
     } catch (e) {
+      if (kDebugMode) debugPrint('Delete post error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error deleting post: $e'),
+          const SnackBar(
+            content: Text('Failed to delete post. Please try again.'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -417,13 +426,13 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         );
       }
     } catch (e) {
-      debugPrint('Remove student error: $e');
+      if (kDebugMode) debugPrint('Remove student error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
-              'Failed to remove student: $e',
-              style: const TextStyle(fontFamily: 'Poppins'),
+              'Failed to remove student. Please try again.',
+              style: TextStyle(fontFamily: 'Poppins'),
             ),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
@@ -434,15 +443,21 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   }
 
   Future<void> _deleteTopic(String topicId) async {
+    if (_isInteractionDisabled) return;
     try {
       // Step 1: Update all posts belonging to this topic to have topic_id = null (General)
       await _supabase
           .from('posts')
           .update({'topic_id': null})
-          .eq('topic_id', topicId);
+          .eq('topic_id', topicId)
+          .eq('course_id', widget.course['id']);
 
       // Step 2: Delete the actual Topic
-      await _supabase.from('topics').delete().eq('id', topicId);
+      await _supabase
+          .from('topics')
+          .delete()
+          .eq('id', topicId)
+          .eq('course_id', widget.course['id']);
 
       // Step 3: Refresh UI coursework list
       await _loadCoursework();
@@ -456,10 +471,11 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         );
       }
     } catch (e) {
+      if (kDebugMode) debugPrint('Delete topic error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error deleting topic: $e'),
+          const SnackBar(
+            content: Text('Failed to delete topic. Please try again.'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -472,6 +488,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   // ════════════════════════════════════════════════════════
 
   void _showAnnouncementDialog({Map<String, dynamic>? existing}) {
+    if (_isInteractionDisabled) return;
     final titleController = TextEditingController(
       text: existing?['title'] ?? '',
     );
@@ -668,13 +685,18 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                     Navigator.pop(context);
                                     await _loadStream();
                                   } catch (e) {
+                                    if (kDebugMode) {
+                                      debugPrint('Post announcement error: $e');
+                                    }
                                     setSheet(() => isPosting = false);
                                     if (!context.mounted) return;
                                     ScaffoldMessenger.of(
                                       context,
                                     ).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Error: $e'),
+                                      const SnackBar(
+                                        content: Text(
+                                          'Failed to post. Please try again.',
+                                        ),
                                         backgroundColor: AppColors.error,
                                       ),
                                     );
@@ -716,6 +738,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     String postType, {
     Map<String, dynamic>? existing,
   }) {
+    if (_isInteractionDisabled) return;
     final titleController = TextEditingController(
       text: existing?['title'] ?? '',
     );
@@ -1771,15 +1794,15 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
                                     await _loadCoursework();
                                   } catch (e) {
                                     setSheet(() => isPosting = false);
-                                    debugPrint('Error posting: $e');
+                                    if (kDebugMode) debugPrint('Error posting: $e');
                                     if (context.mounted) {
                                       ScaffoldMessenger.of(
                                         context,
                                       ).showSnackBar(
-                                        SnackBar(
+                                        const SnackBar(
                                           content: Text(
-                                            'Failed to post: $e',
-                                            style: const TextStyle(
+                                            'Failed to post. Please try again.',
+                                            style: TextStyle(
                                               fontFamily: 'Poppins',
                                             ),
                                           ),
@@ -1821,6 +1844,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
   }
 
   void _showCreateTopicDialog() {
+    if (_isInteractionDisabled) return;
     final titleController = TextEditingController();
     bool isCreating = false;
 
@@ -2405,12 +2429,13 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
         _loadCoursework();
       }
     } catch (e) {
+      if (kDebugMode) debugPrint('Rename topic error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             content: Text(
-              'Failed to rename: $e',
-              style: const TextStyle(fontFamily: 'Poppins'),
+              'Failed to rename. Please try again.',
+              style: TextStyle(fontFamily: 'Poppins'),
             ),
             backgroundColor: AppColors.error,
             behavior: SnackBarBehavior.floating,
