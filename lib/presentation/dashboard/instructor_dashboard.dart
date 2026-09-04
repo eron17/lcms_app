@@ -1536,6 +1536,7 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
       },
     ];
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    final double alignmentX = -1.0 + (_currentIndex * (2.0 / (items.length - 1)));
 
     return Container(
       height: 68,
@@ -1545,53 +1546,88 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
           top: BorderSide(color: context.borderColor.withValues(alpha: 0.5)),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(items.length, (index) {
-          final isActive = _currentIndex == index;
-          return GestureDetector(
-            onTap: () {
-              setState(() => _currentIndex = index);
-              if (index == 2) _loadReports();
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: isActive
-                    ? const LinearGradient(
-                        colors: [AppColors.primaryDark, AppColors.primary],
-                      )
-                    : null,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isActive
-                        ? items[index]['activeIcon'] as IconData
-                        : items[index]['icon'] as IconData,
-                    color: isActive
-                        ? Colors.white
-                        : textColor.withValues(alpha: 0.5),
-                    size: 22,
-                  ),
-                  Text(
-                    items[index]['label'] as String,
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 10,
-                      color: isActive
-                          ? Colors.white
-                          : textColor.withValues(alpha: 0.5),
+      child: Stack(
+        children: [
+          // ─── 1. HORIZONTAL SLIDING BACKGROUND PILL ───
+          AnimatedAlign(
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOutBack,
+            alignment: Alignment(alignmentX, 0.0),
+            child: FractionallySizedBox(
+              widthFactor: 1 / items.length,
+              child: Center(
+                child: Container(
+                  width: 78,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [AppColors.primaryDark, AppColors.primary],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
                     ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          );
-        }),
+          ),
+
+          // ─── 2. TRANSPARENT BUTTON INTERACTION LAYER ───
+          Row(
+            children: List.generate(items.length, (index) {
+              final isActive = _currentIndex == index;
+              return Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    setState(() => _currentIndex = index);
+                    if (index == 2) _loadReports();
+                  },
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        AnimatedScale(
+                          duration: const Duration(milliseconds: 200),
+                          scale: isActive ? 1.15 : 1.0,
+                          child: Icon(
+                            isActive
+                                ? items[index]['activeIcon'] as IconData
+                                : items[index]['icon'] as IconData,
+                            color: isActive
+                                ? Colors.white
+                                : textColor.withValues(alpha: 0.5),
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          items[index]['label'] as String,
+                          style: TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 10,
+                            fontWeight: isActive ? FontWeight.w700 : FontWeight.w400,
+                            color: isActive
+                                ? Colors.white
+                                : textColor.withValues(alpha: 0.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ],
       ),
     );
   }
