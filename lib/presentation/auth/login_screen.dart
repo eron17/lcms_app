@@ -158,7 +158,7 @@ class _LoginScreenState extends State<LoginScreen>
 
         final biometricUser = response.user;
         if (biometricUser != null && mounted) {
-          _navigateToDashboard(biometricUser.id);
+          await _navigateToDashboard(biometricUser.id);
         }
       }
     } catch (e) {
@@ -193,7 +193,7 @@ class _LoginScreenState extends State<LoginScreen>
             value: _passwordController.text.trim(),
           );
 
-          _navigateToDashboard(signedInUser.id);
+          await _navigateToDashboard(signedInUser.id);
         }
       } else {
         // ─── Sign Up ───────────────────────────────────────
@@ -267,6 +267,7 @@ class _LoginScreenState extends State<LoginScreen>
     } catch (e) {
       if (mounted) {
         String errorMessage = e.toString();
+        if (kDebugMode) debugPrint('Auth error: $e');
 
         // Check if the error is about wrong credentials
         if (errorMessage.contains('invalid_credentials') ||
@@ -276,6 +277,16 @@ class _LoginScreenState extends State<LoginScreen>
         } else if (errorMessage.contains('network_error')) {
           errorMessage =
               'Connection error. Please check your internet and try again.';
+        } else if (errorMessage.contains('Invalid faculty secret code')) {
+          // Keep as-is — this is our own app-thrown message, not a raw
+          // backend error, so it's safe to show verbatim.
+        } else {
+          // Never show a raw backend error message here — it can leak
+          // account-enumeration signals (e.g. "already registered")
+          // or internal details the user shouldn't see.
+          errorMessage = _isSignIn
+              ? 'Unable to sign in. Please try again.'
+              : 'Unable to create your account. Please try again.';
         }
 
         _showError(errorMessage);
@@ -386,8 +397,9 @@ class _LoginScreenState extends State<LoginScreen>
                               setDialog(() { isSending = false; step = 2; });
                             } catch (e) {
                               setDialog(() => isSending = false);
+                              if (kDebugMode) debugPrint('Reset password error: $e');
                               if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Something went wrong. Please try again.'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
                             }
                           },
                           child: Container(
@@ -649,7 +661,7 @@ class _LoginScreenState extends State<LoginScreen>
                     controller: _nameController,
                     icon: Icons.person_outline,
                     validator: (v) {
-                      if (!_isSignIn && (v == null || v.isEmpty)) {
+                      if (!_isSignIn && (v == null || v.trim().isEmpty)) {
                         return 'Enter your full name';
                       }
                       return null;
@@ -670,7 +682,7 @@ class _LoginScreenState extends State<LoginScreen>
                     if (v == null || v.isEmpty) {
                       return 'Enter your email';
                     }
-                    if (!v.contains('@')) {
+                    if (!v.contains('@') || !v.contains('.')) {
                       return 'Enter a valid email';
                     }
                     return null;
