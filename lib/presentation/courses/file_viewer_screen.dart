@@ -99,9 +99,10 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     return 'unknown';
   }
 
+  String get _fileExtension => widget.fileName.split('.').last.toLowerCase();
+
   Color _fileTypeColor() {
-    final ext = widget.fileName.split('.').last.toLowerCase();
-    switch (ext) {
+    switch (_fileExtension) {
       case 'pdf':
         return const Color(0xFFFF4D4D);
       case 'doc':
@@ -119,8 +120,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
   }
 
   String _fileTypeLabel() {
-    final ext = widget.fileName.split('.').last.toLowerCase();
-    switch (ext) {
+    switch (_fileExtension) {
       case 'pdf':
         return 'PDF';
       case 'doc':
@@ -133,7 +133,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       case 'xlsx':
         return 'XLS';
       default:
-        return ext.toUpperCase();
+        return _fileExtension.toUpperCase();
     }
   }
 
@@ -175,12 +175,13 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 
   Future<void> _initVideoPlayer() async {
     try {
-      _videoController = VideoPlayerController.networkUrl(
+      final controller = VideoPlayerController.networkUrl(
         Uri.parse(widget.url),
       );
-      await _videoController!.initialize();
+      _videoController = controller;
+      await controller.initialize();
       _chewieController = ChewieController(
-        videoPlayerController: _videoController!,
+        videoPlayerController: controller,
         autoPlay: false,
         looping: false,
         allowFullScreen: true,
@@ -225,7 +226,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
             ? Colors.white
             : context.textPrimary,
         elevation: 0,
-        leadingWidth: 70, // Increased to support the box
+        leadingWidth: 70,
         leading: Center(
           child: PressableScale(
             onPressed: () => Navigator.pop(context),
@@ -383,33 +384,37 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     );
   }
 
-  // ─── Office Doc Viewer (Word / PPT / Excel) ────────────────
-  Widget _buildOfficeViewer() {
-    if (_officeController == null) return _buildUnsupportedFile();
-    return Stack(
-      children: [
-        WebViewWidget(controller: _officeController!),
-        if (_officeLoading)
-          Container(
-            color: context.bgColor,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(color: AppColors.primary),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Loading document...',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 14,
-                      color: context.textSecondary,
-                    ),
-                  ),
-                ],
+  Widget _buildLoadingState(String message) {
+    return Container(
+      color: context.bgColor,
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: AppColors.primary),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: TextStyle(
+                fontFamily: 'Poppins',
+                fontSize: 14,
+                color: context.textSecondary,
               ),
             ),
-          ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Office Doc Viewer (Word / PPT / Excel) ────────────────
+  Widget _buildOfficeViewer() {
+    final officeController = _officeController;
+    if (officeController == null) return _buildUnsupportedFile();
+    return Stack(
+      children: [
+        WebViewWidget(controller: officeController),
+        if (_officeLoading) _buildLoadingState('Loading document...'),
         if (_officeError && !_officeLoading)
           Container(
             color: context.bgColor,
@@ -540,35 +545,15 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
             canShowPaginationDialog: true,
           );
 
+    final pdfError = _pdfError;
     return Stack(
       children: [
         pdfWidget,
 
-        // Loading indicator
-        if (!_pdfLoaded && _pdfError == null)
-          Container(
-            color: context.bgColor,
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(color: AppColors.primary),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Loading PDF...',
-                    style: TextStyle(
-                      fontFamily: 'Poppins',
-                      fontSize: 14,
-                      color: context.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        if (!_pdfLoaded && pdfError == null) _buildLoadingState('Loading PDF...'),
 
         // Error state
-        if (_pdfError != null)
+        if (pdfError != null)
           Container(
             color: context.bgColor,
             child: Center(
@@ -594,7 +579,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      _pdfError!,
+                      pdfError,
                       style: TextStyle(
                         fontFamily: 'Poppins',
                         fontSize: 13,
@@ -637,7 +622,8 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
 
   // ─── Video Player ─────────────────────────────────────────
   Widget _buildVideoPlayer() {
-    if (_videoError != null) {
+    final videoError = _videoError;
+    if (videoError != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -657,7 +643,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                _videoError!,
+                videoError,
                 style: const TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 13,
