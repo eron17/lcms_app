@@ -54,10 +54,9 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
       'title': 'Code Scanner',
       'summary': 'Auto-verifies student output vs expected results',
       'detail':
-          'The CodeScanner checks required keywords, forbidden '
-          'patterns, and compares actual output to the instructor\'s '
-          'expected output. AutoGrader calculates the final score '
-          'instantly.',
+          'Automated code analysis checks student submissions against '
+          'the instructor\'s expected output and grading criteria, '
+          'then calculates the final score instantly.',
     },
     {
       'icon': Icons.shield_rounded,
