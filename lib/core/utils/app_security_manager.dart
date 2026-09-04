@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class AppSecurityManager with WidgetsBindingObserver {
   static final AppSecurityManager _instance =
@@ -11,12 +12,18 @@ class AppSecurityManager with WidgetsBindingObserver {
 
   static const int _backgroundLogoutSeconds = 120;
   static const String _backgroundedAtKey = 'app_backgrounded_at';
+  static const _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   VoidCallback? onLogoutRequired;
   bool _isResuming = false;
+  bool _initialized = false;
   static int? _backgroundedAtMs;
 
   void initialize({required VoidCallback onLogout}) {
+    if (_initialized) return;
+    _initialized = true;
     onLogoutRequired = onLogout;
     WidgetsBinding.instance.addObserver(this);
     _clearBackgroundedAt();
@@ -43,12 +50,16 @@ class AppSecurityManager with WidgetsBindingObserver {
     // which executes AFTER these events on the way back. An
     // _isResuming-only guard cannot protect against them.
     if (_backgroundedAtMs != null) return;
-    _backgroundedAtMs = DateTime.now().millisecondsSinceEpoch;
-    SharedPreferences.getInstance().then((prefs) {
-      prefs.setInt(_backgroundedAtKey, _backgroundedAtMs!);
-      prefs.setBool('app_was_killed', true);
-    });
-    debugPrint('AppSecurity: backgrounded at $_backgroundedAtMs');
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    _backgroundedAtMs = timestamp;
+    _persistBackgroundedAt(timestamp);
+    debugPrint('AppSecurity: backgrounded at $timestamp');
+  }
+
+  Future<void> _persistBackgroundedAt(int timestamp) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_backgroundedAtKey, timestamp);
+    await prefs.setBool('app_was_killed', true);
   }
 
   Future<void> _checkAndLogoutIfNeeded() async {
@@ -89,6 +100,10 @@ class AppSecurityManager with WidgetsBindingObserver {
   Future<void> _performLogout() async {
     try {
       await Supabase.instance.client.auth.signOut();
+    } catch (_) {}
+    try {
+      await _secureStorage.delete(key: 'user_email');
+      await _secureStorage.delete(key: 'user_password');
     } catch (_) {}
     await _clearBackgroundedAt();
     WidgetsBinding.instance.addPostFrameCallback((_) {
