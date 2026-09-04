@@ -152,7 +152,7 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
             // doc it can't render (common for some .xlsx files) can
             // navigate to the raw Supabase file URL, which Android then
             // hands off to a system app instead of showing it in-app.
-            if (request.url.contains('docs.google.com')) {
+            if (request.url.startsWith('https://docs.google.com')) {
               return NavigationDecision.navigate;
             }
             return NavigationDecision.prevent;
@@ -202,7 +202,14 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
       );
       if (mounted) setState(() => _videoInitialized = true);
     } catch (e) {
-      if (mounted) setState(() => _videoError = e.toString());
+      debugPrint('Video init error: $e');
+      if (mounted) {
+        setState(
+          () => _videoError =
+              'The video may be corrupted, unavailable, or the '
+              'connection was interrupted.',
+        );
+      }
     }
   }
 
@@ -211,6 +218,9 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
     _chewieController?.dispose();
     _videoController?.dispose();
     _pdfController.dispose();
+    if (_officeController != null) {
+      WebViewCookieManager().clearCookies();
+    }
     super.dispose();
   }
 
@@ -521,7 +531,14 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
               if (mounted) setState(() => _pdfLoaded = true);
             },
             onDocumentLoadFailed: (details) {
-              if (mounted) setState(() => _pdfError = details.description);
+              debugPrint('PDF load error: ${details.description}');
+              if (mounted) {
+                setState(
+                  () => _pdfError =
+                      'The file may be corrupted, unavailable, or the '
+                      'connection was interrupted.',
+                );
+              }
             },
             pageLayoutMode: PdfPageLayoutMode.continuous,
             scrollDirection: PdfScrollDirection.vertical,
@@ -536,7 +553,14 @@ class _FileViewerScreenState extends State<FileViewerScreen> {
               if (mounted) setState(() => _pdfLoaded = true);
             },
             onDocumentLoadFailed: (details) {
-              if (mounted) setState(() => _pdfError = details.description);
+              debugPrint('PDF load error: ${details.description}');
+              if (mounted) {
+                setState(
+                  () => _pdfError =
+                      'The file may be corrupted, unavailable, or the '
+                      'connection was interrupted.',
+                );
+              }
             },
             pageLayoutMode: PdfPageLayoutMode.continuous,
             scrollDirection: PdfScrollDirection.vertical,
