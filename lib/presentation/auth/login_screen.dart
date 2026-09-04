@@ -9,6 +9,8 @@ import 'package:pinput/pinput.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../shared/widgets/pressable_scale.dart';
 import '../../core/utils/string_utils.dart';
+import '../../core/constants/app_colors.dart';
+import '../../core/theme/theme_extensions.dart';
 class LoginScreen extends StatefulWidget {
   final bool showRegister;
   const LoginScreen({super.key, this.showRegister = false});
@@ -154,8 +156,9 @@ class _LoginScreenState extends State<LoginScreen>
           password: savedPassword,
         );
 
-        if (response.user != null && mounted) {
-          _navigateToDashboard(response.user!.id);
+        final biometricUser = response.user;
+        if (biometricUser != null && mounted) {
+          _navigateToDashboard(biometricUser.id);
         }
       }
     } catch (e) {
@@ -178,7 +181,8 @@ class _LoginScreenState extends State<LoginScreen>
           email: _emailController.text.trim(),
           password: _passwordController.text.trim(),
         );
-        if (response.user != null && mounted) {
+        final signedInUser = response.user;
+        if (signedInUser != null && mounted) {
           // ─── NEW: Save credentials for future biometric login ───
           await _storage.write(
             key: 'user_email',
@@ -189,7 +193,7 @@ class _LoginScreenState extends State<LoginScreen>
             value: _passwordController.text.trim(),
           );
 
-          _navigateToDashboard(response.user!.id);
+          _navigateToDashboard(signedInUser.id);
         }
       } else {
         // ─── Sign Up ───────────────────────────────────────
@@ -209,9 +213,10 @@ class _LoginScreenState extends State<LoginScreen>
           password: _passwordController.text.trim(),
         );
 
-        if (response.user != null) {
+        final newUser = response.user;
+        if (newUser != null) {
           await _supabase.from('users').insert({
-            'id': response.user!.id,
+            'id': newUser.id,
             'name': toTitleCase(_nameController.text.trim()),
             'email': _emailController.text.trim(),
             'role': _isStudent ? 'student' : 'instructor',
@@ -300,7 +305,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   // ─── Forgot Password (2-step: Email → OTP → ResetPasswordScreen) ───
-  void _showForgotPasswordDialog() {
+  void _showForgotPasswordDialog() async {
     _forgotEmailController.text = _emailController.text.trim();
     final otpController = TextEditingController();
     bool isSending = false;
@@ -309,14 +314,14 @@ class _LoginScreenState extends State<LoginScreen>
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dialogBg = isDark ? const Color(0xFF0D1B4B) : Colors.white;
-    final borderColor = isDark ? const Color(0xFF1E3A6E) : const Color(0xFFDDE3F0);
-    final fillColor = isDark ? const Color(0xFF0A1128) : const Color(0xFFF5F7FF);
+    final borderColor = isDark ? AppColors.darkBorder : const Color(0xFFDDE3F0);
+    final fillColor = isDark ? AppColors.darkCard : const Color(0xFFF5F7FF);
     final textColor = isDark ? Colors.white : const Color(0xFF0D1B4B);
     final subtitleColor = isDark ? Colors.white.withValues(alpha: 0.6) : const Color(0xFF0D1B4B).withValues(alpha: 0.5);
-    final cancelBg = isDark ? const Color(0xFF0A1128) : const Color(0xFFF0F4FF);
+    final cancelBg = isDark ? AppColors.darkCard : const Color(0xFFF0F4FF);
     final cancelTextColor = isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF0D1B4B).withValues(alpha: 0.7);
 
-    showDialog(
+    await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
@@ -334,8 +339,8 @@ class _LoginScreenState extends State<LoginScreen>
                   children: [
                     Container(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: const Color(0xFF1E90FF).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                      child: Icon(step == 1 ? Icons.lock_reset_outlined : Icons.pin_outlined, color: const Color(0xFF1E90FF), size: 22),
+                      decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                      child: Icon(step == 1 ? Icons.lock_reset_outlined : Icons.pin_outlined, color: AppColors.primary, size: 22),
                     ),
                     const SizedBox(width: 12),
                     Text(step == 1 ? 'Forgot Password' : 'Enter OTP',
@@ -372,7 +377,7 @@ class _LoginScreenState extends State<LoginScreen>
                           onPressed: isSending ? null : () async {
                             final email = _forgotEmailController.text.trim();
                             if (email.isEmpty || !email.contains('@')) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid email.'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid email.'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
                               return;
                             }
                             setDialog(() => isSending = true);
@@ -382,12 +387,12 @@ class _LoginScreenState extends State<LoginScreen>
                             } catch (e) {
                               setDialog(() => isSending = false);
                               if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
                             }
                           },
                           child: Container(
                             height: 48,
-                            decoration: BoxDecoration(color: const Color(0xFF1E90FF), borderRadius: BorderRadius.circular(12)),
+                            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
                             child: Center(
                               child: isSending
                                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
@@ -424,7 +429,7 @@ class _LoginScreenState extends State<LoginScreen>
                           onPressed: isVerifying ? null : () async {
                             final otp = otpController.text.trim();
                             if (otp.length < 6) {
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter the 6-digit code.'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter the 6-digit code.'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
                               return;
                             }
                             setDialog(() => isVerifying = true);
@@ -436,12 +441,12 @@ class _LoginScreenState extends State<LoginScreen>
                             } catch (e) {
                               setDialog(() => isVerifying = false);
                               if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid or expired OTP.'), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating));
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Invalid or expired OTP.'), backgroundColor: AppColors.error, behavior: SnackBarBehavior.floating));
                             }
                           },
                           child: Container(
                             height: 48,
-                            decoration: BoxDecoration(color: const Color(0xFF1E90FF), borderRadius: BorderRadius.circular(12)),
+                            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
                             child: Center(
                               child: isVerifying
                                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
@@ -466,7 +471,7 @@ class _LoginScreenState extends State<LoginScreen>
                         padding: EdgeInsets.all(8.0),
                         child: Text(
                           'Didn\'t receive it? Resend OTP',
-                          style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: Color(0xFF1E90FF), fontWeight: FontWeight.w600),
+                          style: TextStyle(fontFamily: 'Poppins', fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ),
@@ -478,13 +483,14 @@ class _LoginScreenState extends State<LoginScreen>
         ),
       ),
     );
+    otpController.dispose();
   }
 
   void _showError(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg, style: const TextStyle(fontFamily: 'Poppins')),
-        backgroundColor: Colors.red.shade800,
+        backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
@@ -552,7 +558,7 @@ class _LoginScreenState extends State<LoginScreen>
               ? const RadialGradient(
                   center: Alignment(0, -0.3),
                   radius: 1.2,
-                  colors: [Color(0xFF0D1B4B), Color(0xFF080D1F)],
+                  colors: [Color(0xFF0D1B4B), AppColors.darkBackground],
                 )
               : const LinearGradient(
                   begin: Alignment.topCenter,
@@ -577,8 +583,6 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Widget _buildLoginForm() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Form(
       key: _formKey,
       child: Column(
@@ -654,196 +658,11 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
 
                 // ─── Sex Radio Buttons (Student Sign Up only) ─
-                _animatedField(
-                  isVisible: !_isSignIn && _isStudent,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 18),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF0A1128) : Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: isDark
-                              ? const Color(0xFF1E3A6E)
-                              : const Color(0xFFDDE3F0),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.wc_outlined,
-                                color: isDark
-                                    ? Colors.white.withValues(alpha: 0.3)
-                                    : const Color(
-                                        0xFF0D1B4B,
-                                      ).withValues(alpha: 0.4),
-                                size: 20,
-                              ),
-                              const SizedBox(width: 10),
-                              Text(
-                                'Sex',
-                                style: TextStyle(
-                                  fontFamily: 'Poppins',
-                                  fontSize: 13,
-                                  color: isDark
-                                      ? Colors.white.withValues(alpha: 0.5)
-                                      : const Color(
-                                          0xFF0D1B4B,
-                                        ).withValues(alpha: 0.4),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          RadioGroup<String>(
-                            groupValue: _selectedSex,
-                            onChanged: (v) =>
-                                setState(() => _selectedSex = v ?? 'male'),
-                            child: Row(
-                              children: [
-                                // Male
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () =>
-                                        setState(() => _selectedSex = 'male'),
-                                    child: AnimatedContainer(
-                                      duration: const Duration(
-                                        milliseconds: 200,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _selectedSex == 'male'
-                                            ? const Color(
-                                                0xFF1E90FF,
-                                              ).withValues(alpha: 0.15)
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(
-                                          10,
-                                        ),
-                                        border: Border.all(
-                                          color: _selectedSex == 'male'
-                                              ? const Color(0xFF1E90FF)
-                                              : (isDark
-                                                    ? const Color(0xFF1E3A6E)
-                                                    : const Color(
-                                                        0xFFDDE3F0,
-                                                      )), // FIXED BORDER
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          const Radio<String>(
-                                            value: 'male',
-                                            activeColor: Color(0xFF1E90FF),
-                                            materialTapTargetSize:
-                                                MaterialTapTargetSize
-                                                    .shrinkWrap,
-                                          ),
-                                          Text(
-                                            'Male',
-                                            style: TextStyle(
-                                              fontFamily: 'Poppins',
-                                              fontSize: 14,
-                                              // FIXED COLOR: White in Dark, Dark Blue in Light
-                                              color: isDark
-                                                  ? Colors.white
-                                                  : const Color(0xFF0D1B4B),
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                // Female
-                                Expanded(
-                                  child: GestureDetector(
-                                    onTap: () => setState(
-                                      () => _selectedSex = 'female',
-                                    ),
-                                    child: AnimatedContainer(
-                                      duration: const Duration(
-                                        milliseconds: 200,
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 10,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _selectedSex == 'female'
-                                            ? const Color(
-                                                0xFFFF69B4,
-                                              ).withValues(alpha: 0.15)
-                                            : Colors.transparent,
-                                        borderRadius: BorderRadius.circular(
-                                          10,
-                                        ),
-                                        border: Border.all(
-                                          color: _selectedSex == 'female'
-                                              ? const Color(0xFFFF69B4)
-                                              : (isDark
-                                                    ? const Color(0xFF1E3A6E)
-                                                    : const Color(
-                                                        0xFFDDE3F0,
-                                                      )), // FIXED BORDER
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          const Radio<String>(
-                                            value: 'female',
-                                            activeColor: Color(0xFFFF69B4),
-                                            materialTapTargetSize:
-                                                MaterialTapTargetSize
-                                                    .shrinkWrap,
-                                          ),
-                                          Text(
-                                            'Female',
-                                            style: TextStyle(
-                                              fontFamily: 'Poppins',
-                                              fontSize: 14,
-                                              // FIXED COLOR: White in Dark, Dark Blue in Light
-                                              color: isDark
-                                                  ? Colors.white
-                                                  : const Color(0xFF0D1B4B),
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
+                _buildSexSelector(),
 
                 // ─── Email ─────────────────────────
                 _buildField(
-                  label: _isSignIn
-                      ? 'Email Address'
-                      : _isStudent
-                      ? 'Student Email Address'
-                      : 'Faculty Email Address',
+                  label: _emailFieldLabel,
                   controller: _emailController,
                   icon: Icons.email_outlined,
                   keyboardType: TextInputType.emailAddress,
@@ -947,7 +766,7 @@ class _LoginScreenState extends State<LoginScreen>
                             style: TextStyle(
                               fontFamily: 'Poppins',
                               fontSize: 13,
-                              color: Color(0xFF1E90FF),
+                              color: AppColors.primary,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -967,6 +786,162 @@ class _LoginScreenState extends State<LoginScreen>
 
           const SizedBox(height: 40),
         ],
+      ),
+    );
+  }
+
+  String get _emailFieldLabel {
+    if (_isSignIn) return 'Email Address';
+    if (_isStudent) return 'Student Email Address';
+    return 'Faculty Email Address';
+  }
+
+  Widget _buildSexSelector() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return _animatedField(
+      isVisible: !_isSignIn && _isStudent,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 18),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: context.cardColor,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isDark ? AppColors.darkBorder : const Color(0xFFDDE3F0),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.wc_outlined,
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.3)
+                        : const Color(0xFF0D1B4B).withValues(alpha: 0.4),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Sex',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 13,
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.5)
+                          : const Color(0xFF0D1B4B).withValues(alpha: 0.4),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              RadioGroup<String>(
+                groupValue: _selectedSex,
+                onChanged: (v) => setState(() => _selectedSex = v ?? 'male'),
+                child: Row(
+                  children: [
+                    // Male
+                    Expanded(
+                      child: PressableScale(
+                        onPressed: () => setState(() => _selectedSex = 'male'),
+                        scaleFactor: 0.97,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _selectedSex == 'male'
+                                ? AppColors.primary.withValues(alpha: 0.15)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: _selectedSex == 'male'
+                                  ? AppColors.primary
+                                  : (isDark
+                                        ? AppColors.darkBorder
+                                        : const Color(0xFFDDE3F0)),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Radio<String>(
+                                value: 'male',
+                                activeColor: AppColors.primary,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              Text(
+                                'Male',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF0D1B4B),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Female
+                    Expanded(
+                      child: PressableScale(
+                        onPressed: () =>
+                            setState(() => _selectedSex = 'female'),
+                        scaleFactor: 0.97,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _selectedSex == 'female'
+                                ? const Color(0xFFFF69B4).withValues(alpha: 0.15)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: _selectedSex == 'female'
+                                  ? const Color(0xFFFF69B4)
+                                  : (isDark
+                                        ? AppColors.darkBorder
+                                        : const Color(0xFFDDE3F0)),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Radio<String>(
+                                value: 'female',
+                                activeColor: Color(0xFFFF69B4),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              Text(
+                                'Female',
+                                style: TextStyle(
+                                  fontFamily: 'Poppins',
+                                  fontSize: 14,
+                                  color: isDark
+                                      ? Colors.white
+                                      : const Color(0xFF0D1B4B),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -997,9 +972,9 @@ class _LoginScreenState extends State<LoginScreen>
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : const Color(0xFF0D1B4B);
-    final fillColor = isDark ? const Color(0xFF0A1128) : Colors.white;
+    final fillColor = context.cardColor;
     final borderColor = isDark
-        ? const Color(0xFF1E3A6E)
+        ? AppColors.darkBorder
         : const Color(0xFFDDE3F0);
     final hintColor = isDark
         ? Colors.white.withValues(alpha: 0.5)
@@ -1026,7 +1001,7 @@ class _LoginScreenState extends State<LoginScreen>
           floatingLabelStyle: const TextStyle(
             fontFamily: 'Poppins',
             fontSize: 12,
-            color: Color(0xFF1E90FF),
+            color: AppColors.primary,
             fontWeight: FontWeight.w600,
           ),
           prefixIcon: Icon(icon, color: iconColor, size: 20),
@@ -1046,7 +1021,7 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(color: Color(0xFF1E90FF), width: 1.5),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
           ),
           errorBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
@@ -1089,10 +1064,10 @@ class _LoginScreenState extends State<LoginScreen>
     return Container(
       height: 48,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0A1128) : Colors.white,
+        color: context.cardColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isDark ? const Color(0xFF1E3A6E) : const Color(0xFFDDE3F0),
+          color: isDark ? AppColors.darkBorder : const Color(0xFFDDE3F0),
           width: 1,
         ),
       ),
@@ -1111,15 +1086,16 @@ class _LoginScreenState extends State<LoginScreen>
         ? Colors.white.withValues(alpha: 0.5)
         : const Color(0xFF0D1B4B).withValues(alpha: 0.5);
     return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
+      child: PressableScale(
+        onPressed: onTap,
+        scaleFactor: 0.97,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 250),
           margin: const EdgeInsets.all(4),
           decoration: BoxDecoration(
             gradient: isActive
                 ? const LinearGradient(
-                    colors: [Color(0xFF1565C0), Color(0xFF1E90FF)],
+                    colors: [AppColors.primaryDark, AppColors.primary],
                     begin: Alignment.centerLeft,
                     end: Alignment.centerRight,
                   )
@@ -1152,14 +1128,14 @@ class _LoginScreenState extends State<LoginScreen>
         height: 56,
         decoration: BoxDecoration(
           gradient: const LinearGradient(
-            colors: [Color(0xFF1565C0), Color(0xFF1E90FF)],
+            colors: [AppColors.primaryDark, AppColors.primary],
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
           ),
           borderRadius: BorderRadius.circular(32),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF1E90FF).withValues(alpha: _glowAnimation.value * 0.5),
+              color: AppColors.primary.withValues(alpha: _glowAnimation.value * 0.5),
               blurRadius: 16,
               offset: const Offset(0, 4),
             ),
