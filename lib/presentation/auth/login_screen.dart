@@ -347,7 +347,7 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   // ─── Forgot Password → OTP Verification Screen ─────────────
-  void _showForgotPasswordDialog() {
+  void _showForgotPasswordDialog() async {
     _forgotEmailController.text = _emailController.text.trim();
     bool isSending = false;
 
@@ -359,7 +359,7 @@ class _LoginScreenState extends State<LoginScreen>
     final cancelBg = isDark ? AppColors.darkCard : const Color(0xFFF0F4FF);
     final cancelTextColor = isDark ? Colors.white.withValues(alpha: 0.7) : const Color(0xFF0D1B4B).withValues(alpha: 0.7);
 
-    showDialog(
+    final sentToEmail = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (context) => StatefulBuilder(
@@ -419,8 +419,13 @@ class _LoginScreenState extends State<LoginScreen>
                           try {
                             await _supabase.auth.resetPasswordForEmail(email, redirectTo: 'com.psulubao.it.lcms_app://reset-password');
                             if (context.mounted) {
-                              Navigator.pop(context);
-                              context.push(AppRoutes.verifyOtp, extra: email);
+                              // Return the email as the dialog's own pop result
+                              // instead of popping then immediately pushing —
+                              // that let the dialog's close transition and the
+                              // OTP screen's enter transition overlap on the
+                              // same navigator, which looked janky. Pushing
+                              // only happens after the dialog has fully closed.
+                              Navigator.pop(context, email);
                             }
                           } catch (e) {
                             setDialog(() => isSending = false);
@@ -448,6 +453,10 @@ class _LoginScreenState extends State<LoginScreen>
         ),
       ),
     );
+
+    if (sentToEmail != null && mounted) {
+      context.push(AppRoutes.verifyOtp, extra: sentToEmail);
+    }
   }
 
   void _showError(String msg) {
