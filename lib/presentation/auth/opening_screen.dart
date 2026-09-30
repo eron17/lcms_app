@@ -49,7 +49,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     },
     {
       'icon': Icons.qr_code_scanner_rounded,
-      'color': const Color(0xFF4CAF50),
+      'color': const Color(0xFF3B9EFF),
       'title': 'Code Scanner',
       'summary': 'Auto-verifies student output vs expected results',
       'detail':
@@ -59,7 +59,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     },
     {
       'icon': Icons.shield_rounded,
-      'color': AppColors.accent,
+      'color': const Color(0xFF3B9EFF),
       'title': 'Rank Badges',
       'summary': '8 ranks from Script Kiddie to Compiler Whisperer',
       'detail':
@@ -69,7 +69,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     },
     {
       'icon': Icons.leaderboard_rounded,
-      'color': AppColors.gold,
+      'color': const Color(0xFF3B9EFF),
       'title': 'Live Leaderboard',
       'summary': 'Per-class XP and streak rankings in real time',
       'detail':
@@ -79,7 +79,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     },
     {
       'icon': Icons.assignment_rounded,
-      'color': const Color(0xFFFF9800),
+      'color': const Color(0xFF3B9EFF),
       'title': 'Assignment Management',
       'summary': 'Due dates, grading, and student work tracking',
       'detail':
@@ -89,7 +89,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     },
     {
       'icon': Icons.bar_chart_rounded,
-      'color': const Color(0xFF00BCD4),
+      'color': const Color(0xFF3B9EFF),
       'title': 'Reports & Analytics',
       'summary': 'Pass rate and submission tracking per class',
       'detail':
