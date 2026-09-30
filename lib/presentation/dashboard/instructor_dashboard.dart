@@ -1690,38 +1690,6 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
                 ],
               ),
             ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                _buildWebStatCard(
-                  icon: Icons.book_rounded,
-                  color: const Color(0xFF3B9EFF),
-                  value: '${_courses.length}',
-                  label: 'Total classes',
-                ),
-                const SizedBox(width: 10),
-                _buildWebStatCard(
-                  icon: Icons.people_rounded,
-                  color: const Color(0xFF4CAF50),
-                  value: '$_totalStudents',
-                  label: 'Total students',
-                ),
-                const SizedBox(width: 10),
-                _buildWebStatCard(
-                  icon: Icons.pending_actions_rounded,
-                  color: const Color(0xFFFF9800),
-                  value: '${_pendingSubmissions.length}',
-                  label: 'Pending grades',
-                ),
-                const SizedBox(width: 10),
-                _buildWebStatCard(
-                  icon: Icons.check_circle_rounded,
-                  color: const Color(0xFF7B2FBE),
-                  value: '$activeCoursesCount',
-                  label: 'Published',
-                ),
-              ],
-            ),
             const SizedBox(height: 16),
           ] else ...[
             // ─── Welcome Banner (Colors kept white for contrast) ───
@@ -1970,50 +1938,78 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         .toList();
   }
 
-  Widget _buildWebStatCard({
+  Widget _buildHoverStatCard({
     required IconData icon,
     required Color color,
     required String value,
     required String label,
   }) {
     final textColor = context.isDark ? Colors.white : const Color(0xFF0D1B4B);
+    // isHovered lives here, outside StatefulBuilder's builder callback, so
+    // it survives the internal rebuilds that setCardState triggers — a
+    // local declared inside the builder would reset to false every time
+    // and the hover glow would never actually show.
+    bool isHovered = false;
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: context.isDark ? const Color(0xFF111d33) : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: context.isDark
-                ? Colors.white.withValues(alpha: 0.07)
-                : const Color(0xFFDDE3F0),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color, size: 16),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: textColor,
+      child: StatefulBuilder(
+        builder: (ctx, setCardState) {
+          return MouseRegion(
+            onEnter: (_) => setCardState(() => isHovered = true),
+            onExit: (_) => setCardState(() => isHovered = false),
+            cursor: SystemMouseCursors.basic,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isHovered
+                    ? color.withValues(alpha: 0.08)
+                    : (context.isDark ? const Color(0xFF111d33) : Colors.white),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isHovered
+                      ? color.withValues(alpha: 0.3)
+                      : (context.isDark
+                            ? Colors.white.withValues(alpha: 0.07)
+                            : const Color(0xFFDDE3F0)),
+                ),
+                boxShadow: isHovered
+                    ? [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.12),
+                          blurRadius: 10,
+                          spreadRadius: 1,
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(icon, color: color, size: 18),
+                  const SizedBox(height: 10),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 11,
+                      color: textColor.withValues(alpha: 0.45),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ],
               ),
             ),
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 10,
-                color: textColor.withValues(alpha: 0.4),
-                letterSpacing: 0.4,
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -2404,18 +2400,71 @@ class _InstructorDashboardState extends ConsumerState<InstructorDashboard>
         // Stat cards
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 2.8,
+          child: Row(
             children: [
-              _reportStatCard('Total', _reportTotalSubmissions, AppColors.primary),
-              _reportStatCard('Graded', _reportGraded, AppColors.success),
-              _reportStatCard('Ungraded', _reportUngraded, const Color(0xFFF97316)),
-              _reportStatCard('No submission', _reportNotSubmitted, AppColors.error),
+              _buildHoverStatCard(
+                icon: Icons.book_rounded,
+                color: const Color(0xFF3B9EFF),
+                value: '${_courses.length}',
+                label: 'Total classes',
+              ),
+              const SizedBox(width: 10),
+              _buildHoverStatCard(
+                icon: Icons.people_rounded,
+                color: const Color(0xFF4CAF50),
+                value: '$_totalStudents',
+                label: 'Total students',
+              ),
+              const SizedBox(width: 10),
+              _buildHoverStatCard(
+                icon: Icons.pending_actions_rounded,
+                color: const Color(0xFFFF9800),
+                value: '${_pendingSubmissions.length}',
+                label: 'Pending grades',
+              ),
+              const SizedBox(width: 10),
+              _buildHoverStatCard(
+                icon: Icons.check_circle_rounded,
+                color: const Color(0xFF7B2FBE),
+                value:
+                    '${_courses.where((c) => c['is_published'] == true).length}',
+                label: 'Published',
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              _buildHoverStatCard(
+                icon: Icons.assignment_outlined,
+                color: AppColors.primary,
+                value: '$_reportTotalSubmissions',
+                label: 'Total',
+              ),
+              const SizedBox(width: 10),
+              _buildHoverStatCard(
+                icon: Icons.check_circle_outline_rounded,
+                color: AppColors.success,
+                value: '$_reportGraded',
+                label: 'Graded',
+              ),
+              const SizedBox(width: 10),
+              _buildHoverStatCard(
+                icon: Icons.hourglass_empty_rounded,
+                color: const Color(0xFFF97316),
+                value: '$_reportUngraded',
+                label: 'Ungraded',
+              ),
+              const SizedBox(width: 10),
+              _buildHoverStatCard(
+                icon: Icons.cancel_outlined,
+                color: AppColors.error,
+                value: '$_reportNotSubmitted',
+                label: 'No submission',
+              ),
             ],
           ),
         ),

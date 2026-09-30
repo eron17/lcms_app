@@ -3376,7 +3376,7 @@ class _CourseDetailScreenState extends ConsumerState<CourseDetailScreen>
     ];
 
     return Positioned(
-      bottom: 80,
+      bottom: 16,
       right: 16,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,

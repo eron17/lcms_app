@@ -35,7 +35,6 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
   final _heroKey = GlobalKey();
   final _featuresKey = GlobalKey();
   final _aboutKey = GlobalKey();
-  int _expandedFeature = 0;
 
   final List<Map<String, dynamic>> _features = [
     {
@@ -788,8 +787,8 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               }
 
               // ─── 2. DESKTOP/TABLET LAYOUT (GridView) ───
-              final cols = w > 900 ? 3 : 2;
-              final ratio = w > 900 ? 1.6 : 1.8;
+              final cols = w > 1100 ? 6 : (w > 800 ? 3 : 2);
+              final ratio = w > 1100 ? 0.85 : (w > 800 ? 1.2 : 1.3);
               return GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -814,57 +813,91 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
     final isDark = context.isDark;
     final textColor = isDark ? Colors.white : const Color(0xFF0B1220);
     final f = _features[i];
-    final isExpanded = _expandedFeature == i;
     final color = f['color'] as Color;
 
-    final card = PressableScale(
-      onPressed: () => setState(() => _expandedFeature = isExpanded ? -1 : i),
-      scaleFactor: 0.97,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(18),
-        width: isMobileList ? double.infinity : null,
-        decoration: BoxDecoration(
-          color: isExpanded ? color.withValues(alpha: 0.1) : context.cardColor,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isExpanded
-                ? color.withValues(alpha: 0.4)
-                : (isDark
-                      ? Colors.white.withValues(alpha: 0.07)
-                      : const Color(0xFFE2E8F0)),
+    // Declared outside the builder so it survives StatefulBuilder's
+    // internal rebuilds — a local inside the builder would reset to
+    // false every time setCardState fires, and the hover glow would
+    // never render.
+    bool isHovered = false;
+    final card = StatefulBuilder(
+      builder: (ctx, setCardState) {
+        return MouseRegion(
+          onEnter: (_) => setCardState(() => isHovered = true),
+          onExit: (_) => setCardState(() => isHovered = false),
+          cursor: SystemMouseCursors.basic,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            padding: const EdgeInsets.all(14),
+            width: isMobileList ? double.infinity : null,
+            decoration: BoxDecoration(
+              color: isHovered ? color.withValues(alpha: 0.07) : context.cardColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isHovered
+                    ? color.withValues(alpha: 0.3)
+                    : (isDark
+                          ? Colors.white.withValues(alpha: 0.07)
+                          : const Color(0xFFE2E8F0)),
+              ),
+              boxShadow: isHovered
+                  ? [
+                      BoxShadow(
+                        color: color.withValues(alpha: 0.15),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: isMobileList
+                  ? MainAxisSize.min
+                  : MainAxisSize.max,
+              children: [
+                Icon(f['icon'] as IconData, color: color, size: 32),
+                const SizedBox(height: 10),
+                Text(
+                  f['title'] as String,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isHovered ? color : textColor,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 180),
+                  child: isHovered
+                      ? Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text(
+                            f['summary'] as String,
+                            textAlign: TextAlign.justify,
+                            style: TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 10,
+                              color: textColor.withValues(alpha: 0.5),
+                              height: 1.4,
+                            ),
+                            maxLines: isMobileList ? null : 3,
+                            overflow: isMobileList
+                                ? TextOverflow.clip
+                                : TextOverflow.ellipsis,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: isMobileList ? MainAxisSize.min : MainAxisSize.max,
-          children: [
-            Icon(f['icon'] as IconData, color: color, size: 22),
-            const SizedBox(height: 10),
-            Text(
-              f['title'] as String,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: isExpanded ? color : textColor,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              isExpanded ? f['detail'] as String : f['summary'] as String,
-              style: TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 11,
-                color: textColor.withValues(alpha: 0.5),
-                height: 1.5,
-              ),
-              maxLines: isMobileList ? null : (isExpanded ? 6 : 2),
-              overflow: isMobileList ? TextOverflow.clip : TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
+        );
+      },
     );
 
     return isMobileList
