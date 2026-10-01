@@ -594,7 +594,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               height: 1.15,
             ),
             children: const [
-              TextSpan(text: 'Learn to code in\na '),
+              TextSpan(text: 'Submit C++ activities in\na '),
               TextSpan(
                 text: '3D classroom',
                 style: TextStyle(color: Color(0xFF3B9EFF)),
@@ -604,9 +604,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
         ),
         const SizedBox(height: 14),
         Text(
-          'An immersive learning management system where '
-          'students write real C++ code, get auto-graded in '
-          'real time, and compete on live leaderboards.',
+          'A gamified classroom management system where students complete instructor-assigned C++ activities, get auto-graded in real time, and compete on live leaderboards — all inside an immersive 3D classroom environment.',
           style: TextStyle(
             fontFamily: 'Poppins',
             fontSize: 14,
@@ -763,7 +761,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
           ),
           const SizedBox(height: 6),
           Text(
-            'Everything you need for immersive coding education',
+            'Everything you need for gamified C++ classroom management',
             style: TextStyle(
               fontFamily: 'Poppins',
               fontSize: 14,
@@ -987,11 +985,7 @@ class _OpeningScreenState extends ConsumerState<OpeningScreen>
               ),
               const SizedBox(height: 12),
               Text(
-                'Code Lab 3D is an immersive learning management '
-                'system built for Pampanga State University. Students '
-                'write real C++ code inside a Unity 3D classroom, get '
-                'auto-graded in real time, and compete on live '
-                'per-class leaderboards.',
+                'Code Lab 3D is a gamified interactive classroom management system built for Pampanga State University – Lubao Campus. Students complete instructor-assigned C++ activities inside a Unity-based 3D classroom, get auto-graded in real time, and compete on live per-class leaderboards.',
                 style: TextStyle(
                   fontFamily: 'Poppins',
                   fontSize: 13,
